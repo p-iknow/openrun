@@ -420,57 +420,57 @@ const app = moduleRef.createNestApplication();</code></pre>
         <section id="stub-env">
           <h2>앱을 테스트 DB에 붙이기</h2>
           <p>
-            테스트에서 앱은 로컬 DB가 아니라 Testcontainers가 띄운 컨테이너 DB에 붙어야 한다. 그러려면
-            앱에 컨테이너 주소를 알려 줘야 하고, 방법은 두 가지다.
+            테스트에서 앱은 로컬 DB가 아니라 Testcontainers가 띄운 컨테이너 DB에 붙어야 한다. 그래서
+            <code>beforeAll</code>에서 <code>vi.stubEnv</code>로 앱이 읽는 환경 변수를 컨테이너 주소로
+            바꿔 둔다.
           </p>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>방법</th>
-                  <th>앱 안에서 일어나는 일</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>
-                    환경 변수를 바꾼다 <span class="badge green">이 저장소</span><br />
-                    <code>vi.stubEnv('DATABASE_URL', 주소)</code>
-                  </td>
-                  <td>
-                    앱이 평소처럼 <code>readEnv()</code>로 값을 읽고, <code>DatabaseModule</code> 팩토리가
-                    <code>drizzle(url)</code>을 만든다
-                  </td>
-                </tr>
-                <tr>
-                  <td>
-                    DB 객체를 통째로 바꾼다<br />
-                    <code>.overrideProvider(DATABASE).useValue(drizzle(주소))</code>
-                  </td>
-                  <td><code>readEnv()</code>와 팩토리가 아예 실행되지 않는다</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          <pre><code class="language-ts">vi.stubEnv('DATABASE_URL', inject('databaseUrl'));</code></pre>
+          <p>그 뒤로는 앱이 평소와 똑같이 움직인다.</p>
+          <ol class="steps blue">
+            <li>
+              <strong><code>compile()</code> 중 <code>DatabaseModule</code> 팩토리 실행</strong>
+              <code>readEnv()</code>가 <code>process.env.DATABASE_URL</code>을 읽는다. 지금은 컨테이너
+              주소다.
+            </li>
+            <li>
+              <strong><code>drizzle(url)</code></strong>
+              그 주소로 앱의 DB 연결을 만든다.
+            </li>
+          </ol>
           <p>
-            둘 다 테스트는 통과한다. 차이는 두 번째 방법에서는 <code>readEnv()</code>와 팩토리 코드를
-            테스트가 지나가지 않는다는 점이다. <code>DATABASE_URL</code>을 비운 채
-            <code>overrideProvider</code>로 조립해도 성공하는 것을 실행해 확인했다.
+            즉 운영에서 앱이 DB를 찾아가는 경로(<code>readEnv()</code> → 팩토리 →
+            <code>drizzle(url)</code>)를 테스트도 그대로 지나간다. 이 경로에 실수가 있으면 테스트가
+            잡는다. 예를 들어 <code>readEnv()</code>에서 변수 이름을 잘못 바꾸면, 테스트가 넣은
+            <code>DATABASE_URL</code>을 앱이 찾지 못해 <code>compile()</code>에서 실패한다.
           </p>
-          <div class="callout">
-            <p>
-              예를 들어 누군가 <code>readEnv()</code>에서 변수 이름을 <code>DB_URL</code>로 잘못
-              바꿨다고 하자. 환경 변수를 바꾸는 방법이면 테스트가 넣은 <code>DATABASE_URL</code>을 앱이
-              찾지 못해 <code>compile()</code>에서 실패하고, 실수가 PR 전에 드러난다. DB 객체를 바꾸는
-              방법이면 <code>readEnv()</code>가 실행되지 않아 테스트는 통과하고, 실수는 실제로 앱을 띄울
-              때에야 드러난다. 그래서 운영에서 앱이 DB를 찾아가는 경로를 테스트도 그대로 지나가도록
-              환경 변수를 바꾸는 방법을 골랐다.
-            </p>
-          </div>
           <p>
-            <code>afterAll</code>의 <code>vi.unstubAllEnvs()</code>는 바꿔 둔 값을 원래대로 되돌린다. 테스트가
-            끝나면 손댄 것을 원래 상태로 돌려 두는 정리다.
+            <code>afterAll</code>의 <code>vi.unstubAllEnvs()</code>는 바꿔 둔 값을 원래대로 되돌린다.
+            테스트가 끝나면 손댄 것을 원래 상태로 돌려 두는 정리다.
           </p>
+          <details class="fold">
+            <summary>선택 읽기: <code>overrideProvider</code>를 쓰지 않은 이유</summary>
+            <div class="fold-body">
+              <p>
+                Nest 테스트에서 DB를 바꿔 끼울 때 흔히 쓰는 방법은 <code>overrideProvider</code>다. NestJS 공식 테스트 문서가 이 방법을 보여 주고, 공식 <code>@nestjs/drizzle</code> 문서도 테스트에서 DB 토큰 자리에 가짜 객체를 넣는 방법을 보여 준다. 이 저장소의 001 문서도 처음에는 "DB를 붙이면 <code>overrideProvider()</code>로 바꿀 수
+                있다"고 안내했다. 그래서 "왜 그 방법을 쓰지 않았나"에 답해 둔다.
+              </p>
+              <pre><code class="language-ts">await Test.createTestingModule({ imports: [AppModule] })
+  .overrideProvider(DATABASE)
+  .useValue(drizzle(inject('databaseUrl')))
+  .compile();</code></pre>
+              <p>
+                이렇게 하면 <code>DATABASE</code> 자리에 미리 만든 객체가 바로 들어가서,
+                <code>readEnv()</code>와 팩토리가 아예 실행되지 않는다. <code>DATABASE_URL</code>을 비운
+                채 이렇게 조립해도 성공하는 것을 실행해 확인했다. 테스트는 통과하지만, 위에서 말한 경로의
+                실수는 잡지 못하고 실제로 앱을 띄울 때에야 드러난다. 그래서 환경 변수를 바꾸는 방법을
+                골랐다.
+              </p>
+              <p>
+                <code>overrideProvider</code>가 맞는 경우도 있다. 실제 DB 없이 가짜 객체를 넣어 서비스
+                로직만 볼 때다. 이 저장소는 HTTP 경계에서 진짜 DB로 테스트하기로 했으므로 해당하지 않는다.
+              </p>
+            </div>
+          </details>
         </section>
 
         <section id="isolation">
