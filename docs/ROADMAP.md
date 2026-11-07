@@ -7,6 +7,7 @@
 - 구현 전 서비스 규칙: [`service-plan.md`](./service-plan.md)
 - 이력서 문장과 측정값: [`resume-tracker.md`](./resume-tracker.md)
 - 단계별 기록: [`stage-notes/`](./stage-notes/)
+- 조사 자료: [`research/`](./research/)
 - 티켓 작업 규칙: [`agents/ticket-workflow.md`](./agents/ticket-workflow.md)
 
 ## 진행 방식
@@ -103,13 +104,15 @@
 | 영역 | 선택 |
 |---|---|
 | 저장소 | 모노레포, pnpm workspace, Turborepo |
+| 런타임 관리 | mise(Node, pnpm) |
+| 린트와 포맷 | oxlint, oxfmt |
 | 스토어 | Next.js, TypeScript, TanStack Query |
 | 어드민 | Vite, TanStack Router, TypeScript, TanStack Query (SPA) |
 | 디자인 시스템 | `store-ui`, `admin-ui`, Base UI, Tailwind CSS, CSS 변수 토큰, Storybook |
 | 백엔드 | NestJS, 모듈러 모놀리스, 워커는 별도 프로세스 |
 | 데이터 | PostgreSQL, Drizzle, Redis, BullMQ |
 | API | OpenAPI에서 타입과 클라이언트 생성 |
-| 테스트 | Jest, Testcontainers, Playwright, k6 |
+| 테스트 | Vitest, Testcontainers, Playwright, k6 |
 | 인프라 | Docker, GitHub Actions, AWS(ECS, RDS, ALB), Terraform |
 | 관측성 | Prometheus, Grafana, OpenTelemetry, Sentry |
 
@@ -122,7 +125,7 @@
   - Base UI가 맡지 않는 색 대비와 라벨은 Storybook 접근성 애드온으로 점검하고, 포커스 표시는 Storybook에서 직접 확인한다.
   - 시각적 회귀 테스트는 필요해지면 `/retro`에서 검토한다.
 - **브랜치:** `main`에서 티켓별 브랜치를 따고 스쿼시 병합한다.
-- **로컬 개발:** PostgreSQL, Redis, MinIO, 가짜 메일 서버만 Docker Compose로 실행하고, 앱은 로컬에서 직접 실행한다.
+- **로컬 개발:** PostgreSQL, Redis, MinIO, 가짜 메일 서버만 Docker Compose로 실행하고, 앱은 로컬에서 직접 실행한다. 서비스는 필요해질 때 추가한다. 개발 기반에서 PostgreSQL과 가짜 메일 서버를 띄우고, MinIO는 어드민(1.7)에서, Redis는 처음 쓰는 단계에서 추가한다.
 - **환경:** 처음에는 로컬과 운영만 두고, 4단계에서 스테이징을 추가한다.
 
 ```
@@ -151,7 +154,7 @@ openrun/
   - FAQ와 공지사항 조회
   - 운영자의 공연·쿠폰·FAQ·공지사항 관리와 포스터 업로드
 - **세부 순서:**
-  1. **개발 기반:** 모노레포, Docker Compose(가짜 메일 서버 포함), 린트와 빌드, 첫 마이그레이션, 코딩 표준. 웹 페이지에 DB에서 읽은 값이 표시되고 린트와 빌드가 통과하면 완료다.
+  1. **개발 기반:** 모노레포(`apps/store`, `apps/api`, `packages/api-client`), Docker Compose(PostgreSQL, 가짜 메일 서버), 린트와 포맷, 테스트, 빌드, 첫 마이그레이션, OpenAPI 클라이언트 생성, 코딩 표준. 새로 clone한 뒤 README 명령만 따라 해도 웹 페이지에 DB에서 읽은 값이 표시되고, 린트, 포맷, 타입 검사, 테스트, 빌드가 통과하면 완료다.
   2. **디자인 기반:** 스토어의 시각적 방향 선택, `store-ui` 토큰, 조회 화면에 필요한 컴포넌트, Storybook
   3. **조회:** 스키마(구역과 좌석 등급 포함), 시드, 공연 목록과 상세, 제목 검색, 장르·판매 상태 필터, 정렬, 오프셋 페이지
   4. **인증:** 이메일 회원가입과 인증, 로그인, 구글·카카오 로그인, 약관 동의와 재동의, 사용자·운영자 역할 구분
@@ -170,7 +173,7 @@ openrun/
 
 ### 2. 테스트
 - **완료 기준:** 예매 성공, 매진, 권한 오류, 주문 취소, 쿠폰·포인트 금액 계산, 리뷰 작성 자격을 자동으로 검증한다.
-- **범위:** 구현하면서 쌓인 테스트에서 빠진 시나리오를 채우고, Testcontainers 통합 테스트와 Playwright E2E를 갖춘다.
+- **범위:** 1단계부터 쌓인 Testcontainers 통합 테스트에서 빠진 시나리오를 채우고, Playwright E2E를 갖춘다.
 - **학습 개념:** 단위·통합·E2E 테스트, Testcontainers
 - **이력서 항목:** API 설계와 테스트
 
