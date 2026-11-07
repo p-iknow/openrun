@@ -346,13 +346,6 @@ export class DatabaseModule implements OnApplicationShutdown {
             개를 열어 두고 돌려 쓰는 묶음을 둔다. 이것이 Pool이다. 서비스마다 Pool을 만들면 안 되는
             이유는 <a href="003-의존성-주입.html#without">003의 문제 3</a>에 있다.
           </p>
-          <ul>
-            <li>
-              <code>new Pool({ connectionString })</code>은 접속 정보만 기억한다. 실제 연결은 첫 쿼리
-              때 연다.
-            </li>
-            <li>그래서 DB가 꺼져 있어도 앱 부팅은 된다. 실패는 첫 요청에서 난다.</li>
-          </ul>
 
           <h3><code>drizzle({ client: pool })</code></h3>
           <p>
@@ -397,6 +390,44 @@ export class DatabaseModule implements OnApplicationShutdown {
               <code>필수 환경 변수가 없습니다: DATABASE_URL</code> 메시지와 함께 exit 1로 끝난다.
             </p>
           </div>
+
+          <h3>부팅이 성공했다고 DB에 붙는 것은 아니다</h3>
+          <p>
+            <code>readEnv()</code>는 <code>DATABASE_URL</code> 값이 <strong>있는지</strong>만 본다. 그
+            주소로 DB에 <strong>접속되는지</strong>는 보지 않는다. <code>new Pool(...)</code>도 주소를
+            기억만 하고 접속하지 않는다. Pool은 첫 쿼리가 올 때 연결을 연다. 그래서 부팅 과정에는 DB와
+            통신하는 순간이 한 번도 없다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>상황</th>
+                  <th>언제 실패하나</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>DATABASE_URL</code>이 없다</td>
+                  <td><span class="badge blue">부팅</span> exit 1</td>
+                </tr>
+                <tr>
+                  <td>값은 있는데 DB가 꺼져 있거나, 주소나 비밀번호가 틀렸다</td>
+                  <td>
+                    <span class="badge green">첫 요청</span> 부팅은 성공하고,
+                    <code>GET /shows</code>에서 <code>ECONNREFUSED</code> 등으로 500
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            두 번째 줄은 아무것도 떠 있지 않은 포트를 주소로 줘서 실행해 확인했다. 비밀번호 오타 같은
+            설정 실수는 요청이 들어올 때까지 드러나지 않는다는 뜻이다. 부팅 때 잡으려면 팩토리에서
+            <code>select 1</code>을 한 번 실행하는 방법이 있다. 하지만 그러면 DB가 앱보다 늦게 뜨는
+            환경에서 앱이 부팅에 실패한다. 운영에서는 보통 헬스 체크로 따로 알리며, 배포 단계에서 다시
+            정한다.
+          </p>
 
           <h3>두 번째: <code>DATABASE</code></h3>
           <pre><code class="language-ts">{
