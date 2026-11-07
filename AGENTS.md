@@ -1,3 +1,7 @@
+## 코딩 표준
+
+코드를 쓰거나 리뷰할 때 `CODING_STANDARDS.md`를 따른다.
+
 ## Agent skills
 
 ### Issue tracker
