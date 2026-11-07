@@ -15,3 +15,7 @@
 ### Ticket workflow
 
 `/implement`로 티켓을 구현할 때 브랜치, PR, 이해 확인 질문은 `docs/agents/ticket-workflow.md`를 따른다.
+
+## 병합 후 정리
+
+사용자가 PR을 병합했다고 알리면 `main`으로 옮겨 최신으로 맞추고 PR의 로컬 브랜치를 지운다. squash 병합한 브랜치는 `git branch -d`가 거부하므로, PR이 `MERGED`이고 PR의 마지막 커밋이 로컬 브랜치 끝과 같은지 확인한 뒤 `git branch -D`로 지운다. 완료 기준: `git branch` 목록에 그 브랜치가 없다.
