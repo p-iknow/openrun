@@ -23,7 +23,7 @@
         <strong>2부: 테스트 본문</strong>
         <ol>
           <li><a href="#connections">연결이 두 개다</a></li>
-          <li><a href="#stub-env">진짜 설정 경로로 DB 찾기</a></li>
+          <li><a href="#stub-env">앱을 테스트 DB에 붙이기</a></li>
           <li><a href="#isolation">테스트끼리 섞이지 않게</a></li>
           <li><a href="#cases">테스트 두 개</a></li>
         </ol>
@@ -418,34 +418,58 @@ const app = moduleRef.createNestApplication();</code></pre>
         </section>
 
         <section id="stub-env">
-          <h2>진짜 설정 경로로 DB 찾기</h2>
+          <h2>앱을 테스트 DB에 붙이기</h2>
           <p>
-            앱은 <code>readEnv()</code>로 <code>process.env.DATABASE_URL</code>을 읽는다.
-            <code>vi.stubEnv</code>는 테스트 동안 이 값을 컨테이너 주소로 바꿔 둔다.
+            테스트에서 앱은 로컬 DB가 아니라 Testcontainers가 띄운 컨테이너 DB에 붙어야 한다. 그러려면
+            앱에 컨테이너 주소를 알려 줘야 하고, 방법은 두 가지다.
           </p>
           <div class="table-wrap">
             <table>
               <thead>
                 <tr>
                   <th>방법</th>
-                  <th>검증하는 범위</th>
+                  <th>앱 안에서 일어나는 일</th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
-                  <td><code>vi.stubEnv('DATABASE_URL', ...)</code> <span class="badge green">이 저장소</span></td>
-                  <td>환경 변수 → <code>readEnv()</code> → <code>drizzle(url)</code>. 운영과 같은 경로</td>
+                  <td>
+                    환경 변수를 바꾼다 <span class="badge green">이 저장소</span><br />
+                    <code>vi.stubEnv('DATABASE_URL', 주소)</code>
+                  </td>
+                  <td>
+                    앱이 평소처럼 <code>readEnv()</code>로 값을 읽고, <code>DatabaseModule</code> 팩토리가
+                    <code>drizzle(url)</code>을 만든다
+                  </td>
                 </tr>
                 <tr>
-                  <td><code>overrideProvider(DATABASE)</code></td>
-                  <td>DB 객체를 통째로 갈아 끼움. 설정과 조립 경로를 건너뜀</td>
+                  <td>
+                    DB 객체를 통째로 바꾼다<br />
+                    <code>.overrideProvider(DATABASE).useValue(drizzle(주소))</code>
+                  </td>
+                  <td><code>readEnv()</code>와 팩토리가 아예 실행되지 않는다</td>
                 </tr>
               </tbody>
             </table>
           </div>
           <p>
-            <code>afterAll</code>의 <code>vi.unstubAllEnvs()</code>는 원래 값을 되돌린다. 다른 테스트에
-            값이 새지 않게 하려는 것이다.
+            둘 다 테스트는 통과한다. 차이는 두 번째 방법에서는 <code>readEnv()</code>와 팩토리 코드를
+            테스트가 지나가지 않는다는 점이다. <code>DATABASE_URL</code>을 비운 채
+            <code>overrideProvider</code>로 조립해도 성공하는 것을 실행해 확인했다.
+          </p>
+          <div class="callout">
+            <p>
+              예를 들어 누군가 <code>readEnv()</code>에서 변수 이름을 <code>DB_URL</code>로 잘못
+              바꿨다고 하자. 환경 변수를 바꾸는 방법이면 테스트가 넣은 <code>DATABASE_URL</code>을 앱이
+              찾지 못해 <code>compile()</code>에서 실패하고, 실수가 PR 전에 드러난다. DB 객체를 바꾸는
+              방법이면 <code>readEnv()</code>가 실행되지 않아 테스트는 통과하고, 실수는 실제로 앱을 띄울
+              때에야 드러난다. 그래서 운영에서 앱이 DB를 찾아가는 경로를 테스트도 그대로 지나가도록
+              환경 변수를 바꾸는 방법을 골랐다.
+            </p>
+          </div>
+          <p>
+            <code>afterAll</code>의 <code>vi.unstubAllEnvs()</code>는 바꿔 둔 값을 원래대로 되돌린다. 테스트가
+            끝나면 손댄 것을 원래 상태로 돌려 두는 정리다.
           </p>
         </section>
 
