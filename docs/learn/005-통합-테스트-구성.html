@@ -256,19 +256,17 @@
   // &lt;App&gt;은 supertest가 받을 HTTP 서버 타입이다.
   let app: INestApplication&lt;App&gt;;
 
-  // [파일에서 한 번, 맨 처음] process.env.DATABASE_URL을 컨테이너 주소로 바꿔 둔다.
+  // process.env.DATABASE_URL을 컨테이너 주소로 바꿔 둔다.
   // 앱이 readEnv()로 이 값을 읽어 컨테이너 DB에 붙는다.
   beforeAll(() =&gt; {
     vi.stubEnv('DATABASE_URL', inject('databaseUrl'));
   });
 
-  // [파일에서 한 번, 맨 마지막]
   afterAll(async () =&gt; {
     vi.unstubAllEnvs();      // 바꿔 둔 환경 변수를 원래 값으로 되돌린다
     await db.$client.end();  // 테스트 코드의 연결(Pool)을 닫는다
   });
 
-  // [테스트마다, 테스트 직전]
   beforeEach(async () =&gt; {
     // shows를 비우고 id 번호를 1로 되돌린다. 모든 테스트가 빈 테이블에서 시작한다.
     await db.execute('TRUNCATE shows RESTART IDENTITY');
@@ -283,8 +281,7 @@
     await app.init();                        // 라우트를 연결한다. 포트는 열지 않는다
   });
 
-  // [테스트마다, 테스트 직후] 앱을 닫는다.
-  // 종료 훅(onApplicationShutdown)이 불려 앱의 DB 연결이 닫힌다.
+  // 앱을 닫는다. 종료 훅(onApplicationShutdown)이 불려 앱의 DB 연결이 닫힌다.
   afterEach(async () =&gt; {
     await app.close();
   });
