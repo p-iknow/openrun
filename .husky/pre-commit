@@ -1,7 +1,7 @@
 pnpm exec lint-staged
 
 # 코드에서 openapi.json을 다시 만들고, 스테이징된 파일과 다르면 커밋을 막는다.
-pnpm openapi
+pnpm openapi:generate
 if ! git diff --quiet -- apps/api/openapi.json; then
   echo 'apps/api/openapi.json이 API 코드와 다릅니다. 방금 갱신된 파일을 확인하고 git add apps/api/openapi.json 후 다시 커밋하세요.' >&2
   exit 1

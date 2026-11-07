@@ -7,7 +7,7 @@
     "dev": "nest start --watch --env-file .env",
     "build": "nest build",
     "start": "node --env-file-if-exists=.env dist/main.js",
-    "openapi": "node dist/generate-openapi.js",
+    "openapi:generate": "node dist/generate-openapi.js",
     "lint": "oxlint --type-aware",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

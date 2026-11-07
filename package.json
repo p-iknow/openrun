@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "turbo run dev",
     "build": "turbo run build",
-    "openapi": "turbo run openapi --filter=@openrun/api",
+    "openapi:generate": "turbo run openapi:generate --filter=@openrun/api",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
