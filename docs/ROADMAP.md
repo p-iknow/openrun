@@ -105,7 +105,7 @@
 |---|---|
 | 저장소 | 모노레포, pnpm workspace, Turborepo |
 | 런타임 관리 | mise(Node, pnpm) |
-| 린트와 포맷 | oxlint, oxfmt |
+| 린트와 포맷 | oxlint, Prettier |
 | 스토어 | Next.js, TypeScript, TanStack Query |
 | 어드민 | Vite, TanStack Router, TypeScript, TanStack Query (SPA) |
 | 디자인 시스템 | `store-ui`, `admin-ui`, Base UI, Tailwind CSS, CSS 변수 토큰, Storybook |
