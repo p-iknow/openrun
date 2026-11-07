@@ -2,7 +2,7 @@
 
 풀스택 전 과정을 학습하고 취업용 포트폴리오로 쓰기 위한 장기 프로젝트다. 마감을 두지 않으므로 일정이 아니라 **완료 기준**으로 진행을 관리한다.
 
-- 용어: [`CONTEXT.md`](../CONTEXT.md)
+- 용어: [`GLOSSARY.md`](../GLOSSARY.md)
 - 구조 결정: [`docs/adr/`](./adr/)
 - 구현 전 서비스 규칙: [`service-plan.md`](./service-plan.md)
 - 이력서 문장과 측정값: [`resume-tracker.md`](./resume-tracker.md)

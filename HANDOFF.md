@@ -1,7 +1,7 @@
 # 오픈런(OpenRun): 프로젝트 인계 문서
 
 > **시작 기록입니다. 더 이상 수정하지 않으며, 일부 내용은 이후 결정으로 바뀌었습니다.**
-> 현재 계획은 [`docs/ROADMAP.md`](docs/ROADMAP.md), 용어는 [`CONTEXT.md`](CONTEXT.md), 이력서 문장은 [`docs/resume-tracker.md`](docs/resume-tracker.md)를 보세요.
+> 현재 계획은 [`docs/ROADMAP.md`](docs/ROADMAP.md), 용어는 [`GLOSSARY.md`](GLOSSARY.md), 이력서 문장은 [`docs/resume-tracker.md`](docs/resume-tracker.md)를 보세요.
 
 ## 프로젝트 정보
 - 서비스 이름: 오픈런(OpenRun)
