@@ -1,0 +1,58 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/shows": {
+      "get": {
+        "operationId": "ShowsController_findAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ShowDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Shows"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "openrun API",
+    "description": "",
+    "version": "0.0.0",
+    "contact": {}
+  },
+  "tags": [],
+  "servers": [],
+  "components": {
+    "schemas": {
+      "ShowDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "공연 ID"
+          },
+          "title": {
+            "type": "string",
+            "description": "공연 제목"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ]
+      }
+    }
+  }
+}

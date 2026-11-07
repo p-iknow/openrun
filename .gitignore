@@ -5,3 +5,5 @@ dist/
 .env
 .env.*
 !.env.example
+# openapi-typescript가 apps/api/openapi.json에서 만든다.
+packages/api-client/src/generated/
