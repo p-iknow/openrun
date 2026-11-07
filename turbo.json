@@ -13,11 +13,18 @@
       "dependsOn": ["^build"]
     },
     "test": {
-      "dependsOn": ["^build"]
+      "dependsOn": ["^build"],
+      "env": ["DATABASE_URL"]
     },
     "dev": {
       "cache": false,
-      "persistent": true
+      "persistent": true,
+      "env": ["DATABASE_URL"]
+    },
+    "test:integration": {
+      "dependsOn": ["^build"],
+      "env": ["DATABASE_URL"],
+      "passThroughEnv": ["DOCKER_HOST", "TESTCONTAINERS_*"]
     }
   }
 }

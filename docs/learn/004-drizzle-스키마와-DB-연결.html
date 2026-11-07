@@ -1,0 +1,817 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Drizzle 스키마와 DB 연결: shows.ts와 DatabaseModule</title>
+    <link rel="stylesheet" href="learn.css" />
+    <script src="vendor/highlightjs/highlight.min.js" defer></script>
+    <script src="learn.js" defer></script>
+  </head>
+  <body>
+    <div class="layout">
+      <nav aria-label="목차">
+        <strong>목차</strong>
+        <ol>
+          <li><a href="#overview">한눈에 보기</a></li>
+        </ol>
+        <strong>1부: 스키마 파일</strong>
+        <ol>
+          <li><a href="#schema">shows.ts 한 줄씩</a></li>
+          <li><a href="#schema-sql">이 코드가 만드는 SQL</a></li>
+          <li><a href="#schema-uses">스키마가 쓰이는 두 곳</a></li>
+          <li><a href="#schema-rules">스키마 파일 규칙</a></li>
+        </ol>
+        <strong>2부: DB 연결 모듈</strong>
+        <ol>
+          <li><a href="#layers">pg와 Drizzle, 두 층</a></li>
+          <li><a href="#providers">프로바이더 등록</a></li>
+          <li><a href="#exports">exports와 @Global()</a></li>
+          <li><a href="#shutdown">앱을 끌 때</a></li>
+          <li><a href="#flow">전체 흐름</a></li>
+        </ol>
+        <strong>마무리</strong>
+        <ol>
+          <li><a href="#check">스스로 확인하기</a></li>
+          <li><a href="#more">더 읽을거리</a></li>
+        </ol>
+      </nav>
+
+      <main>
+        <h1>Drizzle 스키마와 DB 연결: shows.ts와 DatabaseModule</h1>
+        <ul class="tags" aria-label="태그">
+          <li>drizzle</li>
+          <li>nestjs</li>
+        </ul>
+        <p class="lead">
+          Drizzle을 처음 쓰는 사람 기준으로, 이 저장소의 두 파일을 읽는다. 테이블을 정의하는
+          <code>apps/api/src/db/schema/shows.ts</code>와, 그 테이블을 쿼리할 연결을 앱에 등록하는
+          <code>apps/api/src/db/database.module.ts</code>다. 기준 버전은 drizzle-orm 0.45.4,
+          drizzle-kit 0.31.11, pg 8.23, NestJS 12.4다. 프로바이더, <code>useFactory</code>, 토큰은
+          <a href="003-의존성-주입.html#nest">003 문서</a>에서 다뤘다.
+        </p>
+
+        <section id="overview">
+          <h2>한눈에 보기</h2>
+          <div class="callout">
+            <p>
+              <strong>Drizzle</strong>은 TypeScript용 ORM이다. SQL을 감추기보다 SQL 모양을 거의 그대로
+              TypeScript로 옮겨 놓았다. 그래서 SQL을 알면 코드를 읽기 쉽다. 테이블 정의 하나에서
+              <strong>마이그레이션 SQL</strong>과 <strong>쿼리 타입</strong>이 함께 나온다.
+            </p>
+          </div>
+          <div class="flow">
+            <div class="lane blue">
+              <div class="lane-title">개발 중: 스키마 → 마이그레이션 (drizzle-kit)</div>
+              <ol class="chain">
+                <li><span>shows.ts 수정</span></li>
+                <li><span>pnpm db:generate</span></li>
+                <li><span>drizzle/*.sql 생성</span></li>
+                <li><span>pnpm db:migrate로 DB에 적용</span></li>
+              </ol>
+            </div>
+            <div class="lane green">
+              <div class="lane-title">앱 실행 중: 스키마 → 쿼리 (drizzle-orm)</div>
+              <ol class="chain">
+                <li><span>DatabaseModule이 연결 등록</span></li>
+                <li><span>ShowsService가 db 주입받음</span></li>
+                <li><span>db.select().from(shows)</span></li>
+                <li><span>타입이 붙은 결과</span></li>
+              </ol>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>파일</th>
+                  <th>하는 일</th>
+                  <th>누가 실행하나</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>db/schema/shows.ts</code></td>
+                  <td><code>shows</code> 테이블의 모양을 정의</td>
+                  <td>drizzle-kit(개발 도구)과 앱 코드 둘 다</td>
+                </tr>
+                <tr>
+                  <td><code>db/database.module.ts</code></td>
+                  <td>앱 전체가 함께 쓸 DB 연결을 Nest에 등록</td>
+                  <td>Nest(앱 부팅과 종료 때)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="schema">
+          <h2><code>shows.ts</code> 한 줄씩</h2>
+          <p>SQL의 <code>CREATE TABLE</code>을 직접 쓰는 대신 TypeScript 객체로 테이블을 표현한다.</p>
+          <pre><code class="language-ts">import { integer, pgTable, text } from 'drizzle-orm/pg-core';
+
+export const shows = pgTable('shows', {
+  id: integer().primaryKey().generatedAlwaysAsIdentity(),
+  title: text().notNull(),
+});</code></pre>
+
+          <h3><code>from 'drizzle-orm/pg-core'</code></h3>
+          <p>
+            PostgreSQL용 도구를 가져온다. MySQL은 <code>mysql-core</code>, SQLite는
+            <code>sqlite-core</code>를 쓴다. DB마다 지원하는 타입이 달라서 나뉘어 있다.
+          </p>
+
+          <h3><code>pgTable('shows', { ... })</code></h3>
+          <ul>
+            <li>첫 인자 <code>'shows'</code>는 DB의 실제 테이블 이름이다.</li>
+            <li>두 번째 인자의 각 키가 컬럼이 된다.</li>
+            <li>
+              컬럼 이름을 따로 주지 않으면 키 이름(<code>id</code>, <code>title</code>)이 그대로 DB
+              컬럼 이름이 된다. <code>integer('show_id')</code>처럼 쓰면 DB 컬럼 이름만 따로 정할 수
+              있다.
+            </li>
+          </ul>
+
+          <h3><code>id: integer().primaryKey().generatedAlwaysAsIdentity()</code></h3>
+          <p>메서드를 이어 붙여 컬럼 성질을 하나씩 더한다.</p>
+          <ol class="steps blue">
+            <li>
+              <strong><code>integer()</code></strong>
+              정수 타입이다.
+            </li>
+            <li>
+              <strong><code>.primaryKey()</code></strong>
+              기본 키다. 값이 겹칠 수 없고 비어 있을 수 없다.
+            </li>
+            <li>
+              <strong><code>.generatedAlwaysAsIdentity()</code></strong>
+              번호를 DB가 1, 2, 3… 자동으로 매긴다. 예전 <code>serial</code>의 표준 SQL 버전이다.
+            </li>
+          </ol>
+          <div class="callout warn">
+            <p>
+              <strong>ALWAYS</strong>는 "항상 DB가 정한다"는 뜻이다. insert에서 id를 직접 넣으면 DB가
+              거부한다. 그래서 시드(<code>src/db/seed.ts</code>)는 "id 1, 2로 고정해 덮어쓰기" 대신
+              "비우고 번호를 1부터 다시 시작(<code>TRUNCATE ... RESTART IDENTITY</code>)"을 쓴다. 직접
+              넣는 것을 허용하려면 <code>generatedByDefaultAsIdentity()</code>를 쓴다.
+            </p>
+          </div>
+
+          <h3><code>title: text().notNull()</code></h3>
+          <p>길이 제한 없는 문자열이고, 비울 수 없다(<code>NOT NULL</code>).</p>
+        </section>
+
+        <section id="schema-sql">
+          <h2>이 코드가 만드는 SQL</h2>
+          <p>
+            <code>pnpm db:generate</code>를 실행하면 drizzle-kit이 이 파일을 읽어
+            <code>apps/api/drizzle/0000_create_shows.sql</code>을 만든다.
+          </p>
+          <pre><code class="language-sql">CREATE TABLE "shows" (
+  "id" integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY (...),
+  "title" text NOT NULL
+);</code></pre>
+          <p>TypeScript 한 줄이 SQL 한 줄과 거의 1:1로 대응한다.</p>
+        </section>
+
+        <section id="schema-uses">
+          <h2>스키마가 쓰이는 두 곳</h2>
+
+          <h3>1. 마이그레이션을 만들 때 (drizzle-kit, 개발 도구)</h3>
+          <ol class="steps blue">
+            <li>
+              <strong>스키마 수정</strong>
+              예를 들어 <code>venue: text()</code>를 추가한다.
+            </li>
+            <li>
+              <strong><code>pnpm db:generate</code></strong>
+              지난번 상태(<code>drizzle/meta/*.json</code>)와 지금 스키마를 비교한다.
+            </li>
+            <li>
+              <strong>차이만큼 새 SQL 파일 생성</strong>
+              <code>ALTER TABLE "shows" ADD COLUMN "venue" text;</code>가 담긴
+              <code>0001_...sql</code>이 생긴다.
+            </li>
+          </ol>
+          <p>
+            <code>generate</code>는 파일을 만들기만 하고 DB는 건드리지 않는다. DB에 적용하는 일은
+            <code>pnpm db:migrate</code>가 따로 한다. 생성과 적용이 나뉘어 있으므로, 적용하기 전에
+            PR에서 SQL을 읽고 확인할 수 있다.
+          </p>
+
+          <h3>2. 앱에서 쿼리할 때 (drizzle-orm, 런타임)</h3>
+          <p><code>shows.service.ts</code>는 같은 <code>shows</code> 객체를 쿼리 재료로 쓴다.</p>
+          <pre><code class="language-ts">this.db
+  .select({ id: shows.id, title: shows.title })
+  .from(shows)
+  .orderBy(asc(shows.id));
+// → SELECT "id", "title" FROM "shows" ORDER BY "id" ASC</code></pre>
+          <p>이때 TypeScript가 타입을 알아서 붙여 준다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>상황</th>
+                  <th>결과</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>위 쿼리의 결과</td>
+                  <td><code>{ id: number; title: string }[]</code>로 자동 추론</td>
+                </tr>
+                <tr>
+                  <td><code>shows.titel</code>처럼 오타</td>
+                  <td><span class="badge blue">컴파일</span> 오류</td>
+                </tr>
+                <tr>
+                  <td>insert에서 <code>title</code>을 빠뜨림</td>
+                  <td><span class="badge blue">컴파일</span> 오류. <code>notNull</code>이므로</td>
+                </tr>
+                <tr>
+                  <td>insert에 <code>id</code>를 넣음</td>
+                  <td><span class="badge blue">컴파일</span> 오류. ALWAYS identity라 insert 타입에서 빠짐</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout">
+            <p>
+              테이블 정의 하나에서 마이그레이션과 쿼리 타입이 같이 나오므로, 스키마와 코드가 어긋나기
+              어렵다.
+            </p>
+          </div>
+        </section>
+
+        <section id="schema-rules">
+          <h2>스키마 파일 규칙</h2>
+          <p>이 저장소의 <code>CODING_STANDARDS.md</code>와 <code>drizzle.config.ts</code>가 정한 규칙이다.</p>
+          <ul>
+            <li>
+              <strong>스키마 파일은 다른 스키마 파일과 Drizzle만 import한다.</strong> drizzle-kit은 Nest
+              앱 밖에서 이 파일을 실제로 실행한다. 여기서 서비스나 설정 코드를 import하면 그 코드도
+              함께 실행된다.
+            </li>
+            <li>
+              <strong>폴더를 평평하게 유지한다.</strong> <code>drizzle.config.ts</code>의
+              <code>schema: './src/db/schema'</code>는 폴더 한 단계만 읽는다.
+            </li>
+            <li>
+              <strong>테이블 이름은 복수형이다.</strong> 앞으로 생길 <code>order</code>,
+              <code>user</code>는 단수형이 PostgreSQL 예약어다.
+            </li>
+          </ul>
+          <div class="callout warn">
+            <p>
+              파일을 <code>schema/shows/table.ts</code>처럼 하위 폴더로 옮기면 drizzle-kit 눈에는
+              <code>shows</code> 테이블이 사라진 것으로 보인다. 그래서 경고 없이
+              <code>DROP TABLE "shows"</code>가 담긴 마이그레이션이 생성된다. 생성된 SQL을 PR에서 꼭
+              읽어야 하는 이유다. 근거는 <code>docs/research/drizzle-schema-organization.md</code>에
+              있다.
+            </p>
+          </div>
+        </section>
+
+        <section id="layers">
+          <h2>pg와 Drizzle, 두 층</h2>
+          <p>
+            여기부터는 <code>database.module.ts</code>를 본다. 이 파일은 앱 전체가 함께 쓸
+            <strong>DB 연결 하나</strong>를 만들어 Nest에 등록한다. 서비스는 연결을 직접 만들지 않고
+            "DB를 달라"고 요청만 한다.
+          </p>
+          <pre><code class="language-ts">export const DATABASE = Symbol('DATABASE');
+// drizzle()이 안에서 만든 pg Pool은 $client로 꺼낼 수 있다.
+export type Database = NodePgDatabase &amp; { $client: Pool };
+
+@Global()
+@Module({
+  providers: [
+    {
+      provide: DATABASE,
+      useFactory: (): Database =&gt; drizzle(readEnv().databaseUrl),
+    },
+  ],
+  exports: [DATABASE],
+})
+export class DatabaseModule implements OnApplicationShutdown {
+  constructor(@Inject(DATABASE) private readonly db: Database) {}
+
+  async onApplicationShutdown() {
+    await this.db.$client.end();
+  }
+}</code></pre>
+          <p>
+            먼저 알아 둘 것이 있다. Drizzle은 PostgreSQL과 직접 통신하지 않는다. 실제 통신은
+            <code>pg</code>라는 드라이버가 하고, Drizzle은 그 위에 얹힌다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>층</th>
+                  <th>하는 일</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>ShowsService</code></td>
+                  <td><code>db.select()...</code>로 쿼리를 쓴다</td>
+                </tr>
+                <tr>
+                  <td>Drizzle (<code>db</code>)</td>
+                  <td>TypeScript 쿼리를 SQL 문자열로 바꾸고, 결과에 타입을 붙인다</td>
+                </tr>
+                <tr>
+                  <td>pg <code>Pool</code> (<code>db.$client</code>)</td>
+                  <td>SQL을 실제로 PostgreSQL에 보내고 결과를 받아 온다</td>
+                </tr>
+                <tr>
+                  <td>PostgreSQL</td>
+                  <td>실행한다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Pool이 뭔가</h3>
+          <p>
+            DB 연결을 맺는 일은 비싸다(네트워크 왕복과 인증). 요청마다 맺고 끊으면 느리므로, 연결 몇
+            개를 열어 두고 돌려 쓰는 묶음을 둔다. 이것이 Pool이다. 서비스마다 Pool을 만들면 안 되는
+            이유는 <a href="003-의존성-주입.html#without">003의 문제 3</a>에 있다.
+          </p>
+
+          <h3><code>drizzle(url)</code>: Pool까지 한 번에 만든다</h3>
+          <p>
+            <code>drizzle()</code>에 주소 문자열을 주면, Drizzle이 안에서
+            <code>new Pool({ connectionString: url })</code>을 대신 호출하고 그 Pool 위에
+            <code>db</code> 객체를 만들어 돌려준다. 우리 코드에는 <code>new Pool</code>이 없다.
+          </p>
+          <ul>
+            <li>
+              안에서 만든 Pool은 <code>db.$client</code>로 꺼낼 수 있다. 앱을 끌 때 이걸로 Pool을
+              닫는다.
+            </li>
+            <li>
+              <code>Database</code> 타입은 <code>NodePgDatabase</code>(쿼리 기능)에
+              <code>$client: Pool</code>을 붙인 것이다. 이렇게 적어야 <code>db.$client.end()</code>가
+              타입 검사를 통과한다.
+            </li>
+          </ul>
+          <details class="fold">
+            <summary>선택 읽기: drizzle 안에서 Pool을 만드는 코드</summary>
+            <div class="fold-body">
+              <p>
+                <code>node_modules/drizzle-orm/node-postgres/driver.js</code>(0.45.4)의 해당 부분을
+                줄인 것이다.
+              </p>
+              <pre><code class="language-js">function drizzle(...params) {
+  if (typeof params[0] === "string") {     // 첫 인자가 주소 문자열이면
+    const instance = new pg.Pool({         // 여기서 Pool을 만든다
+      connectionString: params[0]
+    });
+    return construct(instance, params[1]);
+  }
+  // ...
+}
+
+function construct(client, config = {}) {
+  // ...
+  db.$client = client;                     // 만든 Pool을 db.$client에 붙여 둔다
+  return db;
+}</code></pre>
+              <p>
+                Pool 옵션(최대 연결 수 등)이 필요해지면
+                <code>drizzle({ connection: { connectionString, max } })</code>처럼 객체로 넘긴다. 그러면
+                <code>new pg.Pool(connection)</code>으로 그대로 전달된다.
+              </p>
+            </div>
+          </details>
+        </section>
+
+        <section id="providers">
+          <h2>프로바이더 등록</h2>
+          <p>프로바이더는 "이 이름표로 요청하면 이 값을 준다"는 등록이다.</p>
+          <pre><code class="language-ts">{
+  provide: DATABASE,
+  useFactory: (): Database =&gt; drizzle(readEnv().databaseUrl),
+}</code></pre>
+
+          <h3>왜 <code>useFactory</code>로 만드는 함수를 직접 주나</h3>
+          <p>
+            Nest가 객체를 스스로 만드는 방법은 하나뿐이다. 클래스에 <code>new</code>를 호출하면서,
+            생성자 인자 자리에 등록된 다른 프로바이더를 넣는 것이다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>대상</th>
+                  <th>만드는 코드</th>
+                  <th>Nest가 혼자 만들 수 있나</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>ShowsService</code></td>
+                  <td><code>new ShowsService(db)</code></td>
+                  <td>
+                    <span class="badge green">있다</span> 인자 <code>db</code>가 등록된
+                    프로바이더다. <code>providers: [ShowsService]</code>면 된다.
+                  </td>
+                </tr>
+                <tr>
+                  <td>Drizzle <code>db</code></td>
+                  <td><code>drizzle(url)</code></td>
+                  <td>
+                    <span class="badge blue">없다</span> 클래스가 아니라 함수 호출이고, 인자도 주소
+                    문자열이다. Nest는 <code>new</code>만 할 줄 알고, 문자열은 등록된 프로바이더가
+                    아니다.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            그래서 "이렇게 만들어라"는 함수를 <code>useFactory</code>로 직접 준다. Nest는 이 함수를
+            한 번 실행해서 나온 값을 <code>DATABASE</code>라는 이름표로 등록한다.
+            <a href="003-의존성-주입.html#nest">003의 2단계</a>에서 <code>new Database(url)</code>을
+            등록한 것과 같은 상황이다.
+          </p>
+
+          <h3>이름표: <code>Symbol('DATABASE')</code></h3>
+          <p>
+            클래스로 등록하는 <code>ShowsService</code>는 클래스 자체가 이름표다. <code>db</code>는
+            함수가 돌려준 값이라 이름표를 따로 만들어야 한다. Symbol은 세상에 하나뿐인 값이라 다른
+            이름표와 겹칠 수 없다. 문자열 <code>'DATABASE'</code>도 동작하지만 다른 라이브러리와 겹칠
+            위험이 있다. 받는 쪽의 <code>@Inject(DATABASE)</code>만 봐도 "앱의 DB를 받는다"가 읽힌다는
+            장점도 있다.
+          </p>
+
+          <h3>부팅 중에 환경 변수를 검사한다</h3>
+          <ul>
+            <li>팩토리 안의 <code>readEnv()</code>가 <code>DATABASE_URL</code>을 확인하고, 없으면 에러를 던진다.</li>
+            <li>
+              Nest는 부팅 중(<code>NestFactory.create</code>)에 팩토리를 실행한다. 그래서 "필수 환경
+              변수가 없으면 부팅이 바로 실패한다"가 성립한다.
+            </li>
+          </ul>
+          <div class="callout warn">
+            <p>
+              <code>main.ts</code>는 <code>NestFactory.create(AppModule, { abortOnError: false })</code>로
+              부른다. 기본값 <code>true</code>이면 부팅 오류에서 Nest가 <code>process.abort()</code>를
+              호출해 프로세스를 강제로 멈춘다. <code>false</code>이면 오류를 던지므로
+              <code>필수 환경 변수가 없습니다: DATABASE_URL</code> 메시지와 함께 exit 1로 끝난다.
+            </p>
+          </div>
+
+          <h3>부팅이 성공했다고 DB에 붙는 것은 아니다</h3>
+          <p>
+            <code>readEnv()</code>는 <code>DATABASE_URL</code> 값이 <strong>있는지</strong>만 본다. 그
+            주소로 DB에 <strong>접속되는지</strong>는 보지 않는다. <code>drizzle(url)</code>이 안에서
+            만드는 Pool도 주소를 기억만 하고 접속하지 않는다. Pool은 첫 쿼리가 올 때 연결을 연다.
+            그래서 부팅 과정에는 DB와 통신하는 순간이 한 번도 없다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>상황</th>
+                  <th>언제 실패하나</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>DATABASE_URL</code>이 없다</td>
+                  <td><span class="badge blue">부팅</span> exit 1</td>
+                </tr>
+                <tr>
+                  <td>값은 있는데 DB가 꺼져 있거나, 주소나 비밀번호가 틀렸다</td>
+                  <td>
+                    <span class="badge green">첫 요청</span> 부팅은 성공하고,
+                    <code>GET /shows</code>에서 <code>ECONNREFUSED</code> 등으로 500. 아무것도 떠 있지
+                    않은 포트를 주소로 줘서 실행해 확인했다.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout warn">
+            <p>
+              "부팅 성공"은 "DB에 붙을 수 있다"를 뜻하지 않는다. <code>DATABASE_URL</code>의 비밀번호에
+              오타가 있어도 앱은 멀쩡히 뜨고, 첫 요청이 들어와서야 500으로 드러난다. 앱이 이상하면
+              부팅 로그만 믿지 말고 DB 접속 정보부터 확인한다.
+            </p>
+          </div>
+          <details class="fold">
+            <summary>선택 읽기: 부팅 때 DB 접속까지 확인하려면</summary>
+            <div class="fold-body">
+              <p>팩토리에서 쿼리를 한 번 실행하면 된다. 접속이 안 되면 부팅이 실패한다.</p>
+              <pre><code class="language-ts">useFactory: async (): Promise&lt;Database&gt; =&gt; {
+  const db = drizzle(readEnv().databaseUrl);
+  await db.execute('select 1'); // 접속 실패 시 여기서 throw → 부팅 실패
+  return db;
+},</code></pre>
+              <p>
+                대가가 있다. 배포 환경에서는 DB가 앱보다 늦게 뜨는 일이 흔한데, 그때마다 앱이 부팅에
+                실패한다. 그래서 운영에서는 부팅을 막기보다, DB 접속 여부를 알려 주는 헬스 체크
+                엔드포인트를 따로 두는 방식을 많이 쓴다.
+              </p>
+            </div>
+          </details>
+          <p>지금 코드는 이 확인을 하지 않는다. 어느 방식을 쓸지는 배포 단계에서 정한다.</p>
+        </section>
+
+        <section id="exports">
+          <h2><code>exports</code>와 <code>@Global()</code></h2>
+          <p><code>database.module.ts</code>에서 이 절이 다루는 두 줄이다.</p>
+          <pre><code class="language-ts">@Global() // ← 모든 모듈에서 쓸 수 있게 한다
+@Module({
+  providers: [
+    { provide: DATABASE, useFactory: (): Database =&gt; drizzle(readEnv().databaseUrl) },
+  ],
+  exports: [DATABASE], // ← 모듈 밖에 공개한다
+})
+export class DatabaseModule implements OnApplicationShutdown { /* ... */ }</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>설정</th>
+                  <th>효과</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>exports: [DATABASE]</code></td>
+                  <td>다른 모듈이 <code>DATABASE</code>를 받아 쓸 수 있게 공개한다.</td>
+                </tr>
+                <tr>
+                  <td><code>@Global()</code></td>
+                  <td>
+                    원래는 다른 모듈의 프로바이더를 쓰려면 그 모듈을 <code>imports</code>에 적어야
+                    한다. Global이면 <code>AppModule</code>에 한 번만 등록해도 모든 모듈에서 쓸 수
+                    있다. 거의 모든 모듈이 쓰는 DB 같은 것에 흔히 쓴다.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>그래서 <code>ShowsModule</code>은 <code>imports</code> 없이 이렇게 받아 쓴다.</p>
+          <pre><code class="language-ts">@Injectable()
+export class ShowsService {
+  constructor(@Inject(DATABASE) private readonly db: Database) {}
+}</code></pre>
+          <p>
+            클래스가 아니라 이름표로 등록했으므로, 받을 때도 <code>@Inject(DATABASE)</code>로 이름표를
+            적어 줘야 한다. 생성자 타입 <code>Database</code>만으로는 Symbol 이름표를 찾을 수 없기
+            때문이다.
+          </p>
+
+          <h3>꼭 Symbol과 <code>@Inject</code>여야 하나</h3>
+          <p>
+            아니다. 다만 <code>drizzle(url)</code>이 돌려준 값을 넣으려면 어떤 형태로든 이름표가 필요하고,
+            그 이름표가 클래스가 아니면 받는 쪽에서 <code>@Inject</code>로 적어야 한다.
+          </p>
+          <p>
+            <code>@Inject</code> 없이 받으면 Nest는 생성자 인자의 타입 기록(<code>design:paramtypes</code>)을
+            이름표로 쓴다. 이 기록에는 런타임에 남는 클래스만 제대로 남는다.
+            <code>Database</code>는 <code>NodePgDatabase &amp; { $client: Pool }</code>이라는 교차
+            타입이라 <code>Object</code>로 기록되고(실행해 확인했다), Nest는 무엇을 넣을지 모른다.
+          </p>
+          <details class="fold">
+            <summary>선택 읽기: <code>@Inject</code> 없이 받는 방법들</summary>
+            <div class="fold-body">
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>방법</th>
+                      <th>받는 쪽</th>
+                      <th>단점</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><span class="badge green">이 저장소</span> Symbol + <code>@Inject</code></td>
+                      <td><code>@Inject(DATABASE) db: Database</code></td>
+                      <td>받을 때마다 <code>@Inject</code>를 적어야 한다</td>
+                    </tr>
+                    <tr>
+                      <td>Drizzle 클래스를 이름표로</td>
+                      <td><code>db: NodePgDatabase</code></td>
+                      <td>
+                        타입을 <code>NodePgDatabase</code> 그대로 적어야 해서 <code>$client</code> 타입이
+                        빠진다. Drizzle 내부 클래스 이름에 코드가 묶인다
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>추상 클래스 + 인터페이스 병합</td>
+                      <td><code>db: Database</code></td>
+                      <td>
+                        아래처럼 같은 이름을 클래스와 인터페이스로 겹쳐 선언한다. 동작은 하지만(실행해
+                        확인했다) 처음 보는 사람에게는 수수께끼 같은 코드다
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>감싸는 서비스</td>
+                      <td><code>databaseService: DatabaseService</code></td>
+                      <td>쿼리마다 <code>this.databaseService.db.select()...</code>처럼 한 단계를 더 거친다</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p>세 번째 방법의 모양이다. 클래스는 런타임 이름표가 되고, 인터페이스는 타입을 채운다.</p>
+              <pre><code class="language-ts">export abstract class Database {}
+export interface Database extends NodePgDatabase {
+  $client: Pool;
+}
+
+// 등록: { provide: Database, useFactory: (): Database =&gt; drizzle(url) }
+// 받기: constructor(private readonly db: Database) {}</code></pre>
+            </div>
+          </details>
+          <p>
+            NestJS 공식 <code>@nestjs/drizzle</code>도 받을 때 <code>@InjectDrizzle()</code> 데코레이터를
+            쓴다. 그 안의 이름표는 <code>getDrizzleToken()</code>이 돌려주는 토큰이다. "토큰으로 등록하고,
+            받을 때 데코레이터로 토큰을 적는다"는 지금 코드와 같은 구조다.
+          </p>
+          <div class="callout">
+            <p>
+              그래서 Symbol + <code>@Inject</code>를 쓴다. Nest가 클래스가 아닌 값을 주입하는 표준
+              방법이고, 공식 패키지와 구조도 같다. 받는 곳이 늘어 <code>@Inject(DATABASE)</code>가 길게
+              느껴지면 <code>export const InjectDatabase = () =&gt; Inject(DATABASE);</code>로 줄여
+              <code>@InjectDatabase()</code>로 쓸 수 있다. 지금은 쓰는 곳이 <code>ShowsService</code>
+              하나라 필요 없다.
+            </p>
+          </div>
+        </section>
+
+        <section id="shutdown">
+          <h2>앱을 끌 때</h2>
+          <pre><code class="language-ts">export class DatabaseModule implements OnApplicationShutdown {
+  constructor(@Inject(DATABASE) private readonly db: Database) {}
+
+  async onApplicationShutdown() {
+    await this.db.$client.end();
+  }
+}</code></pre>
+          <ul>
+            <li>모듈 클래스도 프로바이더를 주입받을 수 있다. 여기서는 자기가 등록한 <code>db</code>를 받아 둔다.</li>
+            <li><code>onApplicationShutdown</code>은 <code>app.close()</code>가 호출되면 Nest가 불러 주는 생명주기 훅이다.</li>
+            <li><code>db.$client.end()</code>는 Drizzle이 안에서 만든 Pool의 연결을 모두 닫는다.</li>
+          </ul>
+          <p>
+            이 훅이 없으면 열린 연결이 Node 프로세스를 붙잡는다. 그러면 테스트가 끝나도 프로세스가
+            종료되지 않거나, 테스트마다 연결이 쌓인다. 통합 테스트는 테스트마다 앱을 만들고 닫는데,
+            그래도 깔끔하게 끝나는 것은 이 훅 덕분이다.
+          </p>
+
+          <h3><code>onModuleDestroy</code>가 아니라 <code>onApplicationShutdown</code>인 이유</h3>
+          <p>
+            <a href="003-의존성-주입.html#nest">003의 5단계</a>는 <code>onModuleDestroy</code>로
+            풀을 닫았다. 둘 다 <code>app.close()</code>에서 불리지만 시점이 다르다. NestJS 12.4 소스의
+            순서는 이렇다.
+          </p>
+          <ol class="steps green">
+            <li>
+              <strong><code>onModuleDestroy</code></strong>
+              모든 프로바이더의 정리 훅
+            </li>
+            <li>
+              <strong><code>beforeApplicationShutdown</code></strong>
+              종료 직전 훅
+            </li>
+            <li>
+              <strong>HTTP 서버 닫기</strong>
+              더 이상 요청을 받지 않는다
+            </li>
+            <li>
+              <strong><code>onApplicationShutdown</code></strong>
+              마지막 훅. 여기서 풀을 닫는다
+            </li>
+          </ol>
+          <p>
+            풀은 다른 코드가 모두 정리되고 HTTP 서버까지 닫힌 뒤에 닫는 것이 안전하다. 다른 모듈의
+            <code>onModuleDestroy</code>가 마지막으로 DB에 무언가를 쓰더라도 풀이 아직 열려 있기
+            때문이다. NestJS 공식 샘플도 같은 훅에서 Pool을 닫는다.
+          </p>
+          <div class="callout warn">
+            <p>
+              이 훅은 <code>app.close()</code>를 부를 때만 실행된다. Ctrl+C 같은 종료 신호에도
+              실행하려면 <code>app.enableShutdownHooks()</code>를 호출해야 한다. 지금
+              <code>main.ts</code>에는 없다. 프로세스가 종료되면 OS가 연결을 끊으므로 로컬 개발에는
+              문제가 없지만, 배포 단계에서 다시 볼 부분이다.
+            </p>
+          </div>
+        </section>
+
+        <section id="flow">
+          <h2>전체 흐름</h2>
+          <div class="flow">
+            <div class="lane blue">
+              <div class="lane-title">부팅: NestFactory.create(AppModule)</div>
+              <ol class="chain">
+                <li><span>DATABASE 팩토리 → readEnv()</span></li>
+                <li><span>DATABASE_URL 없으면 실패, exit 1</span></li>
+                <li><span>drizzle(url) → 안에서 Pool 생성</span></li>
+                <li><span>ShowsService에 db 주입</span></li>
+              </ol>
+            </div>
+            <div class="lane green">
+              <div class="lane-title">요청과 종료</div>
+              <ol class="chain">
+                <li><span>GET /shows → db.select()...</span></li>
+                <li><span>Pool이 연결을 빌려 SQL 실행 후 반납</span></li>
+                <li><span>app.close() → HTTP 서버 닫기</span></li>
+                <li><span>onApplicationShutdown → db.$client.end()</span></li>
+              </ol>
+            </div>
+          </div>
+        </section>
+
+        <section id="check">
+          <h2>스스로 확인하기</h2>
+          <p>질문에 먼저 답해 본 뒤, 눌러서 답을 확인한다.</p>
+          <details>
+            <summary>1. <code>pnpm db:generate</code>를 실행하면 DB의 테이블이 바뀌는가?</summary>
+            <p>
+              아니다. <code>generate</code>는 스키마와 지난번 스냅샷을 비교해 SQL 파일만 만든다. DB에
+              적용하는 것은 <code>pnpm db:migrate</code>다. 둘이 나뉘어 있어서 적용 전에 SQL을 리뷰할
+              수 있다.
+            </p>
+          </details>
+          <details>
+            <summary>
+              2. <code>shows</code> 테이블에 <code>{ id: 10, title: '...' }</code>로 insert하면 어떻게
+              되는가?
+            </summary>
+            <p>
+              TypeScript에서는 <code>id</code>가 insert 타입에 없어 컴파일 오류가 난다. SQL로 직접
+              넣어도 <code>GENERATED ALWAYS</code> 컬럼이라 PostgreSQL이 거부한다.
+            </p>
+          </details>
+          <details>
+            <summary>3. PostgreSQL이 꺼진 상태에서 <code>pnpm start</code>를 하면 언제 실패하는가?</summary>
+            <p>
+              부팅은 성공한다. <code>drizzle(url)</code>이 만드는 Pool은 접속 정보만 기억하고 실제 연결은 첫 쿼리 때
+              열기 때문이다. <code>GET /shows</code> 요청에서 처음 실패한다. 반면
+              <code>DATABASE_URL</code>이 아예 없으면 부팅에서 실패한다.
+            </p>
+          </details>
+          <details>
+            <summary>
+              4. <code>ShowsService</code>가 생성자에 <code>@Inject(DATABASE)</code> 없이
+              <code>private readonly db: Database</code>만 적으면 어떻게 되는가?
+            </summary>
+            <p>
+              부팅 때 의존성을 해결하지 못했다는 오류가 난다(실행해 확인했다). Nest는
+              <code>@Inject</code>가 없으면 생성자 타입 기록을 이름표로 쓰는데, 프로바이더는
+              <code>DATABASE</code>라는 Symbol로 등록했으므로 타입으로는 찾을 수 없다. 토큰으로 등록한
+              프로바이더는 받을 때도 토큰을 적어야 한다.
+            </p>
+          </details>
+          <details>
+            <summary>
+              5. 우리 코드에는 <code>new Pool</code>이 없는데, 앱을 끌 때 무엇을 어떻게 닫는가?
+            </summary>
+            <p>
+              <code>drizzle(url)</code>이 안에서 만든 pg Pool을 닫는다. 그 Pool은 <code>db.$client</code>로
+              꺼낼 수 있고, <code>onApplicationShutdown</code>에서 <code>db.$client.end()</code>를 부른다.
+              <code>Database</code> 타입에 <code>$client: Pool</code>을 붙여 둔 것은 이 호출이 타입 검사를
+              통과하게 하려는 것이다.
+            </p>
+          </details>
+        </section>
+
+        <section id="more">
+          <h2>더 읽을거리</h2>
+          <ol>
+            <li>
+              <a href="https://orm.drizzle.team/docs/sql-schema-declaration">Drizzle: Schema declaration</a>
+            </li>
+            <li>
+              <a href="https://orm.drizzle.team/docs/column-types/pg">Drizzle: PostgreSQL column types</a>
+            </li>
+            <li>
+              <a href="https://orm.drizzle.team/docs/migrations">Drizzle: Migrations</a>
+            </li>
+            <li>
+              <a href="https://orm.drizzle.team/docs/get-started-postgresql">Drizzle: PostgreSQL 연결</a>
+            </li>
+            <li>
+              <a href="https://docs.nestjs.com/fundamentals/lifecycle-events">NestJS: Lifecycle events</a>
+            </li>
+            <li>
+              <a href="https://node-postgres.com/apis/pool">node-postgres: Pool</a>
+            </li>
+            <li>
+              <a href="https://www.postgresql.org/docs/current/ddl-identity-columns.html">
+                PostgreSQL: Identity columns</a
+              >
+            </li>
+          </ol>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
