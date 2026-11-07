@@ -18,6 +18,7 @@
 | `nestjs` | NestJS의 구조와 사용법 |
 | `drizzle` | Drizzle ORM의 스키마, 마이그레이션, 쿼리 |
 | `testing` | 테스트 구성, 도구, 작성 방법 |
+| `nextjs` | Next.js의 렌더링, 캐시, 앱 구조 |
 
 ## 모듈
 
