@@ -523,6 +523,15 @@ function construct(client, config = {}) {
 
         <section id="exports">
           <h2><code>exports</code>와 <code>@Global()</code></h2>
+          <p><code>database.module.ts</code>에서 이 절이 다루는 두 줄이다.</p>
+          <pre><code class="language-ts">@Global() // ← 모든 모듈에서 쓸 수 있게 한다
+@Module({
+  providers: [
+    { provide: DATABASE, useFactory: (): Database =&gt; drizzle(readEnv().databaseUrl) },
+  ],
+  exports: [DATABASE], // ← 모듈 밖에 공개한다
+})
+export class DatabaseModule implements OnApplicationShutdown { /* ... */ }</code></pre>
           <div class="table-wrap">
             <table>
               <thead>
