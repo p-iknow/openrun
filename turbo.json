@@ -29,7 +29,7 @@
       "dependsOn": ["^build"],
       "cache": false,
       "persistent": true,
-      "env": ["DATABASE_URL"]
+      "env": ["DATABASE_URL", "API_INTERNAL_URL"]
     },
     "test:integration": {
       "dependsOn": ["^build"],
