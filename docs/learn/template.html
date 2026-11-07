@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>문서 제목</title>
+    <link rel="stylesheet" href="learn.css" />
+    <script src="vendor/highlightjs/highlight.min.js" defer></script>
+    <script src="learn.js" defer></script>
+  </head>
+  <body>
+    <div class="layout">
+      <nav aria-label="목차">
+        <strong>목차</strong>
+        <ol>
+          <li><a href="#flow">흐름도</a></li>
+          <li><a href="#steps">단계</a></li>
+          <li><a href="#code">코드</a></li>
+          <li><a href="#table">표와 배지</a></li>
+          <li><a href="#callout">강조 상자</a></li>
+          <li><a href="#check">접는 질문</a></li>
+        </ol>
+      </nav>
+
+      <main>
+        <h1>문서 제목</h1>
+        <ul class="tags" aria-label="태그">
+          <li>tag-name</li>
+        </ul>
+        <p class="lead">이 문서가 다루는 범위를 한 문장으로 적는다.</p>
+
+        <section id="flow">
+          <h2>흐름도</h2>
+          <div class="flow">
+            <div class="lane blue">
+              <div class="lane-title">파란색 흐름</div>
+              <ol class="chain">
+                <li><span>첫 단계</span></li>
+                <li><span>다음 단계</span></li>
+              </ol>
+            </div>
+            <div class="lane green">
+              <div class="lane-title">초록색 흐름</div>
+              <ol class="chain">
+                <li><span>첫 단계</span></li>
+                <li><span>다음 단계</span></li>
+              </ol>
+            </div>
+          </div>
+        </section>
+
+        <section id="steps">
+          <h2>단계</h2>
+          <ol class="steps blue">
+            <li>
+              <strong>첫 단계</strong>
+              설명을 적는다.
+            </li>
+            <li>
+              <strong>둘째 단계</strong>
+              설명을 적는다.
+            </li>
+          </ol>
+          <p>번호를 이어 가려면 앞 목록의 항목 수를 <code>--start</code>에 넣는다.</p>
+          <ol class="steps green" style="--start: 2">
+            <li>
+              <strong>셋째 단계</strong>
+              설명을 적는다.
+            </li>
+          </ol>
+        </section>
+
+        <section id="code">
+          <h2>코드</h2>
+          <p>
+            문장 안의 코드는 <code>code</code>로 감싼다. 코드 블록의 <code>&lt;</code>,
+            <code>&gt;</code>, <code>&amp;</code>는 이스케이프한다. TypeScript 블록에
+            <code>language-ts</code>를 붙이면 구문이 강조된다.
+          </p>
+          <pre><code class="language-ts">const value = await load();</code></pre>
+        </section>
+
+        <section id="table">
+          <h2>표와 배지</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>항목</th>
+                  <th>시점</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>파란색 배지</td>
+                  <td><span class="badge blue">파란색</span></td>
+                </tr>
+                <tr>
+                  <td>초록색 배지</td>
+                  <td><span class="badge green">초록색</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="callout">
+          <h2>강조 상자</h2>
+          <div class="callout"><p>꼭 기억할 정의나 핵심을 적는다.</p></div>
+          <div class="callout warn"><p>흔한 실수나 주의할 점을 적는다.</p></div>
+        </section>
+
+        <section id="check">
+          <h2>접는 질문</h2>
+          <details>
+            <summary>1. 질문을 적는다.</summary>
+            <p>답을 적는다.</p>
+          </details>
+          <p>코드나 표가 든 선택 읽기 내용은 <code>fold</code>로 접는다. 결론은 접기 밖에 적는다.</p>
+          <details class="fold">
+            <summary>선택 읽기: 접어 둘 내용의 제목</summary>
+            <div class="fold-body">
+              <p>설명을 적는다.</p>
+              <pre><code class="language-ts">const value = await load();</code></pre>
+            </div>
+          </details>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

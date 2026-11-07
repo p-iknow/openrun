@@ -1,0 +1,548 @@
+<!doctype html>
+<html lang="ko">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NestJS 기초: 초기화된 파일 읽기</title>
+  <link rel="stylesheet" href="learn.css" />
+  <script src="vendor/highlightjs/highlight.min.js" defer></script>
+  <script src="learn.js" defer></script>
+</head>
+
+<body>
+  <div class="layout">
+    <nav aria-label="목차">
+      <strong>목차</strong>
+      <ol>
+        <li><a href="#overview">한눈에 보기</a></li>
+        <li><a href="#why">Nest가 대신 해 주는 일</a></li>
+        <li><a href="#flow">앱이 동작하는 순서</a></li>
+        <li><a href="#controller">컨트롤러</a></li>
+        <li><a href="#module">모듈</a></li>
+        <li><a href="#provider">프로바이더와 DI</a></li>
+        <li><a href="#failures">실패 시점과 디버깅</a></li>
+        <li><a href="#test">테스트</a></li>
+        <li><a href="#esm">ESM 때문에 낯선 부분</a></li>
+        <li><a href="#config">설정 파일</a></li>
+        <li><a href="#skip">지금은 건너뛸 것</a></li>
+        <li><a href="#check">스스로 확인하기</a></li>
+        <li><a href="#more">더 읽을거리</a></li>
+      </ol>
+    </nav>
+
+    <main>
+      <h1>NestJS 기초: 초기화된 파일 읽기</h1>
+      <ul class="tags" aria-label="태그">
+        <li>nestjs</li>
+      </ul>
+      <p class="lead">
+        <code>apps/api</code>에 초기화된 파일을 읽는 데 필요한 개념을 정리한다. 기준 버전은 NestJS
+        12.4다.
+      </p>
+
+      <section id="overview">
+        <h2>한눈에 보기</h2>
+        <div class="flow">
+          <div class="lane blue">
+            <div class="lane-title">조립 시점: 앱이 켜질 때</div>
+            <ol class="chain">
+              <li><span>main.ts</span></li>
+              <li><span>AppModule</span></li>
+              <li><span>ShowsModule</span></li>
+              <li><span>ShowsController</span></li>
+              <li><span>GET /shows 연결</span></li>
+              <li><span>3000번 포트 열기</span></li>
+            </ol>
+          </div>
+          <div class="lane green">
+            <div class="lane-title">요청 시점: 요청이 들어올 때</div>
+            <ol class="chain">
+              <li><span>GET /shows</span></li>
+              <li><span>findAll() 실행</span></li>
+              <li><span>[] 반환</span></li>
+              <li><span>200 + JSON 응답</span></li>
+            </ol>
+          </div>
+        </div>
+        <p>기억할 내용은 두 가지다.</p>
+        <ul>
+          <li>
+            Nest는 <code>AppModule</code>에서 시작해 <code>imports</code>를 따라가며 앱을
+            조립한다.
+          </li>
+          <li>
+            일은 <strong>조립 시점</strong>과 <strong>요청 시점</strong>으로 나뉜다. 문제가 어느
+            시점에 드러나는지 구분하면 원인을 찾기 쉽다.
+          </li>
+        </ul>
+      </section>
+
+      <section id="why">
+        <h2>Nest가 대신 해 주는 일</h2>
+        <p>Nest 없이 Express로 같은 API를 만들면 대략 다음과 같다.</p>
+        <pre><code class="language-ts">const app = express();                    // 앱 만들기
+const controller = new ShowsController(); // 객체 만들기
+app.get('/shows', (req, res) =&gt; {         // 주소와 함수 연결하기
+  res.json(controller.findAll());         // 응답 보내기
+});
+app.listen(3000);                         // 요청 받기 시작</code></pre>
+        <p>
+          Nest에서는 이 일을 직접 쓰지 않고 데코레이터로 알려 준다. 그래서 코드 어디에도
+          <code>new ShowsController()</code>가 없다.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>코드</th>
+                <th>Nest에 알려 주는 내용</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>@Module({ controllers: [ShowsController] })</code></td>
+                <td>이 컨트롤러를 앱에 포함해 줘</td>
+              </tr>
+              <tr>
+                <td><code>@Controller('shows')</code> + <code>@Get()</code></td>
+                <td><code>GET /shows</code>를 이 메서드에 연결해 줘</td>
+              </tr>
+              <tr>
+                <td><code>NestFactory.create(AppModule)</code></td>
+                <td>이 모듈부터 따라가며 앱을 만들어 줘</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout">
+          <p>
+            <strong>데코레이터</strong>는 <code>@</code>로 시작하며, 클래스나 메서드에 정보를
+            붙인다. Nest는 시작할 때 이 정보를 읽어 앱을 조립한다.
+          </p>
+        </div>
+      </section>
+
+      <section id="flow">
+        <h2>앱이 동작하는 순서</h2>
+
+        <h3>조립 시점: 앱이 켜질 때</h3>
+        <ol class="steps blue">
+          <li>
+            <strong>코드 실행</strong>
+            <code>pnpm dev</code>가 <code>nest start --watch</code>를 실행한다. Nest CLI가
+            <code>tsc</code>로 코드를 컴파일하고 <code>main.ts</code>의 결과물을 실행한다.
+            <code>--watch</code> 때문에 파일을 고치면 이 과정이 다시 실행된다.
+          </li>
+          <li>
+            <strong><code>main.ts</code>: 조립 시작</strong>
+            <pre><code class="language-ts">const app = await NestFactory.create(AppModule);</code></pre>
+            <code>AppModule</code>을 시작점으로 앱 조립을 시작한다.
+          </li>
+          <li>
+            <strong><code>app.module.ts</code>: 다음 모듈 찾기</strong>
+            <pre><code class="language-ts">@Module({
+  imports: [ShowsModule],
+})
+export class AppModule {}</code></pre>
+            <code>imports</code>를 보고 <code>ShowsModule</code>도 앱에 포함한다. 클래스 본문이
+            비어 있어도 정상이다. 필요한 내용은 데코레이터에 들어 있다.
+          </li>
+          <li>
+            <strong><code>shows.module.ts</code>: 컨트롤러 찾기</strong>
+            <pre><code class="language-ts">@Module({
+  controllers: [ShowsController],
+})
+export class ShowsModule {}</code></pre>
+            <code>ShowsController</code>를 찾아 인스턴스를 만든다. 생성자에서 요구하는 것이 없어
+            바로 만들 수 있다.
+          </li>
+          <li>
+            <strong><code>main.ts</code>: 주소 연결 후 요청 받기</strong>
+            <pre><code class="language-ts">await app.listen(3000);</code></pre>
+            <code>listen()</code>은 초기화가 안 됐으면 <code>init()</code>을 먼저 실행한다. 이때
+            Nest가 데코레이터를 읽어 <code>GET /shows</code>와 <code>findAll()</code>을 연결한다.
+            그다음 3000번 포트를 열고 요청을 기다린다.
+          </li>
+        </ol>
+
+        <h3>요청 시점: <code>GET /shows</code>가 들어올 때</h3>
+        <ol class="steps green" style="--start: 5">
+          <li>
+            <strong>요청 수신</strong>
+            Express가 요청을 받고, 조립 때 연결해 둔 <code>findAll()</code>을 호출한다. Nest는
+            기본 HTTP 서버로 Express를 쓴다. 그래서 <code>@nestjs/platform-express</code>를 직접
+            import하지 않아도 된다.
+          </li>
+          <li>
+            <strong><code>shows.controller.ts</code>: 메서드 실행</strong>
+            <pre><code class="language-ts">@Controller('shows')
+export class ShowsController {
+  @Get()
+  findAll() {
+    return [];
+  }
+}</code></pre>
+            메서드는 빈 배열만 반환하고, HTTP 응답을 직접 다루지 않는다.
+          </li>
+          <li>
+            <strong>응답 전송</strong>
+            Nest가 반환값을 JSON으로 바꿔 상태 코드 200과 함께 보낸다. 그래서 클라이언트는
+            <code>[]</code>를 받는다.
+          </li>
+        </ol>
+      </section>
+
+      <section id="controller">
+        <h2>컨트롤러: 주소와 메서드 연결</h2>
+        <p><code>@Controller</code>의 경로와 <code>@Get</code>의 경로가 합쳐져 주소가 된다.</p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>컨트롤러</th>
+                <th>메서드</th>
+                <th>주소</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>@Controller('shows')</code></td>
+                <td><code>@Get()</code></td>
+                <td><code>GET /shows</code></td>
+              </tr>
+              <tr>
+                <td><code>@Controller('shows')</code></td>
+                <td><code>@Get('popular')</code></td>
+                <td><code>GET /shows/popular</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>상태 코드의 기본값은 200이고, <code>POST</code>만 201이다.</p>
+      </section>
+
+      <section id="module">
+        <h2>모듈: 기능을 묶는 단위</h2>
+        <p><code>@Module</code>에는 네 가지 항목을 쓸 수 있다.</p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>항목</th>
+                <th>의미</th>
+                <th>현재 사용</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>imports</code></td>
+                <td>가져올 다른 모듈</td>
+                <td><code>AppModule</code></td>
+              </tr>
+              <tr>
+                <td><code>controllers</code></td>
+                <td>이 모듈의 HTTP 진입점</td>
+                <td><code>ShowsModule</code></td>
+              </tr>
+              <tr>
+                <td><code>providers</code></td>
+                <td>이 모듈 안에서 주입할 수 있는 객체</td>
+                <td>없음</td>
+              </tr>
+              <tr>
+                <td><code>exports</code></td>
+                <td>다른 모듈에 공개할 프로바이더</td>
+                <td>없음</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>파일이 있어도 모듈에 등록하지 않으면 Nest는 그 존재를 모른다.</p>
+      </section>
+
+      <section id="provider">
+        <h2>프로바이더와 DI: 아직 코드에 없지만 곧 필요한 개념</h2>
+        <p>
+          컨트롤러는 요청을 받고, 실제 일은 보통 서비스에 맡긴다. 이때 서비스 객체를 직접 만들지
+          않고 생성자에 필요하다고 적기만 한다. 이렇게 필요한 객체를 밖에서 넣어 주는 방식이
+          <strong>DI(의존성 주입)</strong>이고, Nest가 만들어 넣어 주는 객체가
+          <strong>프로바이더</strong>다.
+        </p>
+        <pre><code class="language-ts">@Injectable()
+export class ShowsService {
+  findAll() {
+    return [];
+  }
+}
+
+@Controller('shows')
+export class ShowsController {
+  constructor(private readonly shows: ShowsService) {}
+}
+
+@Module({
+  controllers: [ShowsController],
+  providers: [ShowsService], // Nest가 만들어서 필요한 곳에 넣어 줌
+})
+export class ShowsModule {}</code></pre>
+
+        <h3>다른 모듈의 프로바이더 쓰기</h3>
+        <p>
+          프로바이더는 기본적으로 등록한 모듈 안에서만 보인다. 다른 모듈에서 쓰려면 두 가지가 모두
+          필요하다.
+        </p>
+        <ul>
+          <li><strong>제공하는 쪽:</strong> <code>exports</code>에 넣어 공개한다.</li>
+          <li><strong>사용하는 쪽:</strong> 그 모듈을 <code>imports</code>에 넣는다.</li>
+        </ul>
+        <pre><code class="language-ts">@Module({
+  providers: [ShowsService],
+  exports: [ShowsService], // 공개
+})
+export class ShowsModule {}
+
+@Module({
+  imports: [ShowsModule], // 가져오기
+  controllers: [ReviewsController],
+})
+export class ReviewsModule {}</code></pre>
+        <div class="callout warn">
+          <p>
+            <code>ReviewsModule</code>의 <code>providers</code>에 <code>ShowsService</code>를 넣어
+            해결하면 안 된다. 오류는 사라지지만 모듈마다 인스턴스가 따로 생겨서, 서비스가 상태를
+            가지면 값이 서로 달라질 수 있다.
+          </p>
+        </div>
+
+        <h3><code>import type</code>으로 가져오면 주입되지 않는다</h3>
+        <p>
+          <code>import type { ShowsService }</code>는 컴파일 후 지워져서 런타임에 클래스 정보가
+          남지 않는다. 그러면 Nest가 무엇을 주입할지 알 수 없다. <code>tsc</code>는 타입만 보기
+          때문에 이 문제를 잡지 못한다. 자세한 내용은
+          <code>docs/stage-notes/01-풀스택-기본.md</code>에 있다.
+        </p>
+      </section>
+
+      <section id="failures">
+        <h2>어떤 문제가 언제 드러나는가</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>상황</th>
+                <th>실패 시점</th>
+                <th>결과</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>모듈을 <code>imports</code>에서 뺌</td>
+                <td><span class="badge green">요청 시점</span></td>
+                <td>앱은 켜지고 404 응답</td>
+              </tr>
+              <tr>
+                <td>컨트롤러를 <code>controllers</code>에서 뺌</td>
+                <td><span class="badge green">요청 시점</span></td>
+                <td>앱은 켜지고 404 응답</td>
+              </tr>
+              <tr>
+                <td>서비스를 <code>providers</code>에 넣지 않음</td>
+                <td><span class="badge blue">조립 시점</span></td>
+                <td>앱이 켜지지 않음</td>
+              </tr>
+              <tr>
+                <td>서비스를 <code>exports</code>에 넣지 않음</td>
+                <td><span class="badge blue">조립 시점</span></td>
+                <td>앱이 켜지지 않음</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>디버깅은 다음 순서로 시작한다.</p>
+        <ul>
+          <li>
+            <strong>앱이 안 켜지면:</strong> 조립 단계를 본다. 생성자에서 요구하는 프로바이더의
+            <code>providers</code>, <code>exports</code>, <code>imports</code>를 확인한다.
+          </li>
+          <li>
+            <strong>앱은 켜졌는데 404가 나면:</strong> <code>imports</code>와
+            <code>controllers</code>에 등록이 빠졌는지, 주소가 맞는지 확인한다.
+          </li>
+        </ul>
+        <p>
+          조립에 실패하면 다음과 같은 오류가 난다. <code>?</code>는 찾지 못한 생성자 인자의 위치를
+          뜻한다.
+        </p>
+        <pre><code>Nest can't resolve dependencies of the ReviewsController (?).
+Please make sure that the argument ShowsService at index [0]
+is available in the ReviewsModule module.</code></pre>
+      </section>
+
+      <section id="test">
+        <h2>테스트: <code>test/shows.spec.ts</code></h2>
+        <p>테스트도 같은 흐름을 따른다. 다만 <code>listen(3000)</code>을 호출하지 않는다.</p>
+        <pre><code class="language-ts">Test.createTestingModule({ imports: [AppModule] }).compile(); // 모듈 그래프 조립
+moduleRef.createNestApplication();                            // 앱 인스턴스 생성
+app.init();                                                   // 주소 연결, 포트는 열지 않음
+request(app.getHttpServer()).get('/shows');                   // HTTP 요청</code></pre>
+        <ul>
+          <li>
+            <strong>포트:</strong> <code>app.getHttpServer()</code>는 아직 포트를 열지 않은 서버
+            객체를 돌려준다. supertest가 이 서버를 임시 포트로 직접 열어 요청을 보낸다.
+          </li>
+          <li>
+            <strong>검증 범위:</strong> 컨트롤러 메서드만 호출하지 않고 앱 전체를 조립한다. 그래서
+            라우팅과 모듈 연결까지 검증한다.
+          </li>
+          <li><strong>정리:</strong> 테스트마다 <code>app.close()</code>로 앱을 닫는다.</li>
+          <li>
+            <strong>나중에 DB를 붙이면:</strong> <code>overrideProvider()</code>로 프로바이더를
+            테스트용 객체로 바꿀 수 있다.
+          </li>
+        </ul>
+      </section>
+
+      <section id="esm">
+        <h2>Nest가 아니라 ESM 때문에 낯선 부분</h2>
+        <p>이 프로젝트는 <code>"type": "module"</code>과 <code>module: nodenext</code>를 쓴다.</p>
+        <ul>
+          <li>
+            <strong><code>.js</code> 확장자:</strong> <code>.ts</code> 파일을 import해도 경로에는
+            <code>.js</code>를 쓴다.
+          </li>
+          <li>
+            <strong>최상위 <code>await</code>:</strong> <code>bootstrap()</code> 함수로 감싸지
+            않아도 <code>await</code>를 쓸 수 있다.
+          </li>
+        </ul>
+      </section>
+
+      <section id="config">
+        <h2>설정 파일</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>파일</th>
+                <th>역할</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>nest-cli.json</code></td>
+                <td>
+                  소스 위치를 <code>src</code>로 정하고, 빌드 전에 <code>dist</code>를 비운다.
+                  빌더를 지정하지 않아 기본값인 <code>tsc</code>를 쓴다.
+                </td>
+              </tr>
+              <tr>
+                <td><code>tsconfig.json</code></td>
+                <td>
+                  공통 TypeScript 설정이다. <code>pnpm typecheck</code>가 쓰며,
+                  <code>test</code>까지 검사한다.
+                </td>
+              </tr>
+              <tr>
+                <td><code>tsconfig.build.json</code></td>
+                <td>
+                  Nest CLI가 우선 쓰는 빌드 설정이다. <code>src</code>만 빌드해서 결과물이
+                  <code>dist/main.js</code>에 생긴다.
+                </td>
+              </tr>
+              <tr>
+                <td><code>vitest.config.ts</code></td>
+                <td>테스트 설정이다. 코드를 SWC로 변환한다.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <ul>
+          <li>
+            <strong>컴파일러가 둘이다:</strong> 빌드는 <code>tsc</code>, 테스트는 SWC를 쓴다.
+          </li>
+          <li>
+            <strong><code>experimentalDecorators</code>:</strong> Nest가 쓰는 데코레이터 문법을
+            켠다.
+          </li>
+          <li>
+            <strong><code>emitDecoratorMetadata</code>:</strong> 생성자 인자 타입을 런타임에
+            남긴다. DI가 이 정보를 쓴다.
+          </li>
+          <li>
+            <strong><code>reflect-metadata</code>:</strong> 데코레이터 정보를 저장하는
+            라이브러리다. <code>@nestjs/core</code>와 <code>@nestjs/common</code>이 내부에서
+            import해서 직접 불러오지 않아도 된다.
+          </li>
+        </ul>
+      </section>
+
+      <section id="skip">
+        <h2>지금은 건너뛰어도 되는 것</h2>
+        <p>
+          파이프, 가드, 인터셉터, 예외 필터, 미들웨어는 현재 코드에 없다. 입력 검증이나 인증을
+          구현할 때 배워도 된다. <code>rxjs</code>도 현재 코드에서 직접 쓰지 않는다.
+        </p>
+      </section>
+
+      <section id="check">
+        <h2>스스로 확인하기</h2>
+        <p>질문에 먼저 답해 본 뒤, 눌러서 답을 확인한다.</p>
+        <details>
+          <summary>
+            1. <code>@Controller('shows')</code>에 <code>@Get('popular')</code>를 추가하면 주소는
+            무엇인가?
+          </summary>
+          <p><code>GET /shows/popular</code>다.</p>
+        </details>
+        <details>
+          <summary>
+            2. <code>ShowsModule</code>을 <code>AppModule</code>의 <code>imports</code>에서 빼면
+            어떻게 되는가?
+          </summary>
+          <p>앱은 켜지고, <code>GET /shows</code>는 404가 된다.</p>
+        </details>
+        <details>
+          <summary>
+            3. 테스트가 <code>listen()</code>을 호출하지 않는데 HTTP 요청이 되는 이유는 무엇인가?
+          </summary>
+          <p>supertest가 서버를 임시 포트로 직접 열기 때문이다.</p>
+        </details>
+        <details>
+          <summary>
+            4. 생성자에서 요구하는 <code>ShowsService</code>가 <code>providers</code>에 없으면
+            어떻게 되는가?
+          </summary>
+          <p>
+            조립 시점에 실패해 앱이 켜지지 않는다. 테스트에서는 <code>compile()</code>에서
+            실패한다.
+          </p>
+        </details>
+        <details>
+          <summary>
+            5. <code>ShowsModule</code>을 import했는데 <code>ShowsService</code>를 주입하지 못하면
+            무엇을 봐야 하는가?
+          </summary>
+          <p>
+            <code>ShowsModule</code>의 <code>exports</code>에 <code>ShowsService</code>가 있는지
+            본다.
+          </p>
+        </details>
+      </section>
+
+      <section id="more">
+        <h2>더 읽을거리</h2>
+        <ol>
+          <li><a href="https://docs.nestjs.com/controllers">Controllers</a></li>
+          <li><a href="https://docs.nestjs.com/providers">Providers</a></li>
+          <li><a href="https://docs.nestjs.com/modules">Modules</a></li>
+          <li>
+            <a href="https://docs.nestjs.com/fundamentals/testing">Testing</a>의 end-to-end 부분
+          </li>
+        </ol>
+      </section>
+    </main>
+  </div>
+</body>
+
+</html>
