@@ -3,7 +3,7 @@ import { createServerApiClient } from '../src/api-client';
 import { fetchShows } from '../src/shows/fetch-shows';
 
 export default async function HomePage() {
-  // 빌드 시점의 사전 렌더링을 멈추고 요청마다 렌더링한다. 빌드에 API와 DB가 필요 없다.
+  // 이 페이지는 빌드 때 미리 그리지 않고 요청마다 렌더링한다. 그래서 빌드에 API와 DB가 필요 없다.
   await connection();
   const shows = await fetchShows(createServerApiClient());
 
