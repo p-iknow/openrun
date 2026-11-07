@@ -380,7 +380,7 @@ is available in the ReviewsModule module.</code></pre>
       </section>
 
       <section id="test">
-        <h2>테스트: <code>test/shows.spec.ts</code></h2>
+        <h2>테스트: <code>test/shows.int.spec.ts</code></h2>
         <p>테스트도 같은 흐름을 따른다. 다만 <code>listen(3000)</code>을 호출하지 않는다.</p>
         <pre><code class="language-ts">Test.createTestingModule({ imports: [AppModule] }).compile(); // 모듈 그래프 조립
 moduleRef.createNestApplication();                            // 앱 인스턴스 생성
@@ -397,8 +397,10 @@ request(app.getHttpServer()).get('/shows');                   // HTTP 요청</co
           </li>
           <li><strong>정리:</strong> 테스트마다 <code>app.close()</code>로 앱을 닫는다.</li>
           <li>
-            <strong>나중에 DB를 붙이면:</strong> <code>overrideProvider()</code>로 프로바이더를
-            테스트용 객체로 바꿀 수 있다.
+            <strong>DB:</strong> 프로바이더를 가짜로 바꾸지 않고, Testcontainers로 띄운 실제
+            PostgreSQL에 연결한다. 그래서 <code>pnpm test</code>가 아니라
+            <code>pnpm test:integration</code>으로 실행한다. 연결 구조는
+            <a href="004-drizzle-스키마와-DB-연결.html">004 문서</a>에 있다.
           </li>
         </ul>
       </section>

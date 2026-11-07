@@ -1102,8 +1102,9 @@ export class SeatHoldController {
           <h3>해법: 앱 조립 테스트와 습관으로 다시 앞당긴다</h3>
           <p>
             컴파일러 대신 테스트가 잡게 한다. 앱 전체를 조립해 보는 테스트 하나면 "앱 시작" 실패를 배포
-            전에 잡는다. 이 저장소의 <code>apps/api/test/shows.spec.ts</code>가 이미 이렇게
-            <code>AppModule</code>을 조립한다.
+            전에 잡는다. 이 저장소의 <code>apps/api/test/shows.int.spec.ts</code>가 이미 이렇게
+            <code>AppModule</code>을 조립한다. 실제 DB가 필요해 pre-commit이 아니라
+            <code>pnpm test:integration</code>에서 실행되므로, PR을 열기 전에 직접 돌려야 한다.
           </p>
           <pre><code class="language-ts">const moduleRef = await Test.createTestingModule({
   imports: [AppModule], // 앱 전체를 조립한다
