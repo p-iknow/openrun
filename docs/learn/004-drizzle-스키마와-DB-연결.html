@@ -566,6 +566,84 @@ export class ShowsService {
             적어 줘야 한다. 생성자 타입 <code>Database</code>만으로는 Symbol 이름표를 찾을 수 없기
             때문이다.
           </p>
+
+          <h3>꼭 Symbol과 <code>@Inject</code>여야 하나</h3>
+          <p>
+            아니다. 다만 <code>drizzle(url)</code>이 돌려준 값을 넣으려면 어떤 형태로든 이름표가 필요하고,
+            그 이름표가 클래스가 아니면 받는 쪽에서 <code>@Inject</code>로 적어야 한다.
+          </p>
+          <p>
+            <code>@Inject</code> 없이 받으면 Nest는 생성자 인자의 타입 기록(<code>design:paramtypes</code>)을
+            이름표로 쓴다. 이 기록에는 런타임에 남는 클래스만 제대로 남는다.
+            <code>Database</code>는 <code>NodePgDatabase &amp; { $client: Pool }</code>이라는 교차
+            타입이라 <code>Object</code>로 기록되고(실행해 확인했다), Nest는 무엇을 넣을지 모른다.
+          </p>
+          <details class="fold">
+            <summary>선택 읽기: <code>@Inject</code> 없이 받는 방법들</summary>
+            <div class="fold-body">
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>방법</th>
+                      <th>받는 쪽</th>
+                      <th>단점</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><span class="badge green">이 저장소</span> Symbol + <code>@Inject</code></td>
+                      <td><code>@Inject(DATABASE) db: Database</code></td>
+                      <td>받을 때마다 <code>@Inject</code>를 적어야 한다</td>
+                    </tr>
+                    <tr>
+                      <td>Drizzle 클래스를 이름표로</td>
+                      <td><code>db: NodePgDatabase</code></td>
+                      <td>
+                        타입을 <code>NodePgDatabase</code> 그대로 적어야 해서 <code>$client</code> 타입이
+                        빠진다. Drizzle 내부 클래스 이름에 코드가 묶인다
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>추상 클래스 + 인터페이스 병합</td>
+                      <td><code>db: Database</code></td>
+                      <td>
+                        아래처럼 같은 이름을 클래스와 인터페이스로 겹쳐 선언한다. 동작은 하지만(실행해
+                        확인했다) 처음 보는 사람에게는 수수께끼 같은 코드다
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>감싸는 서비스</td>
+                      <td><code>databaseService: DatabaseService</code></td>
+                      <td>쿼리마다 <code>this.databaseService.db.select()...</code>처럼 한 단계를 더 거친다</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p>세 번째 방법의 모양이다. 클래스는 런타임 이름표가 되고, 인터페이스는 타입을 채운다.</p>
+              <pre><code class="language-ts">export abstract class Database {}
+export interface Database extends NodePgDatabase {
+  $client: Pool;
+}
+
+// 등록: { provide: Database, useFactory: (): Database =&gt; drizzle(url) }
+// 받기: constructor(private readonly db: Database) {}</code></pre>
+            </div>
+          </details>
+          <p>
+            NestJS 공식 <code>@nestjs/drizzle</code>도 받을 때 <code>@InjectDrizzle()</code> 데코레이터를
+            쓴다. 그 안의 이름표는 <code>getDrizzleToken()</code>이 돌려주는 토큰이다. "토큰으로 등록하고,
+            받을 때 데코레이터로 토큰을 적는다"는 지금 코드와 같은 구조다.
+          </p>
+          <div class="callout">
+            <p>
+              그래서 Symbol + <code>@Inject</code>를 쓴다. Nest가 클래스가 아닌 값을 주입하는 표준
+              방법이고, 공식 패키지와 구조도 같다. 받는 곳이 늘어 <code>@Inject(DATABASE)</code>가 길게
+              느껴지면 <code>export const InjectDatabase = () =&gt; Inject(DATABASE);</code>로 줄여
+              <code>@InjectDatabase()</code>로 쓸 수 있다. 지금은 쓰는 곳이 <code>ShowsService</code>
+              하나라 필요 없다.
+            </p>
+          </div>
         </section>
 
         <section id="shutdown">
