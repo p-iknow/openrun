@@ -357,16 +357,78 @@ export class DatabaseModule implements OnApplicationShutdown {
 
         <section id="providers">
           <h2>프로바이더 두 개</h2>
+          <p>프로바이더는 "이 이름표로 요청하면 이 값을 준다"는 등록이다.</p>
+
+          <h3>왜 <code>useFactory</code>로 만드는 함수를 직접 주나</h3>
           <p>
-            프로바이더는 "이 이름표로 요청하면 이 값을 준다"는 등록이다. Pool과 Drizzle 객체는 우리가
-            만든 클래스가 아니므로, 이름표를 직접 만들고 값을 만드는 함수도 직접 준다.
+            Nest가 객체를 스스로 만드는 방법은 하나뿐이다. 클래스에 <code>new</code>를 호출하면서,
+            생성자 인자 자리에 등록된 다른 프로바이더를 넣는 것이다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>대상</th>
+                  <th>만드는 코드</th>
+                  <th>Nest가 혼자 만들 수 있나</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>ShowsService</code></td>
+                  <td><code>new ShowsService(db)</code></td>
+                  <td>
+                    <span class="badge green">있다</span> 인자 <code>db</code>가 등록된
+                    프로바이더다. <code>providers: [ShowsService]</code>면 된다.
+                  </td>
+                </tr>
+                <tr>
+                  <td>pg <code>Pool</code></td>
+                  <td><code>new Pool({ connectionString })</code></td>
+                  <td>
+                    <span class="badge blue">없다</span> 인자가 설정 객체라 Nest는 무엇을 넣을지
+                    모른다. 라이브러리 코드라 생성자를 바꿀 수도 없다.
+                  </td>
+                </tr>
+                <tr>
+                  <td>Drizzle <code>db</code></td>
+                  <td><code>drizzle({ client: pool })</code></td>
+                  <td>
+                    <span class="badge blue">없다</span> 클래스가 아니라 함수 호출이다. Nest는
+                    <code>new</code>만 할 줄 안다.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            그래서 Pool과 Drizzle은 "이렇게 만들어라"는 함수를 <code>useFactory</code>로 직접 준다.
+            <a href="003-의존성-주입.html#nest">003의 2단계</a>에서 <code>new Database(url)</code>을
+            등록한 것과 같은 상황이다.
           </p>
 
           <h3>이름표: <code>Symbol('DATABASE')</code>, <code>Symbol('PG_POOL')</code></h3>
           <p>
+            이름표는 Symbol이 아니어도 된다. <code>Pool</code>도 클래스이므로
+            <code>{ provide: Pool, useFactory: ... }</code>로 등록하면, 받는 쪽은
+            <code>@Inject</code> 없이 <code>pool: Pool</code>만 적어도 주입된다(실행해 확인했다).
+            Symbol을 쓴 것은 강제가 아니라 선택이고, 이유는 이렇다.
+          </p>
+          <ul>
+            <li>
+              <strong><code>DATABASE</code>:</strong> 받는 쪽의 <code>@Inject(DATABASE)</code>만 봐도
+              "앱의 DB를 받는다"가 읽힌다. Drizzle 내부 클래스 이름(<code>NodePgDatabase</code>)에 코드가
+              묶이지도 않는다.
+            </li>
+            <li>
+              <strong><code>PG_POOL</code>:</strong> 모듈 안에서만 쓰는 Symbol로 두고 export하지 않았다.
+              <code>Pool</code> 클래스를 이름표로 쓰면 다른 곳에서 <code>pool: Pool</code>로 받으려는
+              시도가 자연스러워 보이지만, 이 방식이면 이름표를 아는 코드가 이 파일뿐이다.
+            </li>
+          </ul>
+          <p>
             Symbol은 세상에 하나뿐인 값이라 다른 이름표와 겹칠 수 없다. 문자열
-            <code>'DATABASE'</code>도 동작하지만 다른 라이브러리와 겹칠 위험이 있다. 이름표를 쓰는
-            이유는 <a href="003-의존성-주입.html#nest">003의 4단계</a>와 같다.
+            <code>'DATABASE'</code>도 동작하지만 다른 라이브러리와 겹칠 위험이 있다.
           </p>
 
           <h3>첫 번째: <code>PG_POOL</code></h3>
