@@ -311,6 +311,7 @@
               환경 변수를 되돌리고 테스트용 <code>db</code>의 연결을 닫는다.
             </li>
           </ol>
+
           <div class="table-wrap">
             <table>
               <thead>
@@ -339,6 +340,80 @@
             <code>db</code>로 넣은 데이터를 앱이 자기 연결로 읽어 오는지 확인하는 구조다. 그래서 정리도
             따로 한다. 테스트의 연결은 <code>afterAll</code>의 <code>db.$client.end()</code>가, 앱의
             연결은 <code>afterEach</code>의 <code>app.close()</code>가 닫는다.
+          </p>
+
+          <h3><code>compile()</code>은 무엇인가</h3>
+          <p>
+            TypeScript 컴파일과는 관계가 없다. "적어 둔 모듈 설정대로 실제 객체들을 만들어라"라는
+            뜻이다. 앱 조립은 두 단계로 나뉜다.
+          </p>
+          <pre><code class="language-ts">const moduleRef = await Test.createTestingModule({ imports: [AppModule] }) // ① 설계도
+  .compile(); // ② 실제로 만들기</code></pre>
+          <ol class="steps green">
+            <li>
+              <strong><code>Test.createTestingModule(...)</code>: 설계도만 적는다</strong>
+              "AppModule로 앱을 만든다"는 설계도(<code>TestingModuleBuilder</code>)를 돌려준다. 아직
+              서비스도 DB 연결도 만들어지지 않았다. 그래서 이 사이에
+              <code>.overrideProvider(DATABASE).useValue(가짜)</code>처럼 일부를 갈아 끼울 수 있다.
+            </li>
+            <li>
+              <strong><code>.compile()</code>: 설계도대로 만든다</strong>
+              모듈을 훑어 무엇이 등록됐는지 파악하고, 필요한 것부터 순서대로 객체를 만든다. 결과로
+              <code>moduleRef</code>를 돌려준다.
+            </li>
+          </ol>
+          <p>이 저장소에서는 <code>compile()</code> 중에 이런 일이 일어난다.</p>
+          <div class="flow">
+            <div class="lane green">
+              <div class="lane-title">compile()</div>
+              <ol class="chain">
+                <li><span>AppModule → DatabaseModule, ShowsModule 훑기</span></li>
+                <li><span>DATABASE 팩토리 → readEnv() → drizzle(url)</span></li>
+                <li><span>ShowsService 생성 (db 주입)</span></li>
+                <li><span>ShowsController 생성</span></li>
+              </ol>
+            </div>
+          </div>
+          <p>
+            앱의 DB 연결이 바로 이때 생긴다. 만들어진 <code>moduleRef</code>로는
+            <code>moduleRef.get(ShowsService)</code>처럼 객체를 꺼내거나, 테스트 코드에서 <code>compile()</code> 다음 줄처럼
+            <code>createNestApplication()</code>으로 HTTP 앱을 만든다. 팩토리 중에는 비동기도 있을 수
+            있어서 모두 만들어질 때까지 <code>await</code>로 기다린다.
+          </p>
+          <details class="fold">
+            <summary>선택 읽기: <code>compile()</code>의 실제 코드</summary>
+            <div class="fold-body">
+              <p><code>@nestjs/testing</code>의 <code>testing-module.builder.js</code>를 줄인 것이다.</p>
+              <pre><code class="language-js">async compile(options = {}) {
+  // ...
+  await scanner.scan(this.module, { overrides: this.getModuleOverloads() }); // 모듈 훑기
+  this.applyOverloadsMap();                         // overrideProvider로 바꾼 것 반영
+  await this.createInstancesOfDependencies(/* */);  // 의존 순서대로 객체 생성
+  // ...
+  return testingModule;                             // 결과(moduleRef)
+}</code></pre>
+            </div>
+          </details>
+
+          <h3>실제 앱(<code>main.ts</code>)과 비교</h3>
+          <pre><code class="language-ts">// main.ts: 훑기 + 객체 생성 + 앱 만들기를 한 번에
+NestFactory.create(AppModule);
+
+// 테스트: 단계를 나눈다
+// ① 설계도
+const builder = Test.createTestingModule({ imports: [AppModule] });
+// ② 훑기 + 객체 생성
+const moduleRef = await builder.compile();
+// ③ 앱 만들기
+const app = moduleRef.createNestApplication();</code></pre>
+          <p>
+            나눈 이유는 ①과 ② 사이에서 설계를 바꿀 수 있게 하기 위해서다.
+          </p>
+          <p>
+            객체를 만드는 시점이 같으므로 실패하는 곳도 대응한다. <code>DATABASE_URL</code>이 없으면
+            앱에서는 <code>NestFactory.create</code>가, 테스트에서는 <code>compile()</code>이 실패한다.
+            <code>vi.stubEnv</code>를 <code>beforeAll</code>에서 먼저 하는 것도 <code>compile()</code>보다
+            먼저 값이 있어야 하기 때문이다.
           </p>
         </section>
 
