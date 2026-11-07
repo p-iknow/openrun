@@ -5,33 +5,27 @@ import {
   type OnApplicationShutdown,
 } from '@nestjs/common';
 import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
-import { Pool } from 'pg';
+import type { Pool } from 'pg';
 import { readEnv } from '../config/env.js';
 
 export const DATABASE = Symbol('DATABASE');
-export type Database = NodePgDatabase;
-
-const PG_POOL = Symbol('PG_POOL');
+// drizzle()이 안에서 만든 pg Pool은 $client로 꺼낼 수 있다.
+export type Database = NodePgDatabase & { $client: Pool };
 
 @Global()
 @Module({
   providers: [
     {
-      provide: PG_POOL,
-      useFactory: () => new Pool({ connectionString: readEnv().databaseUrl }),
-    },
-    {
       provide: DATABASE,
-      inject: [PG_POOL],
-      useFactory: (pool: Pool): Database => drizzle({ client: pool }),
+      useFactory: (): Database => drizzle(readEnv().databaseUrl),
     },
   ],
   exports: [DATABASE],
 })
 export class DatabaseModule implements OnApplicationShutdown {
-  constructor(@Inject(PG_POOL) private readonly pool: Pool) {}
+  constructor(@Inject(DATABASE) private readonly db: Database) {}
 
   async onApplicationShutdown() {
-    await this.pool.end();
+    await this.db.$client.end();
   }
 }
