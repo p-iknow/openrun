@@ -1,0 +1,26 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: openrun
+      POSTGRES_PASSWORD: openrun
+      POSTGRES_DB: openrun
+    ports:
+      - '5432:5432'
+    volumes:
+      # PostgreSQL 18 이미지부터 데이터 위치가 /var/lib/postgresql/<버전>/docker로 바뀌었다.
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U openrun -d openrun']
+      interval: 2s
+      timeout: 5s
+      retries: 15
+
+  mailpit:
+    image: axllent/mailpit:v1
+    ports:
+      - '1025:1025' # SMTP
+      - '8025:8025' # 웹 UI
+
+volumes:
+  postgres-data:
