@@ -1,16 +1,25 @@
 {
   "$schema": "https://turborepo.com/schema.json",
   "tasks": {
+    "openapi": {
+      "dependsOn": ["build"],
+      "inputs": ["$TURBO_DEFAULT$", "!openapi.json"],
+      "outputs": ["openapi.json"]
+    },
+    "generate": {
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/apps/api/openapi.json"],
+      "outputs": ["src/generated/**"]
+    },
     "build": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^build", "generate"],
       "outputs": ["dist/**"]
     },
     "lint": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^build", "generate"],
       "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/.oxlintrc.json"]
     },
     "typecheck": {
-      "dependsOn": ["^build"]
+      "dependsOn": ["^build", "generate"]
     },
     "test": {
       "dependsOn": ["^build"],

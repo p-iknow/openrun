@@ -1,3 +1,5 @@
 *.md
 docs
 pnpm-lock.yaml
+# 생성기가 JSON.stringify로 쓰는 파일. Prettier가 바꾸면 pre-commit의 최신 여부 검사가 어긋난다.
+apps/api/openapi.json

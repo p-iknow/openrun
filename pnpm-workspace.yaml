@@ -1,11 +1,17 @@
 packages:
   - apps/*
+  - packages/*
 allowBuilds:
+  '@scarf/scarf': false
   '@swc/core': false
   cpu-features: false
   esbuild: false
   protobufjs: false
   ssh2: false
+# openapi-typescript 7.13.0은 typescript ^5를 요구하지만 6에서 타입 생성과 검사가 통과한다.
+peerDependencyRules:
+  allowedVersions:
+    openapi-typescript>typescript: '6'
 minimumReleaseAgeExclude:
   - '@nestjs/cli@12.0.12'
   - '@nestjs/common@12.4.0'
