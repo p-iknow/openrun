@@ -7,7 +7,7 @@
     "dev": "nest start --watch",
     "build": "nest build",
     "start": "node dist/main.js",
-    "lint": "oxlint",
+    "lint": "oxlint --type-aware",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
