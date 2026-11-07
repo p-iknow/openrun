@@ -16,6 +16,7 @@
 | 태그 | 대상 |
 |---|---|
 | `nestjs` | NestJS의 구조와 사용법 |
+| `drizzle` | Drizzle ORM의 스키마, 마이그레이션, 쿼리 |
 
 ## 모듈
 
