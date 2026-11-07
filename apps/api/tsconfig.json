@@ -15,5 +15,5 @@
     "rootDir": ".",
     "types": ["node"]
   },
-  "exclude": ["node_modules", "dist", "oxfmt.config.ts"]
+  "exclude": ["node_modules", "dist"]
 }

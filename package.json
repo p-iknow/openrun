@@ -8,13 +8,13 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
-    "format": "oxfmt",
-    "format:check": "oxfmt --check"
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
-    "oxfmt": "^0.77.0",
     "oxlint": "^1.92.0",
     "oxlint-tsgolint": "^7.0.2006",
+    "prettier": "^3.9.10",
     "turbo": "^2.11.10"
   },
   "devEngines": {
