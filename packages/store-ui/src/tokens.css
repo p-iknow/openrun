@@ -170,7 +170,8 @@
   --spacing-3xl: 3rem;
 
   /* 모서리 */
-  --radius-badge: 6px;
+  /* 배지는 원형인 칩과 모양으로 구분되게 각지게 둔다. */
+  --radius-badge: 8px;
   --radius-card: 12px;
   --radius-button: 14px;
   --radius-panel: 20px;
