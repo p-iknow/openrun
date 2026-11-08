@@ -451,14 +451,16 @@ request(app.getHttpServer()).get('/shows');                   // HTTP 요청</co
               </tr>
               <tr>
                 <td><code>vitest.config.ts</code></td>
-                <td>테스트 설정이다. 코드를 SWC로 변환한다.</td>
+                <td>테스트 설정이다. 코드를 Vite 기본 변환기(Oxc)로 변환한다.</td>
               </tr>
             </tbody>
           </table>
         </div>
         <ul>
           <li>
-            <strong>컴파일러가 둘이다:</strong> 빌드는 <code>tsc</code>, 테스트는 SWC를 쓴다.
+            <strong>컴파일러가 둘이다:</strong> 빌드는 <code>tsc</code>, 테스트는 Vite의 Oxc를
+            쓴다. Oxc는 파일 하나씩 변환해 타입 정보가 없으므로, <code>import type</code>으로 받은
+            클래스와 enum의 메타데이터가 <code>tsc</code>와 다르게 나온다.
           </li>
           <li>
             <strong><code>experimentalDecorators</code>:</strong> Nest가 쓰는 데코레이터 문법을
