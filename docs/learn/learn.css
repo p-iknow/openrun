@@ -79,6 +79,8 @@ nav {
   position: sticky;
   top: 1.5rem;
   align-self: start;
+  max-height: calc(100vh - 3rem);
+  overflow-y: auto;
   font-size: 0.875rem;
   line-height: 1.5;
 }
@@ -110,6 +112,12 @@ nav a:hover {
 }
 nav ol + strong {
   margin-top: 1.25rem;
+}
+/* 문서 목록: learn.js가 목차 아래에 그린다. 지금 문서를 강조한다. */
+nav .doc-list a[aria-current='page'] {
+  border-left-color: var(--accent);
+  color: var(--text);
+  font-weight: 600;
 }
 main {
   min-width: 0;

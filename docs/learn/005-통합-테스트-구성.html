@@ -451,7 +451,7 @@ const app = moduleRef.createNestApplication();</code></pre>
             <summary>선택 읽기: <code>overrideProvider</code>를 쓰지 않은 이유</summary>
             <div class="fold-body">
               <p>
-                Nest 테스트에서 DB를 바꿔 끼울 때 흔히 쓰는 방법은 <code>overrideProvider</code>다. NestJS 공식 테스트 문서가 이 방법을 보여 주고, 공식 <code>@nestjs/drizzle</code> 문서도 테스트에서 DB 토큰 자리에 가짜 객체를 넣는 방법을 보여 준다. 이 저장소의 001 문서도 처음에는 "DB를 붙이면 <code>overrideProvider()</code>로 바꿀 수
+                Nest 테스트에서 DB를 바꿔 끼울 때 흔히 쓰는 방법은 <code>overrideProvider</code>다. NestJS 공식 테스트 문서가 이 방법을 보여 주고, 공식 <code>@nestjs/drizzle</code> 문서도 테스트에서 DB 토큰 자리에 가짜 객체를 넣는 방법을 보여 준다. 이 저장소의 <a href="001-nestjs-기초.html#test">001 문서</a>도 처음에는 "DB를 붙이면 <code>overrideProvider()</code>로 바꿀 수
                 있다"고 안내했다. 그래서 "왜 그 방법을 쓰지 않았나"에 답해 둔다.
               </p>
               <pre><code class="language-ts">await Test.createTestingModule({ imports: [AppModule] })
