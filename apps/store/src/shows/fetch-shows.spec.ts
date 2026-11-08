@@ -1,6 +1,6 @@
 import { createApiClient } from '@openrun/api-client';
 import { describe, expect, it } from 'vitest';
-import { fetchShows } from '../src/shows/fetch-shows';
+import { fetchShows } from './fetch-shows';
 
 const baseUrl = 'http://api.internal:3000';
 

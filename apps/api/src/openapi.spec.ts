@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createOpenApiDocument } from '../src/openapi.js';
+import { createOpenApiDocument } from './openapi.js';
 
 describe('OpenAPI 문서', () => {
   it('DB 없이 만들 수 있고, GET /shows 응답을 공연 배열로 적는다', async () => {
