@@ -1,0 +1,717 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>cn과 tailwind-merge 확장: clsx, twMerge, extendTailwindMerge</title>
+    <link rel="stylesheet" href="learn.css" />
+    <script src="vendor/highlightjs/highlight.min.js" defer></script>
+    <script src="learn.js" defer></script>
+  </head>
+  <body>
+    <div class="layout">
+      <nav aria-label="목차">
+        <strong>목차</strong>
+        <ol>
+          <li><a href="#overview">한눈에 보기</a></li>
+          <li><a href="#clsx">clsx: 조건부로 이어 붙이기</a></li>
+          <li><a href="#merge">tailwind-merge: 충돌 정리</a></li>
+          <li><a href="#why-extend">확장이 필요한 이유</a></li>
+          <li><a href="#theme">theme: 토큰 이름 알려 주기</a></li>
+        </ol>
+        <strong>확장의 다른 방법</strong>
+        <ol>
+          <li><a href="#concepts">먼저 알아 둘 개념</a></li>
+          <li><a href="#class-groups">classGroups</a></li>
+          <li><a href="#conflicting">conflictingClassGroups</a></li>
+          <li><a href="#modifiers">conflictingClassGroupModifiers</a></li>
+          <li><a href="#order">orderSensitiveModifiers</a></li>
+          <li><a href="#override">extend와 override</a></li>
+          <li><a href="#prefix">prefix와 cacheSize</a></li>
+          <li><a href="#parse">experimentalParseClassName</a></li>
+          <li><a href="#other-forms">설정을 넣는 다른 방법</a></li>
+        </ol>
+        <strong>마무리</strong>
+        <ol>
+          <li><a href="#ours">우리 프로젝트에서는</a></li>
+          <li><a href="#check">스스로 확인하기</a></li>
+          <li><a href="#more">더 읽을거리</a></li>
+        </ol>
+      </nav>
+
+      <main>
+        <h1>cn과 tailwind-merge 확장: clsx, twMerge, extendTailwindMerge</h1>
+        <p class="lead">
+          <code>@openrun/store-ui</code>의 <code>cn</code>은 clsx와 tailwind-merge를 이어 붙인 함수다. 두 라이브러리가 각각
+          무엇을 하는지, 왜 tailwind-merge에 우리 토큰 이름을 알려 줘야 하는지, <code>extendTailwindMerge</code>로 할 수
+          있는 확장을 모두 정리한다. 예시의 결과는 <code>tailwind-merge@3.7.0</code>, <code>clsx@2.1.1</code>에서 실행해
+          확인한 값이다.
+        </p>
+
+        <section id="overview">
+          <h2>한눈에 보기</h2>
+          <pre><code class="language-ts">// packages/store-ui/src/cn.ts
+export function cn(...inputs: ClassValue[]): string {
+  return twMerge(clsx(inputs));
+}</code></pre>
+          <div class="flow">
+            <div class="lane blue">
+              <div class="lane-title">cn('p-lg', active &amp;&amp; 'bg-primary', className)</div>
+              <ol class="chain">
+                <li><span>clsx: 참인 것만 이어 붙임</span></li>
+                <li><span>twMerge: 부딪히면 뒤의 것만 남김</span></li>
+                <li><span>className 문자열</span></li>
+              </ol>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>이름</th>
+                  <th>하는 일</th>
+                  <th>모르는 것</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>clsx</code></td>
+                  <td>여러 클래스를 조건에 따라 하나의 문자열로 이어 붙인다</td>
+                  <td>클래스의 내용. <code>p-2</code>와 <code>p-4</code>가 부딪힌다는 사실</td>
+                </tr>
+                <tr>
+                  <td><code>tailwind-merge</code></td>
+                  <td>서로 부딪히는 Tailwind 클래스 중 뒤의 것만 남긴다</td>
+                  <td>설정에 없는 이름. 우리가 만든 토큰 이름</td>
+                </tr>
+                <tr>
+                  <td><code>cn</code></td>
+                  <td>위 두 개를 순서대로 부른다</td>
+                  <td></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="clsx">
+          <h2>clsx: 조건부로 이어 붙이기</h2>
+          <p>clsx는 문자열, 객체, 배열, falsy 값을 받아 <strong>참인 것만</strong> 공백으로 이어 붙인다.</p>
+          <pre><code class="language-ts">clsx('a', false &amp;&amp; 'b', null, { c: true, d: false }, ['e', ['f']]);
+// → "a c e f"</code></pre>
+          <ul>
+            <li><code>'a'</code>는 그대로 넣는다.</li>
+            <li><code>false</code>, <code>null</code>, <code>undefined</code>, <code>0</code>, <code>''</code>는 버린다.</li>
+            <li>객체는 값이 참인 <strong>키</strong>만 넣는다.</li>
+            <li>배열은 중첩돼도 펼쳐서 넣는다.</li>
+          </ul>
+          <p>템플릿 문자열로 조건부 클래스를 쓰면 빈 문자열과 공백이 남고 읽기 어렵다.</p>
+          <pre><code class="language-tsx">// clsx 없이
+className={`p-lg ${active ? 'bg-primary' : ''} ${disabled ? 'opacity-50' : ''}`}
+
+// clsx로
+className={clsx('p-lg', active &amp;&amp; 'bg-primary', { 'opacity-50': disabled })}</code></pre>
+          <div class="callout warn">
+            <p>clsx는 내용을 보지 않는다. <code>clsx('p-2', 'p-4')</code>는 <code>"p-2 p-4"</code>를 그대로 돌려준다.</p>
+          </div>
+        </section>
+
+        <section id="merge">
+          <h2>tailwind-merge: 충돌 정리</h2>
+          <p>
+            <code>p-2 p-4</code>가 함께 붙어 있으면, 어느 쪽이 이길지는 className에 적은 순서가 아니라
+            <strong>생성된 CSS 안의 규칙 순서</strong>로 정해진다. 컴포넌트가 기본 클래스를 갖고 밖에서
+            <code>className</code>을 받을 때 이 점이 문제가 된다.
+          </p>
+          <pre><code class="language-tsx">function Badge({ className }: { className?: string }) {
+  return &lt;span className={clsx('p-sm bg-surface', className)} /&gt;;
+}
+
+&lt;Badge className="bg-primary" /&gt;
+// clsx만 쓰면 "p-sm bg-surface bg-primary": 어느 배경이 이길지 모른다</code></pre>
+          <p>
+            tailwind-merge는 클래스를 <strong>건드리는 CSS 속성에 따라 그룹으로 나누고</strong>, 같은 그룹이면 뒤의 것만
+            남긴다.
+          </p>
+          <pre><code class="language-ts">twMerge('p-sm bg-surface', 'bg-primary'); // → "p-sm bg-primary"
+twMerge('p-2', 'p-4');                    // → "p-4"
+twMerge('px-4', 'p-2');                   // → "p-2"       p가 px를 포함하므로 px를 지운다
+twMerge('p-2', 'px-4');                   // → "p-2 px-4"  px는 p의 일부만 덮으므로 둘 다 둔다</code></pre>
+          <p>그래서 컴포넌트를 쓰는 쪽이 <code>className</code>으로 기본 스타일을 안전하게 덮어쓸 수 있다.</p>
+        </section>
+
+        <section id="why-extend">
+          <h2>확장이 필요한 이유</h2>
+          <div class="callout">
+            <p>
+              tailwind-merge는 CSS를 읽지 않는다. 미리 들고 있는 <strong>Tailwind 기본 이름 목록</strong>을 보고 클래스의
+              그룹을 추측한다.
+            </p>
+          </div>
+          <p>
+            <code>tokens.css</code>의 <code>@theme</code>은 Tailwind 기본값을 지우고 <code>caption</code>, <code>lg</code>,
+            <code>card</code> 같은 의미 이름만 노출한다. tailwind-merge는 이 이름들을 모르므로 판단을 틀린다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>입력</th>
+                  <th>기본 twMerge</th>
+                  <th>확장한 twMerge</th>
+                  <th>무엇이 문제인가</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>text-caption text-text</code></td>
+                  <td><code>text-text</code></td>
+                  <td><code>text-caption text-text</code></td>
+                  <td>
+                    <span class="badge blue">지움</span> <code>caption</code>을 모르니 글자색으로 보고, 글자색
+                    <code>text-text</code>와 부딪힌다고 판단해 글자 크기를 지운다
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>p-sm p-lg</code></td>
+                  <td><code>p-sm p-lg</code></td>
+                  <td><code>p-lg</code></td>
+                  <td><span class="badge green">못 정리함</span> <code>sm</code>, <code>lg</code>를 간격으로 모른다</td>
+                </tr>
+                <tr>
+                  <td><code>px-lg p-sm</code></td>
+                  <td><code>px-lg p-sm</code></td>
+                  <td><code>p-sm</code></td>
+                  <td><span class="badge green">못 정리함</span> 위와 같다</td>
+                </tr>
+                <tr>
+                  <td><code>rounded-card rounded-button</code></td>
+                  <td>둘 다 남음</td>
+                  <td><code>rounded-button</code></td>
+                  <td><span class="badge green">못 정리함</span> 모서리 값으로 모른다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout warn">
+            <p>
+              첫 줄이 가장 위험하다. 글자 크기와 글자색이 모두 <code>text-</code> 접두사를 쓰기 때문에, 에러 없이 스타일이
+              <strong>조용히 사라진다</strong>. 나머지는 정리를 못 할 뿐이지만, 이 경우는 필요한 클래스를 지운다.
+            </p>
+          </div>
+          <p>
+            색 이름(<code>text-primary</code>, <code>bg-surface</code>)은 따로 알려 주지 않아도 맞게 동작한다.
+            tailwind-merge가 "모르는 <code>text-*</code>, <code>bg-*</code>는 색"으로 처리하기 때문이다. 문제는 색이 아닌데
+            <code>text-</code>를 쓰는 글자 크기 쪽이다.
+          </p>
+        </section>
+
+        <section id="theme">
+          <h2>theme: 토큰 이름 알려 주기</h2>
+          <pre><code class="language-ts">const twMerge = extendTailwindMerge({
+  extend: {                 // 기본 설정을 버리지 않고 덧붙인다
+    theme: {
+      text: ['caption', 'body-sm', 'body', 'title', 'heading', 'display'], // text-*  글자 크기
+      spacing: ['xs', 'sm', 'md', 'lg', 'xl', '2xl', '3xl'],                // p-*, m-*, gap-* …
+      radius: ['badge', 'card', 'button', 'panel'],                        // rounded-*
+      shadow: ['floating'],                                                // shadow-*
+      container: ['content'],                                              // max-w-* 등
+    },
+  },
+});</code></pre>
+          <ul>
+            <li>
+              <code>theme</code>의 키는 Tailwind v4 <code>@theme</code> 변수의 이름 공간과 짝을 맞춘다.
+              <code>--text-caption</code>이 있으면 <code>text: ['caption']</code>, <code>--spacing-lg</code>가 있으면
+              <code>spacing: ['lg']</code>다.
+            </li>
+            <li>
+              한 키에 이름을 넣으면 <strong>그 키를 쓰는 모든 클래스 그룹</strong>에 반영된다. <code>spacing</code>에
+              <code>lg</code>를 넣으면 <code>p-lg</code>, <code>mx-lg</code>, <code>gap-lg</code>, <code>space-y-lg</code>가
+              한 번에 인식된다. 그룹을 하나씩 등록하는 것보다 간단하다.
+            </li>
+          </ul>
+        </section>
+
+        <section id="concepts">
+          <h2>먼저 알아 둘 개념</h2>
+          <p>tailwind-merge는 클래스 하나를 다음 순서로 처리한다.</p>
+          <ol class="steps blue">
+            <li>
+              <strong>수식어 분리</strong>
+              <code>hover:p-4</code>를 수식어 <code>[hover]</code>와 본체 <code>p-4</code>로 나눈다.
+            </li>
+            <li>
+              <strong>그룹 찾기</strong>
+              <code>p-4</code>가 <code>p</code>(padding) 그룹이라는 것을 찾는다.
+            </li>
+            <li>
+              <strong>충돌 판단</strong>
+              앞쪽에 같은 수식어를 가진 같은 그룹, 또는 충돌 관계인 그룹의 클래스가 있으면 그 클래스를 지운다.
+            </li>
+          </ol>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>개념</th>
+                  <th>뜻</th>
+                  <th>예</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>클래스 그룹</td>
+                  <td>같은 CSS 속성을 건드리는 클래스 묶음. ID가 붙어 있다</td>
+                  <td><code>'p'</code>, <code>'px'</code>, <code>'font-size'</code>, <code>'text-color'</code></td>
+                </tr>
+                <tr>
+                  <td>theme</td>
+                  <td>여러 그룹이 함께 쓰는 값 목록</td>
+                  <td><code>spacing</code>을 <code>p</code>, <code>m</code>, <code>gap</code> 그룹이 함께 쓴다</td>
+                </tr>
+                <tr>
+                  <td>validator</td>
+                  <td>값이 맞는지 판단하는 함수</td>
+                  <td><code>isNumber</code>, <code>isArbitraryValue</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>설정은 두 층으로 나뉜다.</p>
+          <pre><code class="language-ts">extendTailwindMerge({
+  // 바깥 층: 동작 방식
+  prefix: 'tw',
+  cacheSize: 500,
+  experimentalParseClassName: ...,
+
+  // 안쪽 층: 그룹과 충돌 규칙 (extend는 덧붙이기, override는 갈아끼우기)
+  extend:   { theme, classGroups, conflictingClassGroups, conflictingClassGroupModifiers, orderSensitiveModifiers },
+  override: { theme, classGroups, conflictingClassGroups, conflictingClassGroupModifiers, orderSensitiveModifiers },
+});</code></pre>
+        </section>
+
+        <section id="class-groups">
+          <h2>classGroups: 새 클래스 그룹 만들기</h2>
+          <p>
+            Tailwind에 없는 클래스를 직접 만들었을 때 쓴다. 예를 들어 <code>tokens.css</code>에
+            <code>@utility elevation-*</code>를 정의한 경우다.
+          </p>
+          <pre><code class="language-ts">// 설정 없음
+twMerge('elevation-1', 'elevation-3'); // → "elevation-1 elevation-3"  모르는 클래스라 그냥 둔다
+
+// 설정 있음
+const twMerge = extendTailwindMerge({
+  extend: {
+    classGroups: {
+      elevation: [{ elevation: ['1', '2', '3', 'none'] }],
+    },
+  },
+});
+twMerge('elevation-1', 'elevation-3'); // → "elevation-3"</code></pre>
+
+          <h3>그룹을 정의하는 네 가지 방식</h3>
+          <pre><code class="language-ts">classGroups: {
+  // ① 정확한 문자열: 클래스 이름 전체를 나열한다
+  skin: ['skin-light', 'skin-dark'],
+
+  // ② 객체: { 접두사: [뒤에 올 값들] } → elevation-1, elevation-2 …
+  elevation: [{ elevation: ['1', '2', '3'] }],
+
+  // ③ validator: 값을 함수로 검사한다
+  stagger: [{ stagger: [validators.isNumber] }],
+  //   stagger-1, stagger-20은 인식하고 stagger-abc는 인식하지 않는다
+
+  // ④ fromTheme: theme 목록을 가져다 쓴다
+  gutter: [{ gutter: [fromTheme('spacing')] }],
+  //   theme.spacing에 넣은 'lg', 'sm'이 그대로 쓰여 gutter-lg, gutter-sm이 된다
+}</code></pre>
+          <div class="callout">
+            <p>
+              ④가 중요하다. <code>theme.spacing</code>에 의미 이름을 넣어 두었다면, 직접 만든 유틸리티도
+              <code>fromTheme('spacing')</code>으로 연결해 <strong>토큰 목록을 한 곳에서만 관리</strong>할 수 있다.
+            </p>
+          </div>
+
+          <details class="fold">
+            <summary>선택 읽기: 자주 쓰는 validator</summary>
+            <div class="fold-body">
+              <p><code>import { validators } from 'tailwind-merge'</code>로 가져온다.</p>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>이름</th>
+                      <th>통과하는 예</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr><td><code>isNumber</code></td><td><code>1</code>, <code>20</code>, <code>1.5</code></td></tr>
+                    <tr><td><code>isInteger</code></td><td><code>1</code>, <code>20</code></td></tr>
+                    <tr><td><code>isFraction</code></td><td><code>1/2</code>, <code>3/4</code></td></tr>
+                    <tr><td><code>isArbitraryValue</code></td><td><code>[10px]</code>, <code>[var(--x)]</code></td></tr>
+                    <tr><td><code>isArbitraryVariable</code></td><td><code>(--my-var)</code></td></tr>
+                    <tr><td><code>isTshirtSize</code></td><td><code>sm</code>, <code>xl</code>, <code>2xl</code></td></tr>
+                    <tr><td><code>isAny</code></td><td>무엇이든</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </details>
+
+          <h3>기존 그룹에 값을 추가하기</h3>
+          <p>새 ID 대신 <strong>기존 ID</strong>를 쓰면 기존 그룹에 덧붙여진다.</p>
+          <pre><code class="language-ts">extend: {
+  classGroups: {
+    'font-size': [{ text: ['caption', 'body'] }], // 기존 font-size 그룹에 추가
+  },
+}</code></pre>
+          <p>
+            <a href="#theme">theme</a>의 <code>text</code>로 한 일을 그룹 단위로 직접 하는 셈이다. 기본 그룹 ID 목록은
+            <code>node_modules/tailwind-merge/dist/types.d.ts</code>의 <code>DefaultClassGroupIds</code>에 있다.
+          </p>
+          <div class="callout warn">
+            <p>
+              새 그룹을 만들기 전에 기본 설정이 이미 아는지 확인한다. 예를 들어 <code>text-shadow-*</code>는 Tailwind
+              v4.1에 들어가서 tailwind-merge 기본 설정이 이미 처리한다.
+            </p>
+          </div>
+        </section>
+
+        <section id="conflicting">
+          <h2>conflictingClassGroups: 다른 그룹끼리 충돌시키기</h2>
+          <p>
+            한 클래스가 <strong>다른 그룹</strong>의 효과까지 덮어쓸 때 쓴다. 기본 설정의 대표적인 예가 <code>p</code>와
+            <code>px</code>다. 서로 다른 그룹이지만 <code>p</code>가 <code>px</code>를 덮는다.
+          </p>
+          <pre><code class="language-ts">twMerge('px-2', 'p-4'); // → "p-4"</code></pre>
+          <p>그림자와 elevation을 모두 없애는 <code>flat</code> 클래스를 만들었다고 하자.</p>
+          <pre><code class="language-ts">classGroups: {
+  elevation: [{ elevation: ['1', '2', '3'] }],
+  flat: ['flat'],
+},
+
+// 관계를 알려 주지 않으면
+twMerge('elevation-2', 'flat');           // → "elevation-2 flat"  다른 그룹이라 둘 다 둔다
+
+// 관계를 알려 주면
+conflictingClassGroups: {
+  flat: ['elevation', 'shadow'],          // flat이 오면 앞의 elevation, shadow를 지운다
+},
+twMerge('elevation-2 shadow-lg', 'flat'); // → "flat"</code></pre>
+          <div class="callout warn">
+            <p>
+              <strong>한 방향으로만 적용된다.</strong> 키(<code>flat</code>)가 <strong>뒤에 올 때만</strong>
+              값(<code>elevation</code>, <code>shadow</code>)을 지운다. <code>twMerge('flat', 'elevation-2')</code>는
+              <code>"flat elevation-2"</code>다. <code>p</code>와 <code>px</code>가 비대칭인 것과 같은 원리다. 양쪽으로
+              지우려면 두 방향을 모두 적는다.
+            </p>
+          </div>
+        </section>
+
+        <section id="modifiers">
+          <h2>conflictingClassGroupModifiers: / 뒤의 값이 다른 그룹을 덮을 때</h2>
+          <p>
+            <code>text-lg/8</code>처럼 <strong><code>/</code> 뒤에 붙는 값(postfix modifier)</strong>이 다른 속성까지 정할 때
+            쓴다. <code>text-lg/8</code>은 글자 크기와 <strong>줄 높이</strong>를 함께 정한다. 기본 설정에
+            <code>{ 'font-size': ['leading'] }</code>가 들어 있어서 다음처럼 동작한다.
+          </p>
+          <pre><code class="language-ts">twMerge('leading-7', 'text-lg/8'); // → "text-lg/8"</code></pre>
+          <p><code>elevation-2/blue</code>가 그림자 색까지 정하는 유틸리티라면 이렇게 알려 준다.</p>
+          <pre><code class="language-ts">conflictingClassGroupModifiers: {
+  elevation: ['elevation-color'], // elevation에 /값이 붙어 있으면 앞의 elevation-color를 지운다
+},
+
+twMerge('elevation-tint-red', 'elevation-2/blue'); // → "elevation-2/blue"
+twMerge('elevation-tint-red', 'elevation-2');      // → "elevation-tint-red elevation-2"  /가 없으면 지우지 않는다</code></pre>
+          <p>
+            <a href="#conflicting">conflictingClassGroups</a>와 다른 점은 <strong><code>/</code>가 붙었을 때만</strong>
+            작동한다는 것이다.
+          </p>
+        </section>
+
+        <section id="order">
+          <h2>orderSensitiveModifiers: 수식어 순서가 의미를 바꿀 때</h2>
+          <p>보통 수식어 순서는 상관없어서 tailwind-merge도 같은 것으로 본다.</p>
+          <pre><code class="language-ts">twMerge('hover:focus:p-2', 'focus:hover:p-4'); // → "focus:hover:p-4"</code></pre>
+          <p>
+            <code>before:</code>, <code>after:</code>, <code>*:</code> 같은 수식어는 순서에 따라 <strong>대상 요소가
+            바뀐다</strong>. <code>before:hover:</code>는 "가상 요소에 hover"이고, <code>hover:before:</code>는 "hover했을 때의
+            가상 요소"다.
+          </p>
+          <pre><code class="language-ts">twMerge('before:hover:p-2', 'hover:before:p-4'); // → 둘 다 남긴다</code></pre>
+          <p>
+            기본 목록은 <code>*</code>, <code>**</code>, <code>after</code>, <code>backdrop</code>, <code>before</code>,
+            <code>details-content</code>, <code>file</code>, <code>first-letter</code>, <code>first-line</code>,
+            <code>marker</code>, <code>placeholder</code>, <code>selection</code>이다. <code>@custom-variant</code>로 특정
+            자식이나 가상 요소를 가리키는 variant를 만들었을 때 추가한다.
+          </p>
+          <pre><code class="language-ts">extend: { orderSensitiveModifiers: ['thumb'] } // 예: 슬라이더 손잡이를 가리키는 thumb: variant</code></pre>
+        </section>
+
+        <section id="override">
+          <h2>extend와 override</h2>
+          <p>같은 키를 넣어도 결과가 크게 다르다.</p>
+          <pre><code class="language-ts">const e = extendTailwindMerge({ extend:   { theme: { spacing: ['lg', 'sm'] } } });
+const o = extendTailwindMerge({ override: { theme: { spacing: ['lg', 'sm'] } } });
+
+e('p-2', 'p-4');   // → "p-4"      기본 숫자 간격도 그대로 안다
+o('p-2', 'p-4');   // → "p-2 p-4"  기본값이 사라져 숫자 간격을 모른다
+o('p-sm', 'p-lg'); // → "p-lg"</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th><code>extend</code></th>
+                  <th><code>override</code></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>동작</td>
+                  <td>기존 배열 <strong>뒤에 추가</strong></td>
+                  <td>그 키의 값을 <strong>통째로 교체</strong></td>
+                </tr>
+                <tr>
+                  <td>위험도</td>
+                  <td>낮다</td>
+                  <td>높다. 기본 동작을 깨뜨릴 수 있다</td>
+                </tr>
+                <tr>
+                  <td>쓰는 경우</td>
+                  <td>거의 항상</td>
+                  <td>Tailwind 기본값을 정말로 금지했고, merge에서도 그것을 확실히 반영해야 할 때</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>둘을 함께 쓰면 override를 먼저, extend를 나중에 적용한다.</p>
+          <div class="callout">
+            <p>
+              이 저장소는 <code>@theme</code>에서 기본값을 지웠으니 <code>override</code>가 더 정확해 보일 수 있다. 하지만
+              <code>theme.spacing</code>을 갈아끼우면 임의 값 처리 같은 기본 동작까지 영향받을 수 있다. 얻는 것에 비해
+              위험이 커서 <code>extend</code>를 쓴다.
+            </p>
+          </div>
+        </section>
+
+        <section id="prefix">
+          <h2>prefix와 cacheSize</h2>
+          <h3>prefix</h3>
+          <p>CSS에서 <code>@import "tailwindcss" prefix(tw);</code>로 접두사를 붙였다면 merge에도 알려 준다.</p>
+          <pre><code class="language-ts">const twMerge = extendTailwindMerge({ prefix: 'tw' });
+
+twMerge('tw:p-2', 'tw:p-4'); // → "tw:p-4"
+twMerge('p-2', 'p-4');       // → "p-2 p-4"  접두사가 없으면 Tailwind 클래스로 보지 않는다</code></pre>
+          <p>v4 문법은 <code>tw:p-2</code>처럼 콜론을 쓴다. v3의 <code>tw-p-2</code>와 다르다.</p>
+          <h3>cacheSize</h3>
+          <p>
+            같은 입력 문자열은 결과를 LRU 캐시에 저장해 다시 쓴다. 기본값은 <code>500</code>이고, <code>0</code> 이하이면
+            캐시를 쓰지 않는다. 서로 다른 클래스 조합이 아주 많을 때만 늘린다.
+          </p>
+        </section>
+
+        <section id="parse">
+          <h2>experimentalParseClassName: 클래스 해석 바꾸기</h2>
+          <div class="callout warn">
+            <p>마이너 버전에서도 바뀔 수 있다고 명시된 <strong>실험 기능</strong>이다.</p>
+          </div>
+          <p>
+            <a href="#concepts">처리 순서</a>의 첫 단계(수식어 분리)를 직접 가로챈다. 아래는 특정 클래스를 merge 대상에서
+            빼는 예다.
+          </p>
+          <pre><code class="language-ts">const twMerge = extendTailwindMerge({
+  experimentalParseClassName({ className, parseClassName }) {
+    if (MUST_KEEP.has(className)) {
+      return {
+        isExternal: true,
+        modifiers: [],
+        hasImportantModifier: false,
+        baseClassName: className,
+        maybePostfixModifierPosition: undefined,
+      };
+    }
+    return parseClassName(className); // 나머지는 기본 해석
+  },
+});</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>반환 필드</th>
+                  <th>뜻</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td><code>isExternal</code></td><td><code>true</code>이면 이 클래스는 지우지도, 다른 클래스를 지우지도 않는다</td></tr>
+                <tr><td><code>modifiers</code></td><td><code>['hover', 'dark']</code>처럼 수식어 목록</td></tr>
+                <tr><td><code>baseClassName</code></td><td>수식어를 뗀 본체</td></tr>
+                <tr><td><code>hasImportantModifier</code></td><td><code>!</code>가 붙었는지</td></tr>
+                <tr><td><code>maybePostfixModifierPosition</code></td><td><code>/</code> 뒤 값이 시작하는 위치</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>일반적인 앱에서는 거의 쓰지 않는다. 접두사 규칙이 특이한 라이브러리를 만들 때 쓰는 탈출구다.</p>
+        </section>
+
+        <section id="other-forms">
+          <h2>설정을 넣는 다른 방법</h2>
+          <h3>함수로 넘기기</h3>
+          <p>
+            객체 대신 <strong>기본 설정을 받아 고치는 함수</strong>를 넘길 수 있다. 여러 개를 넘기면 순서대로 적용한다.
+            객체로 표현하기 어려운 조작, 예를 들어 기존 그룹에서 특정 값을 빼는 일에 쓴다.
+          </p>
+          <pre><code class="language-ts">const twMerge = extendTailwindMerge(
+  { extend: { theme: { spacing: ['lg'] } } }, // 객체는 항상 첫 번째 자리
+  (config) =&gt; {
+    config.classGroups['skin'] = ['skin-a', 'skin-b'];
+    return config;
+  },
+);</code></pre>
+
+          <h3>createTailwindMerge: 처음부터 만들기</h3>
+          <p>기본 설정 없이 완전히 빈 상태에서 만든다.</p>
+          <pre><code class="language-ts">const twMerge = createTailwindMerge(() =&gt; ({
+  cacheSize: 0,
+  theme: {},
+  classGroups: { pad: [{ pad: ['1', '2'] }] },
+  conflictingClassGroups: {},
+  conflictingClassGroupModifiers: {},
+  orderSensitiveModifiers: [],
+}));
+
+twMerge('pad-1', 'pad-2'); // → "pad-2"
+twMerge('p-2', 'p-4');     // → "p-2 p-4"  Tailwind 기본 클래스는 전혀 모른다</code></pre>
+          <p>
+            Tailwind가 아닌 자체 유틸리티 체계를 쓸 때만 의미가 있다.
+            <code>createTailwindMerge(() =&gt; mergeConfigs(getDefaultConfig(), {...}))</code>처럼 조합하면 사실상
+            <code>extendTailwindMerge</code>가 내부에서 하는 일이 된다.
+          </p>
+
+          <details class="fold">
+            <summary>선택 읽기: 함께 export되는 도구들</summary>
+            <div class="fold-body">
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>이름</th>
+                      <th>용도</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr><td><code>getDefaultConfig()</code></td><td>기본 설정 객체. 그룹 ID를 확인할 때 쓴다</td></tr>
+                    <tr><td><code>mergeConfigs(base, ext)</code></td><td>설정 두 개를 extend/override 규칙으로 합친다</td></tr>
+                    <tr><td><code>fromTheme('key')</code></td><td>classGroups에서 theme 값을 참조한다</td></tr>
+                    <tr><td><code>validators</code></td><td>값 검사 함수 모음</td></tr>
+                    <tr><td><code>twJoin(...)</code></td><td>충돌 정리 없이 이어 붙이기만 한다</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </details>
+        </section>
+
+        <section id="ours">
+          <h2>우리 프로젝트에서는</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>상황</th>
+                  <th>쓸 옵션</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>tokens.css</code>에 글자 크기, 간격, 모서리, 그림자, 최대 폭 토큰을 추가</td>
+                  <td><code>extend.theme</code> <span class="badge blue">현재</span></td>
+                </tr>
+                <tr><td><code>@utility</code>로 새 유틸리티를 만듦</td><td><code>extend.classGroups</code>, 값은 <code>fromTheme</code></td></tr>
+                <tr><td>새 유틸리티가 기존 속성까지 덮음</td><td><code>extend.conflictingClassGroups</code></td></tr>
+                <tr><td>새 유틸리티가 <code>/값</code>으로 다른 속성까지 정함</td><td><code>extend.conflictingClassGroupModifiers</code></td></tr>
+                <tr><td>자식이나 가상 요소를 가리키는 <code>@custom-variant</code>를 만듦</td><td><code>extend.orderSensitiveModifiers</code></td></tr>
+                <tr><td>Tailwind <code>prefix(...)</code> 사용</td><td><code>prefix</code></td></tr>
+                <tr><td>기본값을 완전히 없애야 함</td><td><code>override</code> (신중하게)</td></tr>
+                <tr><td>그 밖의 특이한 해석</td><td><code>experimentalParseClassName</code> (최후의 수단)</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            토큰을 <code>tokens.css</code>에만 추가하고 <code>cn.ts</code>에 빠뜨리면 <a href="#why-extend">조용히 사라지는
+            버그</a>가 생긴다. 그래서 <code>cn.spec.ts</code>는 <a href="008-토큰-CSS를-읽는-파서.html#output">008 문서</a>의
+            파서로 <code>tokens.css</code>를 직접 읽고, 모든 글자 크기, 간격, 모서리 토큰마다 확인한다.
+          </p>
+          <pre><code class="language-ts">it.each(tokens.textSizes.map((t) =&gt; t.name))(
+  '글자 크기 text-%s와 글자색 text-text를 함께 남긴다',
+  (size) =&gt; {
+    expect(cn(`text-${size}`, 'text-text')).toBe(`text-${size} text-text`);
+  },
+);</code></pre>
+          <div class="callout warn">
+            <p>
+              그림자와 최대 폭은 토큰 목록을 도는 테스트가 없다. <code>tokens.css</code>에 추가하면 <code>cn.ts</code>에도
+              직접 추가해야 한다. 나중에 <code>@utility</code>를 추가하면 <code>classGroups</code>를 등록하고
+              <code>cn.spec.ts</code>에 "뒤의 것만 남는다" 테스트를 함께 추가한다.
+            </p>
+          </div>
+        </section>
+
+        <section id="check">
+          <h2>스스로 확인하기</h2>
+          <details>
+            <summary>1. cn에서 clsx를 빼고 twMerge만 쓰면 무엇을 잃나?</summary>
+            <p>
+              <code>twMerge</code>도 문자열 여러 개와 falsy 값은 받지만, <code>{ 'bg-primary': active }</code> 같은 객체 문법은
+              받지 않는다. 조건부 클래스를 객체로 쓰는 편의를 잃는다. 반대로 clsx만 쓰면 컴포넌트 밖에서 넘긴
+              <code>className</code>이 기본 클래스를 확실히 덮지 못한다.
+            </p>
+          </details>
+          <details>
+            <summary>2. tokens.css에 --text-overline을 추가하고 cn.ts를 고치지 않으면 어떤 화면 버그가 생기나?</summary>
+            <p>
+              <code>cn('text-overline', 'text-text')</code>가 <code>"text-text"</code>가 된다. tailwind-merge가
+              <code>overline</code>을 글자색으로 보고 뒤의 글자색과 부딪힌다고 판단하기 때문이다. 에러 없이 글자 크기만
+              기본값으로 돌아간다. <code>cn.spec.ts</code>가 <code>tokens.css</code>를 읽어 돌기 때문에 이 테스트가 실패해
+              알려 준다.
+            </p>
+          </details>
+          <details>
+            <summary>3. conflictingClassGroups에 { flat: ['elevation'] }만 적었을 때 cn('flat', 'elevation-2')의 결과는?</summary>
+            <p>
+              <code>"flat elevation-2"</code>다. 충돌 규칙은 키 쪽 클래스가 뒤에 올 때만 앞의 값 쪽 클래스를 지운다. 반대
+              방향도 지우려면 <code>elevation: ['flat']</code>도 적어야 한다.
+            </p>
+          </details>
+          <details>
+            <summary>4. theme.spacing을 extend 대신 override로 바꾸면 cn('p-2', 'p-4')는 어떻게 되나?</summary>
+            <p>
+              <code>"p-2 p-4"</code>다. override가 기본 간격 목록을 지워서 숫자 간격을 padding으로 인식하지 못한다. 우리
+              <code>@theme</code>에서 숫자 간격을 지웠더라도, merge 동작이 바뀐다는 점은 알고 골라야 한다.
+            </p>
+          </details>
+        </section>
+
+        <section id="more">
+          <h2>더 읽을거리</h2>
+          <ol>
+            <li><a href="https://github.com/lukeed/clsx">clsx README</a></li>
+            <li>
+              <a href="https://github.com/dcastil/tailwind-merge/blob/main/docs/what-is-it-for.md"
+                >tailwind-merge: What is it for</a
+              >
+            </li>
+            <li>
+              <a href="https://github.com/dcastil/tailwind-merge/blob/main/docs/configuration.md"
+                >tailwind-merge: Configuration</a
+              >
+            </li>
+            <li><a href="https://github.com/dcastil/tailwind-merge/blob/main/docs/api-reference.md">tailwind-merge: API reference</a></li>
+            <li><a href="https://tailwindcss.com/docs/theme">Tailwind CSS: Theme variables</a></li>
+          </ol>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
