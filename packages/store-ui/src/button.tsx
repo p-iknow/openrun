@@ -78,9 +78,12 @@ export function Button({
       {isLoading && (
         <span
           aria-hidden="true"
-          className="absolute inset-0 flex items-center justify-center"
+          className="absolute inset-0 flex items-center justify-center gap-[6px]"
         >
-          <span className="size-[20px] rounded-full border-2 border-current border-r-transparent motion-safe:animate-spin" />
+          {/* 움직임 줄이기 설정에서는 애니메이션 없이 점 세 개만 보인다. */}
+          <span className="size-[7px] rounded-full bg-current motion-safe:animate-loading-dot" />
+          <span className="size-[7px] rounded-full bg-current motion-safe:animate-loading-dot motion-safe:[animation-delay:160ms]" />
+          <span className="size-[7px] rounded-full bg-current motion-safe:animate-loading-dot motion-safe:[animation-delay:320ms]" />
         </span>
       )}
     </BaseButton>
