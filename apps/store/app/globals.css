@@ -1,0 +1,5 @@
+@import 'tailwindcss';
+@import '@openrun/store-ui/tokens.css';
+
+/* store-ui 컴포넌트가 쓰는 클래스를 빌드된 파일에서 찾는다. */
+@source '../node_modules/@openrun/store-ui/dist';

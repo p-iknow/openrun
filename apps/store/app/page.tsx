@@ -9,10 +9,12 @@ export default async function HomePage() {
 
   return (
     <main>
-      <h1>공연</h1>
-      <ul>
+      <h1 className="text-heading font-bold">공연</h1>
+      <ul className="mt-lg divide-y divide-border rounded-card bg-surface-muted px-lg">
         {shows.map((show) => (
-          <li key={show.id}>{show.title}</li>
+          <li key={show.id} className="py-md">
+            {show.title}
+          </li>
         ))}
       </ul>
     </main>
