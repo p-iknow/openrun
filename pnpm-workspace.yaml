@@ -3,7 +3,7 @@ packages:
   - packages/*
 allowBuilds:
   '@scarf/scarf': false
-  # 테스트는 SWC를 쓰지 않지만, @nestjs/cli가 선택적 peer로 함께 설치한다.
+  # @nestjs/cli의 선택적 peer라서 설치된다.
   '@swc/core': false
   cpu-features: false
   esbuild: false
