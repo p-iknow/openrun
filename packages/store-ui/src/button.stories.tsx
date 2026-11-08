@@ -1,5 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Button } from './button.js';
+import { Button, type ButtonVariant } from './button.js';
+
+// Record로 적어 Button에 종류가 추가되면 여기서 타입 오류가 난다.
+const variantSet = {
+  primary: true,
+  secondary: true,
+} satisfies Record<ButtonVariant, true>;
+const variants = Object.keys(variantSet) as ButtonVariant[];
 
 const meta = {
   title: 'Components/Button',
@@ -14,7 +21,7 @@ const meta = {
     },
   },
   argTypes: {
-    variant: { control: 'inline-radio', options: ['primary', 'secondary'] },
+    variant: { control: 'inline-radio', options: variants },
     onClick: { action: 'click' },
   },
   args: {
@@ -35,4 +42,17 @@ export const Secondary: Story = {
 /** 종류와 관계없이 같은 회색으로 그리고, 누를 수 없다. */
 export const Disabled: Story = {
   args: { variant: 'primary', disabled: true, children: '다음' },
+};
+
+/** 보조 버튼은 바탕이 원래 회색이라 비활성일 때 글자색만 바뀐다. 활성 상태와 나란히 비교한다. */
+export const SecondaryDisabled: Story = {
+  parameters: { controls: { disable: true } },
+  render: () => (
+    <div className="flex gap-sm">
+      <Button variant="secondary">공유하기</Button>
+      <Button variant="secondary" disabled>
+        공유하기
+      </Button>
+    </div>
+  ),
 };
