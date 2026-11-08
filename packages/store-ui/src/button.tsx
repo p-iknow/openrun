@@ -72,9 +72,7 @@ export function Button({
       className={buttonVariants({ variant })}
     >
       {/* 라벨은 투명하게만 만들어 폭과 접근 가능한 이름을 그대로 둔다. */}
-      <span className="inline-flex items-center gap-sm group-data-loading:opacity-0">
-        {children}
-      </span>
+      <span className="group-data-loading:opacity-0">{children}</span>
       {isLoading && (
         <span
           aria-hidden="true"
