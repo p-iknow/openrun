@@ -185,24 +185,18 @@
 
   /* 애니메이션: 로딩 중인 Button의 점 세 개. 점마다 지연을 달리해 차례로 커졌다 작아진다. */
   --animate-loading-dot: loading-dot 1s ease-in-out infinite;
-}
 
-/* `@theme` 밖에 둔다. 토큰 문서(read-tokens.ts)는 `@theme` 안에 중첩 블록이 없다고 가정하고 읽는다. */
-@keyframes loading-dot {
-  0%,
-  80%,
-  100% {
-    opacity: 0.4;
-    transform: scale(0.7);
+  /* @theme 안에 두면 animate-loading-dot 클래스를 쓸 때만 CSS에 나온다. */
+  @keyframes loading-dot {
+    0%,
+    80%,
+    100% {
+      opacity: 0.4;
+      transform: scale(0.7);
+    }
+    40% {
+      opacity: 1;
+      transform: scale(1);
+    }
   }
-  40% {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-/* 글꼴: 앱이 `--font-pretendard`에 Pretendard를 연결한다. */
-@theme inline {
-  --font-sans:
-    var(--font-pretendard), ui-sans-serif, system-ui, -apple-system, sans-serif;
 }
