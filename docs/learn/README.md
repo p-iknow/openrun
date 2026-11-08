@@ -19,6 +19,7 @@
 | `drizzle` | Drizzle ORM의 스키마, 마이그레이션, 쿼리 |
 | `testing` | 테스트 구성, 도구, 작성 방법 |
 | `nextjs` | Next.js의 렌더링, 캐시, 앱 구조 |
+| `openapi` | OpenAPI 계약, 생성 클라이언트, API 호출 방식 |
 
 ## 모듈
 
@@ -30,7 +31,7 @@
 | 태그 | `tags` | 문서 주제 표시 |
 | 흐름도 | `flow`, `lane`, `lane-title`, `chain` | 전체 흐름을 한눈에 보여 주기 |
 | 단계 | `steps` | 번호를 매긴 순서 설명 |
-| 트리 | `tree`, `tree-row`, `tree-node`, `tree-note` | 연결선이 있는 계층 구조와 오른쪽 설명. 설명 열은 세 단계 깊이까지 맞춘다 |
+| 트리 | `tree`, `tree-row`, `tree-node`, `tree-note` | 연결선이 있는 계층 구조와 오른쪽 설명. 설명 열은 깊이와 상관없이 맞춰진다. 이름이 길면 `style="--tree-col: 17rem"`처럼 이름 열을 넓힌다 |
 | 표 | `table-wrap` | 좁은 화면에서 가로로 스크롤되는 표 |
 | 배지 | `badge` | 표나 문장 안의 짧은 분류 |
 | 강조 상자 | `callout`, `callout warn` | 핵심 정의, 주의할 점 |
