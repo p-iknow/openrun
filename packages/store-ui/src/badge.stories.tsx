@@ -41,7 +41,9 @@ export const Success: Story = { args: { tone: 'success' } };
 export const Warning: Story = { args: { tone: 'warning' } };
 export const Danger: Story = { args: { tone: 'danger' } };
 
+/** 톤 5개를 나란히 본다. 직접 그리므로 Controls는 끈다. 톤 하나를 골라 보려면 톤별 스토리를 쓴다. */
 export const AllTones: Story = {
+  parameters: { controls: { disable: true } },
   render: () => (
     <div className="flex flex-wrap gap-sm">
       {tones.map((tone) => (

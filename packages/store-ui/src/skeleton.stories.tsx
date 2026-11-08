@@ -30,6 +30,8 @@ export const Poster: Story = {
 
 /** 포스터 카드 하나의 자리 표시자: 포스터, 제목, 날짜. 글자 줄은 `rounded-badge`로 모서리를 줄인다. */
 export const PosterCard: Story = {
+  // Skeleton 여러 개를 직접 그리므로 Controls는 끈다.
+  parameters: { controls: { disable: true } },
   render: () => (
     <div aria-busy="true" className="flex w-[180px] flex-col gap-sm">
       <Skeleton className="aspect-[3/4] w-full" />
