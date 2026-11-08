@@ -4,7 +4,7 @@
  * 색은 두 단계다.
  * - 기본 팔레트: CSS 변수로만 둔다. 유틸리티 클래스(`bg-blue-500` 등)는 만들지 않는다.
  * - 의미 토큰: `@theme`으로 노출해 `bg-primary`, `text-text-secondary` 같은 클래스로 쓴다.
- * 글자 크기, 간격, 모서리, 그림자도 Tailwind 기본값을 지우고 의미 이름만 노출한다.
+ * 글자 크기, 간격, 모서리, 그림자, 최대 폭도 Tailwind 기본값을 지우고 의미 이름만 노출한다.
  */
 
 /*
@@ -112,6 +112,7 @@
   --inset-shadow-*: initial;
   --drop-shadow-*: initial;
   --text-shadow-*: initial;
+  --container-*: initial;
   /* 브레이크포인트는 sm, md, lg만 쓴다. */
   --breakpoint-xl: initial;
   --breakpoint-2xl: initial;
