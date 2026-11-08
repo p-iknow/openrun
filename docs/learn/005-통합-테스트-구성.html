@@ -42,9 +42,6 @@
 
       <main>
         <h1>통합 테스트 구성: Testcontainers, Vitest, Turborepo</h1>
-        <ul class="tags" aria-label="태그">
-          <li>testing</li>
-        </ul>
         <p class="lead">
           <code>GET /shows</code>를 진짜 PostgreSQL로 검증하는 통합 테스트가 어떻게 짜여 있는지 본다.
           대상 파일은 <code>apps/api</code>의 <code>vitest.config.ts</code>,
@@ -70,7 +67,7 @@
               <tbody>
                 <tr>
                   <td><code>pnpm test</code></td>
-                  <td><code>test/**/*.spec.ts</code> 중 <code>*.int.spec.ts</code>를 뺀 것</td>
+                  <td><code>src/**/*.spec.ts</code>, <code>test/**/*.spec.ts</code> 중 <code>*.int.spec.ts</code>를 뺀 것</td>
                   <td>필요 없음</td>
                   <td><span class="badge blue">커밋마다</span> pre-commit</td>
                 </tr>
@@ -113,9 +110,10 @@
 
           <h3>단위용: <code>vitest.config.ts</code></h3>
           <pre><code class="language-ts">test: {
-  include: ['test/**/*.spec.ts'],
+  // 모듈 단위 테스트는 소스 옆(src)에, 앱 전체를 띄우는 테스트는 test에 둔다.
+  include: ['src/**/*.spec.ts', 'test/**/*.spec.ts'],
   // DB가 필요한 테스트는 vitest.integration.config.ts로 test:integration에서만 실행한다.
-  exclude: [...configDefaults.exclude, 'test/**/*.int.spec.ts'],
+  exclude: [...configDefaults.exclude, '**/*.int.spec.ts'],
   passWithNoTests: true,
 },</code></pre>
           <ul>
@@ -451,7 +449,7 @@ const app = moduleRef.createNestApplication();</code></pre>
             <summary>선택 읽기: <code>overrideProvider</code>를 쓰지 않은 이유</summary>
             <div class="fold-body">
               <p>
-                Nest 테스트에서 DB를 바꿔 끼울 때 흔히 쓰는 방법은 <code>overrideProvider</code>다. NestJS 공식 테스트 문서가 이 방법을 보여 주고, 공식 <code>@nestjs/drizzle</code> 문서도 테스트에서 DB 토큰 자리에 가짜 객체를 넣는 방법을 보여 준다. 이 저장소의 001 문서도 처음에는 "DB를 붙이면 <code>overrideProvider()</code>로 바꿀 수
+                Nest 테스트에서 DB를 바꿔 끼울 때 흔히 쓰는 방법은 <code>overrideProvider</code>다. NestJS 공식 테스트 문서가 이 방법을 보여 주고, 공식 <code>@nestjs/drizzle</code> 문서도 테스트에서 DB 토큰 자리에 가짜 객체를 넣는 방법을 보여 준다. 이 저장소의 <a href="001-nestjs-기초.html#test">001 문서</a>도 처음에는 "DB를 붙이면 <code>overrideProvider()</code>로 바꿀 수
                 있다"고 안내했다. 그래서 "왜 그 방법을 쓰지 않았나"에 답해 둔다.
               </p>
               <pre><code class="language-ts">await Test.createTestingModule({ imports: [AppModule] })

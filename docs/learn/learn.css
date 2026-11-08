@@ -79,6 +79,8 @@ nav {
   position: sticky;
   top: 1.5rem;
   align-self: start;
+  max-height: calc(100vh - 3rem);
+  overflow-y: auto;
   font-size: 0.875rem;
   line-height: 1.5;
 }
@@ -111,8 +113,49 @@ nav a:hover {
 nav ol + strong {
   margin-top: 1.25rem;
 }
+/* 문서 탐색: learn.js가 목차 아래에 앞뒤 문서와 전체 목록 링크를 그린다. */
+.doc-nav-kind {
+  display: block;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.layout.single {
+  grid-template-columns: minmax(0, 760px);
+}
 main {
   min-width: 0;
+}
+/* 전체 문서 목록: index.html에서 learn.js가 채운다. */
+.doc-index {
+  margin: 1.5rem 0;
+  padding: 0;
+  list-style: none;
+}
+.doc-index > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem 1rem;
+  margin: 0;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.doc-index > li[hidden] {
+  display: none;
+}
+.doc-index {
+  border-top: 1px solid var(--border);
+}
+.doc-index > li > a {
+  color: var(--text);
+  text-decoration: none;
+}
+.doc-index > li > a:hover {
+  color: var(--accent);
+}
+.doc-index .tags {
+  margin: 0;
 }
 h1 {
   margin: 0 0 0.5rem;
@@ -268,6 +311,78 @@ td {
   color: var(--muted);
 }
 
+/*
+ * 트리: 연결선이 있는 계층 목록. 설명 열은 깊이와 상관없이 같은 위치에 맞춘다.
+ * 모든 줄의 오른쪽 끝이 같으므로, 설명 칸 너비를 "트리 너비 - 이름 열"로 고정하면
+ * 설명이 트리 왼쪽에서 --tree-col만큼 떨어진 곳에서 시작한다.
+ */
+.tree {
+  --tree-col: 15rem;
+  --tree-note-min: 12rem;
+  container-type: inline-size;
+  margin: 1.25rem 0;
+  padding: 0.9rem 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--code-bg);
+  list-style: none;
+  overflow-x: auto;
+}
+.tree ul {
+  margin: 0;
+  padding-left: 1.25rem;
+  list-style: none;
+}
+.tree li {
+  margin: 0;
+}
+.tree ul > li {
+  position: relative;
+  padding-left: 1.1rem;
+}
+.tree ul > li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid var(--muted);
+}
+.tree ul > li:last-child::before {
+  bottom: auto;
+  height: 0.95rem;
+}
+.tree ul > li::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.95rem;
+  width: 0.8rem;
+  border-top: 1px solid var(--muted);
+}
+.tree-row {
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1fr)
+    max(var(--tree-note-min), calc(100cqi - var(--tree-col) - 0.75rem));
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 1.9rem;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.tree-node {
+  font:
+    0.875rem/1.5 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Consolas,
+    monospace;
+}
+.tree-note {
+  color: var(--muted);
+}
+
 .steps {
   margin: 1rem 0;
   padding: 0;
@@ -337,11 +452,30 @@ td {
 }
 .tags li {
   margin: 0;
-  padding: 0.05rem 0.5rem;
   border: 1px solid var(--border);
   border-radius: 999px;
   color: var(--muted);
   font-size: 0.8rem;
+}
+/* 태그는 전체 목록 페이지의 그 태그 보기로 가는 링크다. */
+.tags a {
+  display: block;
+  padding: 0.05rem 0.5rem;
+  color: inherit;
+  text-decoration: none;
+}
+.tags li:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+/* 태그 필터: index.html에서 고른 태그를 강조한다. */
+.tag-filter {
+  margin: 1.5rem 0 1rem;
+}
+.tag-filter li:has(a[aria-current]) {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
 }
 
 details {
@@ -416,4 +550,11 @@ details.fold {
 }
 .hljs-number {
   color: var(--token-number);
+}
+/* JSX와 HTML의 태그 이름, 속성 */
+.hljs-name {
+  color: var(--token-type);
+}
+.hljs-attr {
+  color: var(--token-decorator);
 }

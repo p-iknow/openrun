@@ -4,5 +4,5 @@
     "rootDir": "./src"
   },
   "include": ["src"],
-  "exclude": ["src/db/seed.ts"]
+  "exclude": ["src/db/seed.ts", "src/**/*.spec.ts"]
 }
