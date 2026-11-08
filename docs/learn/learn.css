@@ -113,14 +113,40 @@ nav a:hover {
 nav ol + strong {
   margin-top: 1.25rem;
 }
-/* 문서 목록: learn.js가 목차 아래에 그린다. 지금 문서를 강조한다. */
-nav .doc-list a[aria-current='page'] {
-  border-left-color: var(--accent);
-  color: var(--text);
-  font-weight: 600;
+/* 문서 탐색: learn.js가 목차 아래에 앞뒤 문서와 전체 목록 링크를 그린다. */
+.doc-nav-kind {
+  display: block;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.layout.single {
+  grid-template-columns: minmax(0, 760px);
 }
 main {
   min-width: 0;
+}
+/* 전체 문서 목록: index.html에서 learn.js가 채운다. */
+.doc-index {
+  margin: 1.5rem 0;
+  padding: 0;
+  list-style: none;
+}
+.doc-index li {
+  margin: 0;
+}
+.doc-index a {
+  display: block;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  text-decoration: none;
+}
+.doc-index li:first-child a {
+  border-top: 1px solid var(--border);
+}
+.doc-index a:hover {
+  background: var(--surface);
+  color: var(--accent);
 }
 h1 {
   margin: 0 0 0.5rem;
