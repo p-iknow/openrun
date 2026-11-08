@@ -35,7 +35,7 @@ function declarations(block: string): [string, string][] {
 }
 
 // 블록 안에 중첩 블록이나 `}`가 없다고 가정하고 첫 `}`에서 자른다.
-function blockAfter(css: string, selector: string): string {
+function blockAfter(css: string, { selector }: { selector: string }): string {
   const start = css.indexOf(`${selector} {`);
   if (start === -1) throw new Error(`tokens.css에 ${selector} 블록이 없다.`);
   const end = css.indexOf('}', start);
@@ -43,7 +43,10 @@ function blockAfter(css: string, selector: string): string {
 }
 
 /** `prefix`로 시작하는 토큰을 접두어를 뗀 이름으로 뽑는다. 지우기용 `initial`과 `--line-height` 같은 부가 값은 뺀다. */
-function themeValues(theme: [string, string][], prefix: string): ThemeValue[] {
+function themeValues(
+  theme: [string, string][],
+  { prefix }: { prefix: string },
+): ThemeValue[] {
   return theme
     .filter(([name, value]) => name.startsWith(prefix) && value !== 'initial')
     .map(([name, value]) => ({ name: name.slice(prefix.length), value }))
@@ -51,14 +54,14 @@ function themeValues(theme: [string, string][], prefix: string): ThemeValue[] {
 }
 
 export function readTokens(css: string): Tokens {
-  const palette = declarations(blockAfter(css, ':root')).map(([name, hex]) => ({
+  const palette = declarations(blockAfter(css, { selector: ':root' })).map(([name, hex]) => ({
     name,
     hex,
   }));
   const hexOf = new Map(palette.map((p) => [p.name, p.hex]));
-  const theme = declarations(blockAfter(css, '@theme'));
+  const theme = declarations(blockAfter(css, { selector: '@theme' }));
 
-  const colors = themeValues(theme, 'color-').map(({ name, value }) => {
+  const colors = themeValues(theme, { prefix: 'color-' }).map(({ name, value }) => {
     const ref = /^var\(--([\w-]+)\)$/.exec(value)?.[1] ?? null;
     return {
       name,
@@ -70,8 +73,8 @@ export function readTokens(css: string): Tokens {
   return {
     palette,
     colors,
-    textSizes: themeValues(theme, 'text-'),
-    spacing: themeValues(theme, 'spacing-'),
-    radii: themeValues(theme, 'radius-'),
+    textSizes: themeValues(theme, { prefix: 'text-' }),
+    spacing: themeValues(theme, { prefix: 'spacing-' }),
+    radii: themeValues(theme, { prefix: 'radius-' }),
   };
 }
