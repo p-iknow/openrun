@@ -7,7 +7,7 @@ const badgeVariants = cva(
   'inline-flex h-[24px] items-center rounded-badge px-sm text-caption font-semibold',
   {
     variants: {
-      variant: {
+      tone: {
         neutral: 'bg-surface-muted text-text-secondary',
         primary: 'bg-primary-subtle text-primary-strong',
         success: 'bg-success-subtle text-success-strong',
@@ -16,20 +16,18 @@ const badgeVariants = cva(
       },
     },
     defaultVariants: {
-      variant: 'neutral',
+      tone: 'neutral',
     },
   },
 );
 
-export type BadgeVariant = NonNullable<
-  VariantProps<typeof badgeVariants>['variant']
->;
+export type BadgeTone = NonNullable<VariantProps<typeof badgeVariants>['tone']>;
 
 export interface BadgeProps {
-  variant?: BadgeVariant;
+  tone?: BadgeTone;
   children: ReactNode;
 }
 
-export function Badge({ variant, children }: BadgeProps) {
-  return <span className={badgeVariants({ variant })}>{children}</span>;
+export function Badge({ tone, children }: BadgeProps) {
+  return <span className={badgeVariants({ tone })}>{children}</span>;
 }
