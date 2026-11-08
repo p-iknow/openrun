@@ -120,6 +120,8 @@
   --color-primary: var(--blue-500);
   --color-primary-hover: var(--blue-600);
   --color-primary-subtle: var(--blue-50);
+  /* `-subtle` 바탕 위의 작은 글자용. 대비 4.5:1 이상(WCAG AA)을 맞춘다. */
+  --color-primary-strong: var(--blue-700);
 
   --color-text: var(--grey-900);
   --color-text-secondary: var(--grey-700);
@@ -133,8 +135,16 @@
   --color-surface-muted: var(--grey-100);
 
   --color-success: var(--green-500);
+  --color-success-subtle: var(--green-50);
+  --color-success-strong: var(--green-900);
+
+  /* 주황은 어느 단계도 orange50 위에서 4.5:1이 안 되므로 글자는 `text`를 쓴다. */
   --color-warning: var(--orange-500);
+  --color-warning-subtle: var(--orange-50);
+
   --color-danger: var(--red-500);
+  --color-danger-subtle: var(--red-50);
+  --color-danger-strong: var(--red-700);
 
   /* 글자 크기 */
   --text-caption: 0.75rem;

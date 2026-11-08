@@ -7,10 +7,10 @@ export type BadgeTone =
 // Tailwind가 dist에서 클래스를 찾을 수 있도록 클래스 이름을 문자열 그대로 둔다.
 const toneClassName: Record<BadgeTone, string> = {
   neutral: 'bg-surface-muted text-text-secondary',
-  primary: 'bg-primary-subtle text-primary',
-  success: 'bg-success/10 text-success',
-  warning: 'bg-warning/10 text-warning',
-  danger: 'bg-danger/10 text-danger',
+  primary: 'bg-primary-subtle text-primary-strong',
+  success: 'bg-success-subtle text-success-strong',
+  warning: 'bg-warning-subtle text-text',
+  danger: 'bg-danger-subtle text-danger-strong',
 };
 
 export interface BadgeProps {
