@@ -15,6 +15,7 @@
         <ol>
           <li><a href="#flow">흐름도</a></li>
           <li><a href="#steps">단계</a></li>
+          <li><a href="#tree">트리</a></li>
           <li><a href="#code">코드</a></li>
           <li><a href="#table">표와 배지</a></li>
           <li><a href="#callout">강조 상자</a></li>
@@ -68,6 +69,38 @@
               설명을 적는다.
             </li>
           </ol>
+        </section>
+
+        <section id="tree">
+          <h2>트리</h2>
+          <p>
+            계층 구조에 항목별 설명을 붙일 때 쓴다. 한글이 들어간 ASCII 트리는 글자 폭 때문에 정렬이
+            어긋나므로 이 모듈을 쓴다. 하위 항목은 <code>li</code> 안에 <code>ul</code>로 넣는다.
+          </p>
+          <ul class="tree">
+            <li>
+              <div class="tree-row"><span class="tree-node">Root</span></div>
+              <ul>
+                <li>
+                  <div class="tree-row">
+                    <span class="tree-node">Child</span>
+                    <span class="tree-note"><span class="badge blue">분류</span> 설명을 적는다.</span>
+                  </div>
+                  <ul>
+                    <li>
+                      <div class="tree-row">
+                        <span class="tree-node">Grandchild</span>
+                        <span class="tree-note">설명 열은 같은 위치에 맞춰진다.</span>
+                      </div>
+                    </li>
+                  </ul>
+                </li>
+                <li>
+                  <div class="tree-row"><span class="tree-node">LastChild</span></div>
+                </li>
+              </ul>
+            </li>
+          </ul>
         </section>
 
         <section id="code">

@@ -111,7 +111,7 @@
         <section id="prerender">
           <h2>빌드 때 페이지를 미리 그린다</h2>
           <p>우리 스토어 페이지는 이렇게 생겼다.</p>
-          <pre><code class="language-ts">// apps/store/app/page.tsx
+          <pre><code class="language-tsx">// apps/store/app/page.tsx
 import { connection } from 'next/server';
 import { createServerApiClient } from '../src/api-client';
 import { fetchShows } from '../src/shows/fetch-shows';
@@ -339,37 +339,49 @@ const nextConfig: NextConfig = {
             </p>
           </div>
           <p>공식 문서의 블로그 예시를 쉘 관점에서 나누면 이렇다.</p>
-          <div class="flow">
-            <div class="lane blue">
-              <div class="lane-title">정적 쉘: 빌드 때 만들어 두고, 요청이 오면 즉시 응답</div>
-              <div class="flow">
-                <ol class="chain">
-                  <li><span>&lt;header&gt;</span> 고정 마크업</li>
-                </ol>
-                <ol class="chain">
-                  <li><span>&lt;BlogPosts&gt;</span> <code>'use cache'</code> 결과</li>
-                </ol>
-                <ol class="chain">
-                  <li>
-                    <span>&lt;Suspense&gt;의 fallback "불러오는 중…"</span> 내용은 비워 두고 자리만 차지
-                  </li>
-                </ol>
-              </div>
-            </div>
-            <div class="lane green">
-              <div class="lane-title">요청 시점: 쉘을 보낸 뒤 서버가 이어서 계산</div>
-              <ol class="chain">
-                <li><span>&lt;UserPreferences&gt;가 cookies()를 읽음</span></li>
-                <li><span>렌더링 결과를 스트리밍</span></li>
-                <li><span>브라우저가 fallback 자리를 교체</span></li>
-              </ol>
-            </div>
-          </div>
+          <ul class="tree">
+            <li>
+              <div class="tree-row"><span class="tree-node">BlogPage</span></div>
+              <ul>
+                <li>
+                  <div class="tree-row">
+                    <span class="tree-node">&lt;header&gt;</span>
+                    <span class="tree-note"><span class="badge blue">정적 쉘</span> 고정 마크업</span>
+                  </div>
+                </li>
+                <li>
+                  <div class="tree-row">
+                    <span class="tree-node">&lt;BlogPosts&gt;</span>
+                    <span class="tree-note"><span class="badge blue">정적 쉘</span> 'use cache' 결과</span>
+                  </div>
+                </li>
+                <li>
+                  <div class="tree-row">
+                    <span class="tree-node">&lt;Suspense&gt;</span>
+                    <span class="tree-note">
+                      <span class="badge blue">정적 쉘</span> fallback("불러오는 중…")만 들어감
+                    </span>
+                  </div>
+                  <ul>
+                    <li>
+                      <div class="tree-row">
+                        <span class="tree-node">&lt;UserPreferences&gt;</span>
+                        <span class="tree-note">
+                          <span class="badge green">요청 시점</span> cookies()를 읽어 스트리밍
+                        </span>
+                      </div>
+                    </li>
+                  </ul>
+                </li>
+              </ul>
+            </li>
+          </ul>
           <p>
-            파란 상자가 정적 쉘이다. 브라우저는 이것을 먼저 받아 바로 화면에 그린다. 초록 상자의 일은
-            요청이 온 뒤에 일어나고, 그 결과가 fallback 자리를 채운다.
+            <span class="badge blue">정적 쉘</span>이 붙은 세 부분이 빌드 때 만들어져 즉시 응답된다.
+            <span class="badge green">요청 시점</span>인 마지막 부분만 요청이 온 뒤 서버가 계산해 fallback
+            자리에 채워 넣는다.
           </p>
-          <pre><code class="language-ts">export default function BlogPage() {
+          <pre><code class="language-tsx">export default function BlogPage() {
   return (
     &lt;&gt;
       &lt;header&gt;...&lt;/header&gt;              {/* 정적: 자동으로 미리 렌더링 */}
@@ -622,7 +634,7 @@ await getTask('7')  // 다른 인자 → 별도 캐시 항목, 이때는 getTask
 
           <h3>connection()으로는 안 되는 경우</h3>
           <p>현재 시각으로 인사말을 만드는 함수를 두 곳에서 쓰고 싶다고 하자.</p>
-          <pre><code class="language-ts">async function greeting() {
+          <pre><code class="language-tsx">async function greeting() {
   await connection() // 사전 렌더링 때 시각이 굳지 않게
   const hour = new Date().getHours()
   return hour &lt; 12 ? '좋은 아침' : '좋은 오후'

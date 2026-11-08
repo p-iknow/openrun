@@ -268,6 +268,77 @@ td {
   color: var(--muted);
 }
 
+/* 트리: 연결선이 있는 계층 목록. 설명 열은 세 단계 깊이까지 같은 위치에 맞춘다. */
+.tree {
+  --tree-col: 15rem;
+  --tree-indent: 2.35rem;
+  margin: 1.25rem 0;
+  padding: 0.9rem 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--code-bg);
+  list-style: none;
+  overflow-x: auto;
+}
+.tree ul {
+  margin: 0;
+  padding-left: 1.25rem;
+  list-style: none;
+}
+.tree li {
+  margin: 0;
+}
+.tree ul > li {
+  position: relative;
+  padding-left: 1.1rem;
+}
+.tree ul > li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid var(--muted);
+}
+.tree ul > li:last-child::before {
+  bottom: auto;
+  height: 0.95rem;
+}
+.tree ul > li::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.95rem;
+  width: 0.8rem;
+  border-top: 1px solid var(--muted);
+}
+.tree-row {
+  display: grid;
+  grid-template-columns: var(--tree-node-col, var(--tree-col)) minmax(12rem, 1fr);
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 1.9rem;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.tree > li > ul > li > .tree-row {
+  --tree-node-col: calc(var(--tree-col) - var(--tree-indent));
+}
+.tree > li > ul > li > ul > li > .tree-row {
+  --tree-node-col: calc(var(--tree-col) - var(--tree-indent) * 2);
+}
+.tree-node {
+  font:
+    0.875rem/1.5 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Consolas,
+    monospace;
+}
+.tree-note {
+  color: var(--muted);
+}
+
 .steps {
   margin: 1rem 0;
   padding: 0;
@@ -416,4 +487,11 @@ details.fold {
 }
 .hljs-number {
   color: var(--token-number);
+}
+/* JSX와 HTML의 태그 이름, 속성 */
+.hljs-name {
+  color: var(--token-type);
+}
+.hljs-attr {
+  color: var(--token-decorator);
 }
