@@ -3,6 +3,7 @@ packages:
   - packages/*
 allowBuilds:
   '@scarf/scarf': false
+  # @nestjs/cli의 선택적 peer라서 설치된다.
   '@swc/core': false
   cpu-features: false
   esbuild: false
