@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "turbo run dev",
     "storybook": "pnpm --filter @openrun/store-ui storybook",
-    "build": "turbo run build",
+    "build": "turbo run build build-storybook",
     "openapi:generate": "turbo run openapi:generate --filter=@openrun/api",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",

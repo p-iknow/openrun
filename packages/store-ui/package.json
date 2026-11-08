@@ -11,7 +11,8 @@
     "./tokens.css": "./src/tokens.css"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && storybook build --quiet",
+    "build": "tsc -p tsconfig.build.json",
+    "build-storybook": "storybook build --quiet",
     "dev": "tsc -p tsconfig.build.json --watch --preserveWatchOutput",
     "storybook": "storybook dev --port 6006",
     "lint": "oxlint --type-aware",
