@@ -14,10 +14,10 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-function Swatch({ hex }: { hex: string }) {
+function Swatch({ hex, className }: { hex: string; className: string }) {
   return (
     <span
-      className="block size-[32px] shrink-0 rounded-badge border border-border"
+      className={`block rounded-badge border border-border ${className}`}
       style={{ backgroundColor: hex }}
     />
   );
@@ -40,8 +40,8 @@ function Table({ head, children }: { head: string[]; children: ReactNode }) {
   );
 }
 
-const cell = 'py-sm pr-lg align-middle';
-const code = 'font-mono text-caption';
+const cellClass = 'py-sm pr-lg align-middle';
+const codeClass = 'font-mono text-caption';
 
 function groupPalette(palette: PaletteColor[]): [string, PaletteColor[]][] {
   const groups = new Map<string, PaletteColor[]>();
@@ -57,19 +57,19 @@ function TokensPage() {
     <div className="flex max-w-content flex-col gap-3xl p-xl">
       <Section title="의미 토큰 색">
         <p className="text-body-sm text-text-secondary">
-          화면 코드는 의미 토큰만 쓴다. 예: <code className={code}>bg-primary</code>,{' '}
-          <code className={code}>text-text-secondary</code>,{' '}
-          <code className={code}>border-border</code>.
+          화면 코드는 의미 토큰만 쓴다. 예: <code className={codeClass}>bg-primary</code>,{' '}
+          <code className={codeClass}>text-text-secondary</code>,{' '}
+          <code className={codeClass}>border-border</code>.
         </p>
         <Table head={['색', '의미 토큰', '팔레트', '값']}>
           {tokens.colors.map((c) => (
             <tr key={c.name} className="border-b border-border">
-              <td className={cell}>
-                <Swatch hex={c.hex} />
+              <td className={cellClass}>
+                <Swatch hex={c.hex} className="size-[32px] shrink-0" />
               </td>
-              <td className={`${cell} ${code}`}>{c.name}</td>
-              <td className={`${cell} ${code}`}>{c.palette ?? '-'}</td>
-              <td className={`${cell} ${code}`}>{c.hex}</td>
+              <td className={`${cellClass} ${codeClass}`}>{c.name}</td>
+              <td className={`${cellClass} ${codeClass}`}>{c.palette ?? '-'}</td>
+              <td className={`${cellClass} ${codeClass}`}>{c.hex}</td>
             </tr>
           ))}
         </Table>
@@ -77,7 +77,7 @@ function TokensPage() {
 
       <Section title="기본 팔레트">
         <p className="text-body-sm text-text-secondary">
-          TDS 라이트 팔레트. CSS 변수(<code className={code}>var(--blue-500)</code>
+          TDS 라이트 팔레트. CSS 변수(<code className={codeClass}>var(--blue-500)</code>
           )로만 있고 유틸리티 클래스는 만들지 않는다.
         </p>
         <div className="flex flex-col gap-lg">
@@ -87,12 +87,9 @@ function TokensPage() {
               <ul className="grid grid-cols-5 gap-sm md:grid-cols-10">
                 {colors.map((c) => (
                   <li key={c.name} className="flex flex-col gap-xs">
-                    <span
-                      className="block h-[40px] rounded-badge border border-border"
-                      style={{ backgroundColor: c.hex }}
-                    />
-                    <span className={code}>{c.name.replace(`${family}-`, '')}</span>
-                    <span className={`${code} text-text-secondary`}>{c.hex}</span>
+                    <Swatch hex={c.hex} className="h-[40px]" />
+                    <span className={codeClass}>{c.name.replace(`${family}-`, '')}</span>
+                    <span className={`${codeClass} text-text-secondary`}>{c.hex}</span>
                   </li>
                 ))}
               </ul>
@@ -105,9 +102,9 @@ function TokensPage() {
         <Table head={['토큰', '크기', '예시']}>
           {tokens.textSizes.map((t) => (
             <tr key={t.name} className="border-b border-border">
-              <td className={`${cell} ${code}`}>text-{t.name}</td>
-              <td className={`${cell} ${code}`}>{t.value}</td>
-              <td className={cell} style={{ fontSize: `var(--text-${t.name})` }}>
+              <td className={`${cellClass} ${codeClass}`}>text-{t.name}</td>
+              <td className={`${cellClass} ${codeClass}`}>{t.value}</td>
+              <td className={cellClass} style={{ fontSize: `var(--text-${t.name})` }}>
                 공연 예매 2026.12.24 55,000원
               </td>
             </tr>
@@ -117,15 +114,15 @@ function TokensPage() {
 
       <Section title="간격">
         <p className="text-body-sm text-text-secondary">
-          <code className={code}>p-lg</code>, <code className={code}>gap-sm</code>,{' '}
-          <code className={code}>mt-xl</code>처럼 쓴다.
+          <code className={codeClass}>p-lg</code>, <code className={codeClass}>gap-sm</code>,{' '}
+          <code className={codeClass}>mt-xl</code>처럼 쓴다.
         </p>
         <Table head={['토큰', '크기', '예시']}>
           {tokens.spacing.map((s) => (
             <tr key={s.name} className="border-b border-border">
-              <td className={`${cell} ${code}`}>*-{s.name}</td>
-              <td className={`${cell} ${code}`}>{s.value}</td>
-              <td className={cell}>
+              <td className={`${cellClass} ${codeClass}`}>*-{s.name}</td>
+              <td className={`${cellClass} ${codeClass}`}>{s.value}</td>
+              <td className={cellClass}>
                 <span
                   className="block h-[16px] bg-primary"
                   style={{ width: `var(--spacing-${s.name})` }}
@@ -144,8 +141,8 @@ function TokensPage() {
                 className="block size-[80px] border border-border-strong bg-surface-muted"
                 style={{ borderRadius: `var(--radius-${r.name})` }}
               />
-              <span className={code}>rounded-{r.name}</span>
-              <span className={`${code} text-text-secondary`}>{r.value}</span>
+              <span className={codeClass}>rounded-{r.name}</span>
+              <span className={`${codeClass} text-text-secondary`}>{r.value}</span>
             </li>
           ))}
         </ul>

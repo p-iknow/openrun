@@ -34,6 +34,7 @@ function declarations(block: string): [string, string][] {
   return [...block.matchAll(declaration)].map((m) => [m[1]!, m[2]!.trim()]);
 }
 
+// 블록 안에 중첩 블록이나 `}`가 없다고 가정하고 첫 `}`에서 자른다.
 function blockAfter(css: string, selector: string): string {
   const start = css.indexOf(`${selector} {`);
   if (start === -1) throw new Error(`tokens.css에 ${selector} 블록이 없다.`);
@@ -41,7 +42,8 @@ function blockAfter(css: string, selector: string): string {
   return css.slice(start, end);
 }
 
-function withPrefix(theme: [string, string][], prefix: string): ThemeValue[] {
+/** `prefix`로 시작하는 토큰을 접두어를 뗀 이름으로 뽑는다. 지우기용 `initial`과 `--line-height` 같은 부가 값은 뺀다. */
+function themeValues(theme: [string, string][], prefix: string): ThemeValue[] {
   return theme
     .filter(([name, value]) => name.startsWith(prefix) && value !== 'initial')
     .map(([name, value]) => ({ name: name.slice(prefix.length), value }))
@@ -56,7 +58,7 @@ export function readTokens(css: string): Tokens {
   const hexOf = new Map(palette.map((p) => [p.name, p.hex]));
   const theme = declarations(blockAfter(css, '@theme'));
 
-  const colors = withPrefix(theme, 'color-').map(({ name, value }) => {
+  const colors = themeValues(theme, 'color-').map(({ name, value }) => {
     const ref = /^var\(--([\w-]+)\)$/.exec(value)?.[1] ?? null;
     return {
       name,
@@ -68,8 +70,8 @@ export function readTokens(css: string): Tokens {
   return {
     palette,
     colors,
-    textSizes: withPrefix(theme, 'text-'),
-    spacing: withPrefix(theme, 'spacing-'),
-    radii: withPrefix(theme, 'radius-'),
+    textSizes: themeValues(theme, 'text-'),
+    spacing: themeValues(theme, 'spacing-'),
+    radii: themeValues(theme, 'radius-'),
   };
 }

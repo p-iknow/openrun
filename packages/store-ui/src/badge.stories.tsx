@@ -1,13 +1,15 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Badge, type BadgeTone } from './badge.js';
 
-const tones = [
-  'neutral',
-  'primary',
-  'success',
-  'warning',
-  'danger',
-] as const satisfies readonly BadgeTone[];
+// Record로 적어 Badge에 톤이 추가되면 여기서 타입 오류가 난다.
+const toneSet = {
+  neutral: true,
+  primary: true,
+  success: true,
+  warning: true,
+  danger: true,
+} satisfies Record<BadgeTone, true>;
+const tones = Object.keys(toneSet) as BadgeTone[];
 
 const meta = {
   title: 'Components/Badge',

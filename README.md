@@ -66,6 +66,6 @@ pnpm build                  # API와 DB 없이 통과한다.
 pnpm storybook              # http://localhost:6006
 ```
 
-앱과 API 없이 토큰(`Foundations/Tokens`)과 컴포넌트를 본다. 토큰 화면은 `tokens.css`를 직접 읽어 그리므로 토큰을 고치면 함께 바뀐다. 글꼴은 스토어와 같은 `pretendard` 패키지의 파일을 `@font-face`로 불러온다. 접근성 애드온은 위반을 실패로 표시한다.
+앱과 API 없이 토큰(`Foundations/Tokens`)과 컴포넌트를 본다. 토큰 화면은 `tokens.css`를 직접 읽어 그리므로 토큰을 고치면 함께 바뀐다. 글꼴은 스토어와 같은 `pretendard` 패키지의 파일을 `@font-face`로 불러온다. 스토리마다 아래 Accessibility 탭에서 접근성 위반을 확인한다. 빌드는 접근성 위반으로 실패하지 않는다.
 
 스토리는 소스 옆에 `*.stories.tsx`로 두며 `dist`에는 들어가지 않는다. `store-ui`의 `build`가 Storybook도 `storybook-static`에 빌드하므로, 스토리가 깨지면 `pnpm build`가 실패한다.
