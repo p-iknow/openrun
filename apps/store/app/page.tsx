@@ -1,3 +1,4 @@
+import { Badge } from '@openrun/store-ui';
 import { connection } from 'next/server';
 import { createServerApiClient } from '../src/api-client';
 import { fetchShows } from '../src/shows/fetch-shows';
@@ -9,10 +10,15 @@ export default async function HomePage() {
 
   return (
     <main>
-      <h1>공연</h1>
-      <ul>
+      <div className="flex items-center gap-sm">
+        <h1 className="text-heading font-bold">공연</h1>
+        <Badge tone="primary">{shows.length}개</Badge>
+      </div>
+      <ul className="mt-lg divide-y divide-border rounded-card bg-surface-muted px-lg">
         {shows.map((show) => (
-          <li key={show.id}>{show.title}</li>
+          <li key={show.id} className="py-md">
+            {show.title}
+          </li>
         ))}
       </ul>
     </main>
