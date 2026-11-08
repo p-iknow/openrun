@@ -14,6 +14,8 @@ const learnDocuments = [
     title: '007 openapi-fetch 호출과 오류 처리',
     tags: ['openapi', 'nextjs'],
   },
+  { file: '008-토큰-CSS를-읽는-파서.html', title: '008 토큰 CSS를 읽는 파서', tags: ['design-system', 'testing'] },
+  { file: '009-storybook-설정과-스토리-문법.html', title: '009 Storybook 설정과 스토리 문법', tags: ['design-system'] },
 ];
 
 const currentFile = decodeURIComponent(location.pathname).split('/').pop();

@@ -1,0 +1,26 @@
+@import 'tailwindcss';
+@import '../src/tokens.css';
+
+/* 스토리와 컴포넌트가 쓰는 클래스를 소스에서 찾는다. */
+@source '../src';
+
+/*
+ * 스토어가 next/font/local로 불러오는 것과 같은 Pretendard 파일이다.
+ * 토큰의 `--font-sans`가 읽는 `--font-pretendard`에 연결한다.
+ */
+@font-face {
+  font-family: 'Pretendard Variable';
+  src: url('../node_modules/pretendard/dist/web/variable/woff2/PretendardVariable.woff2')
+    format('woff2');
+  font-weight: 45 920;
+  font-display: swap;
+}
+
+:root {
+  --font-pretendard: 'Pretendard Variable';
+}
+
+body {
+  font-family: var(--font-sans);
+  color: var(--color-text);
+}

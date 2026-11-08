@@ -54,7 +54,19 @@ pnpm build                  # API와 DB 없이 통과한다.
 - 토큰은 `@openrun/store-ui/tokens.css`에 있다. 스토어는 `apps/store/app/globals.css`에서 Tailwind 뒤에 불러오고, `@source`로 `dist`를 읽어 컴포넌트가 쓰는 클래스를 만든다.
 - Tailwind에는 의미 토큰만 노출한다. 색은 `bg-primary`, `text-text-secondary`처럼, 간격·글자 크기·모서리·최대 폭은 `p-lg`, `text-body`, `rounded-card`, `max-w-content`처럼 쓴다. `bg-blue-500`, `p-4`, `text-sm`, `max-w-7xl` 같은 기본 클래스는 만들어지지 않는다.
 - 컴포넌트는 `@openrun/store-ui`에서 import한다. 서버용 컴포넌트는 Server Component에서 바로 쓸 수 있다.
+- 클래스는 `@openrun/store-ui`의 `cn`으로 합친다. 조건부 클래스를 이어 붙이고(clsx), 같은 속성의 클래스는 뒤에 온 것만 남긴다(tailwind-merge). 의미 토큰 이름을 알도록 설정했으므로, `tokens.css`에 글자 크기·간격·모서리·그림자·최대 폭 토큰을 추가하면 `packages/store-ui/src/cn.ts`에도 추가한다. 글자 크기, 간격, 모서리는 빠뜨리면 `cn.spec.ts`가 실패한다.
 
 | 컴포넌트 | 구분 |
 | -------- | ---- |
 | Badge    | 서버 |
+| Skeleton | 서버 |
+
+### Storybook
+
+```sh
+pnpm storybook              # http://localhost:6006
+```
+
+앱과 API 없이 토큰(`Foundations/Tokens`)과 컴포넌트를 본다. 토큰 화면은 `tokens.css`를 직접 읽어 그리므로 토큰을 고치면 함께 바뀐다. 글꼴은 스토어와 같은 `pretendard` 패키지의 파일을 `@font-face`로 불러온다. 스토리마다 아래 Accessibility 탭에서 접근성 위반을 확인한다. 빌드는 접근성 위반으로 실패하지 않는다.
+
+스토리는 소스 옆에 `*.stories.tsx`로 두며 `dist`에는 들어가지 않는다. Storybook 빌드는 `store-ui`의 `build`와 별도인 `build-storybook` 작업이다. 루트 `pnpm build`가 두 작업을 함께 돌리므로 스토리가 깨지면 `pnpm build`가 실패한다. `dev`, `typecheck` 등은 `build`(tsc)만 기다리고 Storybook 빌드는 기다리지 않는다.

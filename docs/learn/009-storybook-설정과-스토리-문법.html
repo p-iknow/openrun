@@ -1,0 +1,1061 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Storybook 설정과 스토리 문법</title>
+    <link rel="stylesheet" href="learn.css" />
+    <script src="vendor/highlightjs/highlight.min.js" defer></script>
+    <script src="learn.js" defer></script>
+  </head>
+  <body>
+    <div class="layout">
+      <nav aria-label="목차">
+        <strong>목차</strong>
+        <ol>
+          <li><a href="#overview">한눈에 보기</a></li>
+          <li><a href="#files">파일 구조</a></li>
+        </ol>
+        <strong>Storybook 설정</strong>
+        <ol>
+          <li><a href="#main">main.ts: 본체 설정</a></li>
+          <li><a href="#addons">애드온 두 개</a></li>
+          <li><a href="#preview">preview.ts: 공통 적용</a></li>
+          <li><a href="#css">storybook.css: 스타일 연결</a></li>
+        </ol>
+        <strong>badge.stories.tsx 따라가기</strong>
+        <ol>
+          <li><a href="#csf">CSF의 두 규칙</a></li>
+          <li><a href="#import-type">import type과 .js 확장자</a></li>
+          <li><a href="#record">tones: 톤 목록 만들기</a></li>
+          <li><a href="#meta">meta: 파일 정보</a></li>
+          <li><a href="#arg-types">argTypes: Controls 정하기</a></li>
+          <li><a href="#story">스토리와 args 합치기</a></li>
+          <li><a href="#satisfies">satisfies Meta와 StoryObj</a></li>
+          <li><a href="#render">render: 직접 그리기</a></li>
+        </ol>
+        <strong>Skeleton과 토큰 화면</strong>
+        <ol>
+          <li><a href="#jsdoc">JSDoc 주석: 스토리 설명</a></li>
+          <li><a href="#layout">layout: 캔버스 배치</a></li>
+          <li><a href="#single">스토리가 하나뿐인 경우</a></li>
+          <li><a href="#tokens">tokens.css를 읽어 그리기</a></li>
+          <li><a href="#grouping">docs 폴더와 Foundations/Components</a></li>
+        </ol>
+        <strong>마무리</strong>
+        <ol>
+          <li><a href="#build">빌드와의 연결</a></li>
+          <li><a href="#check">스스로 확인하기</a></li>
+          <li><a href="#more">더 읽을거리</a></li>
+        </ol>
+      </nav>
+
+      <main>
+        <h1>Storybook 설정과 스토리 문법</h1>
+        <p class="lead">
+          <code>packages/store-ui</code>의 Storybook이 어떤 설정 파일로 돌아가는지 보고,
+          <code>badge.stories.tsx</code>를 위에서 아래로 읽으며 <code>meta</code>, <code>argTypes</code>,
+          <code>args</code>, <code>render</code>와 <code>satisfies</code> 같은 TypeScript 문법을 정리한다. 이어서
+          Skeleton과 토큰 화면에만 있는 문법, 루트 빌드와의 연결을 본다.
+        </p>
+
+        <section id="overview">
+          <h2>한눈에 보기</h2>
+          <div class="callout">
+            <p>
+              <code>.storybook/</code> 폴더는 <strong>Storybook 앱 자체</strong>를 설정하고,
+              <code>*.stories.tsx</code>는 <strong>화면에 보여 줄 예시</strong>를 적는다. 스토리 파일은
+              <code>export default</code>로 파일 정보(meta)를, 이름 있는 <code>export</code>로 스토리 하나하나를
+              내보낸다.
+            </p>
+          </div>
+          <div class="flow">
+            <div class="lane blue">
+              <div class="lane-title">Storybook 서버 (Node)</div>
+              <ol class="chain">
+                <li><span>pnpm storybook</span></li>
+                <li><span>main.ts 읽기</span></li>
+                <li><span>*.stories.tsx 수집</span></li>
+                <li><span>Vite + Tailwind로 번들</span></li>
+              </ol>
+            </div>
+            <div class="lane green">
+              <div class="lane-title">스토리 화면 (브라우저)</div>
+              <ol class="chain">
+                <li><span>preview.ts 실행</span></li>
+                <li><span>storybook.css 적용</span></li>
+                <li><span>meta + 스토리 args 합치기</span></li>
+                <li><span>컴포넌트 그리기</span></li>
+              </ol>
+            </div>
+          </div>
+        </section>
+
+        <section id="files">
+          <h2>파일 구조</h2>
+          <ul class="tree" style="--tree-col: 15rem">
+            <li>
+              <div class="tree-row"><span class="tree-node">packages/store-ui</span></div>
+              <ul>
+                <li>
+                  <div class="tree-row">
+                    <span class="tree-node">.storybook/</span>
+                    <span class="tree-note"><span class="badge blue">설정</span> Storybook 앱 자체</span>
+                  </div>
+                  <ul>
+                    <li>
+                      <div class="tree-row">
+                        <span class="tree-node">main.ts</span>
+                        <span class="tree-note">어떤 파일을 스토리로 읽나, 어떤 애드온을 쓰나</span>
+                      </div>
+                    </li>
+                    <li>
+                      <div class="tree-row">
+                        <span class="tree-node">preview.ts</span>
+                        <span class="tree-note">모든 스토리를 그리기 전에 공통으로 적용할 것</span>
+                      </div>
+                    </li>
+                    <li>
+                      <div class="tree-row">
+                        <span class="tree-node">storybook.css</span>
+                        <span class="tree-note">Tailwind, 토큰, Pretendard 폰트</span>
+                      </div>
+                    </li>
+                  </ul>
+                </li>
+                <li>
+                  <div class="tree-row">
+                    <span class="tree-node">src/</span>
+                    <span class="tree-note"><span class="badge green">스토리</span> 소스 옆에 둔다</span>
+                  </div>
+                  <ul>
+                    <li>
+                      <div class="tree-row">
+                        <span class="tree-node">badge.stories.tsx</span>
+                        <span class="tree-note">Badge 컴포넌트 스토리</span>
+                      </div>
+                    </li>
+                    <li>
+                      <div class="tree-row">
+                        <span class="tree-node">skeleton.stories.tsx</span>
+                        <span class="tree-note">Skeleton 컴포넌트 스토리</span>
+                      </div>
+                    </li>
+                    <li>
+                      <div class="tree-row">
+                        <span class="tree-node">docs/</span>
+                        <span class="tree-note">
+                          문서 전용 코드. <code>dist</code>에 들어가지 않는다(<a href="#grouping">아래</a>)
+                        </span>
+                      </div>
+                      <ul>
+                        <li>
+                          <div class="tree-row">
+                            <span class="tree-node">tokens.stories.tsx</span>
+                            <span class="tree-note">컴포넌트가 아닌 토큰 문서 화면</span>
+                          </div>
+                        </li>
+                        <li>
+                          <div class="tree-row">
+                            <span class="tree-node">read-tokens.ts</span>
+                            <span class="tree-note">
+                              <code>tokens.css</code>를 읽는 파서(<a href="008-토큰-CSS를-읽는-파서.html">008 문서</a>)
+                            </span>
+                          </div>
+                        </li>
+                      </ul>
+                    </li>
+                  </ul>
+                </li>
+              </ul>
+            </li>
+          </ul>
+        </section>
+
+        <section id="main">
+          <h2>main.ts: 본체 설정</h2>
+          <pre><code class="language-ts">// packages/store-ui/.storybook/main.ts
+import type { StorybookConfig } from '@storybook/react-vite';
+import tailwindcss from '@tailwindcss/vite';
+
+const config: StorybookConfig = {
+  framework: '@storybook/react-vite',
+  stories: ['../src/**/*.stories.tsx'],
+  addons: ['@storybook/addon-docs', '@storybook/addon-a11y'],
+  core: {
+    disableTelemetry: true,
+  },
+  viteFinal(viteConfig) {
+    viteConfig.plugins = [...(viteConfig.plugins ?? []), tailwindcss()];
+    return viteConfig;
+  },
+};
+
+export default config;</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>항목</th>
+                  <th>뜻</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>framework</code></td>
+                  <td>
+                    "React 컴포넌트를 Vite로 번들해서 보여 줘"라는 뜻이다. Storybook은 React, Vue, Svelte 등을 모두
+                    지원하므로 무엇을 쓰는지 알려 줘야 한다. Next.js 앱이 아니라 순수 React 라이브러리라
+                    <code>react-vite</code>를 골랐다.
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>stories</code></td>
+                  <td>
+                    스토리 파일을 찾을 glob 패턴이다. <strong>경로는 <code>.storybook/</code> 폴더 기준</strong>이라
+                    <code>../src</code>로 시작한다. <code>**</code>는 모든 하위 폴더라서
+                    <code>src/docs/tokens.stories.tsx</code>도 잡힌다.
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>addons</code></td>
+                  <td>기능 확장. <a href="#addons">다음 절</a>에서 본다.</td>
+                </tr>
+                <tr>
+                  <td><code>core.disableTelemetry</code></td>
+                  <td>Storybook은 기본으로 익명 사용 통계를 보낸다. 이 설정으로 끈다.</td>
+                </tr>
+                <tr>
+                  <td><code>viteFinal</code></td>
+                  <td>
+                    Storybook이 내부에서 만든 Vite 설정을 <strong>마지막에 한 번 손볼 기회</strong>다. 여기서
+                    Tailwind v4의 Vite 플러그인을 끼워 넣어, CSS의 <code>@import 'tailwindcss'</code>가 실제
+                    유틸리티 클래스로 바뀌게 한다.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p><code>viteFinal</code> 안의 한 줄을 풀면 이렇다.</p>
+          <ol class="steps blue">
+            <li>
+              <strong><code>viteConfig.plugins ?? []</code></strong>
+              기존 플러그인 목록이 없으면(<code>undefined</code>) 빈 배열로 대신한다. <code>??</code>는 왼쪽이
+              <code>null</code>이나 <code>undefined</code>일 때만 오른쪽을 쓴다.
+            </li>
+            <li>
+              <strong><code>[...기존, tailwindcss()]</code></strong>
+              기존 플러그인을 펼쳐 놓고 맨 뒤에 Tailwind를 붙인 <strong>새 배열</strong>을 만든다. 기존
+              플러그인을 덮어쓰지 않는 것이 핵심이다.
+            </li>
+          </ol>
+        </section>
+
+        <section id="addons">
+          <h2>애드온 두 개</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>애드온</th>
+                  <th>하는 일</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>@storybook/addon-docs</code></td>
+                  <td>
+                    스토리에서 <strong>Docs 페이지</strong>를 만든다. 컴포넌트 설명, props 표, 모든 스토리
+                    미리보기가 한 페이지에 모인다.
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>@storybook/addon-a11y</code></td>
+                  <td>
+                    스토리마다 <strong>Accessibility 탭</strong>을 붙인다. 안에서 axe-core 검사기를 돌려 색 대비
+                    부족, 라벨 없는 버튼 같은 접근성 위반을 보여 준다. 위반이 있어도 빌드는 실패하지 않는다.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            Storybook 9부터 Docs는 core에서 분리돼 따로 설치한다. 반대로 Controls, Actions, Viewport처럼 예전
+            "essentials" 묶음에 있던 기능은 core에 들어가서 <code>addons</code>에 적지 않는다.
+          </p>
+        </section>
+
+        <section id="preview">
+          <h2>preview.ts: 공통 적용</h2>
+          <pre><code class="language-ts">// packages/store-ui/.storybook/preview.ts
+import type { Preview } from '@storybook/react-vite';
+import './storybook.css';
+
+const preview: Preview = {};
+
+export default preview;</code></pre>
+          <p>
+            <code>main.ts</code>가 <strong>Storybook 서버(Node)</strong> 쪽 설정이라면,
+            <code>preview.ts</code>는 <strong>스토리가 그려지는 브라우저(iframe)</strong> 쪽 설정이다. 핵심은
+            <code>import './storybook.css'</code> 한 줄이다. 이 줄 덕분에 모든 스토리에 Tailwind, 토큰, 폰트가
+            적용된다.
+          </p>
+          <p>
+            <code>preview</code> 객체는 지금 비어 있다. 나중에 모든 스토리 공통 <code>parameters</code>나
+            <code>decorators</code>(스토리를 감싸는 래퍼, 예: 테마 Provider)를 여기에 넣는다.
+          </p>
+        </section>
+
+        <section id="css">
+          <h2>storybook.css: 스타일 연결</h2>
+          <pre><code class="language-css">/* packages/store-ui/.storybook/storybook.css */
+@import 'tailwindcss';
+@import '../src/tokens.css';
+
+/* 스토리와 컴포넌트가 쓰는 클래스를 소스에서 찾는다. */
+@source '../src';</code></pre>
+          <ul>
+            <li>
+              <code>@import 'tailwindcss'</code>: Tailwind v4를 불러온다. v4는 <code>tailwind.config.js</code> 대신
+              CSS 안에서 설정한다.
+            </li>
+            <li>
+              <code>@import '../src/tokens.css'</code>: 디자인 토큰(<code>@theme</code> 블록)을 불러온다. 이 덕분에
+              <code>bg-primary</code>, <code>gap-sm</code>, <code>rounded-card</code> 같은 의미 토큰 클래스가
+              생긴다.
+            </li>
+            <li>
+              <code>@source '../src'</code>: Tailwind에게 이 폴더 파일을 훑어 <strong>실제로 쓰인 클래스만</strong>
+              CSS로 만들라고 알린다. 경로는 이 CSS 파일 기준이다.
+            </li>
+          </ul>
+          <pre><code class="language-css">@font-face {
+  font-family: 'Pretendard Variable';
+  src: url('../node_modules/pretendard/dist/web/variable/woff2/PretendardVariable.woff2')
+    format('woff2');
+  font-weight: 45 920;
+  font-display: swap;
+}
+
+:root {
+  --font-pretendard: 'Pretendard Variable';
+}
+
+body {
+  font-family: var(--font-sans);
+  color: var(--color-text);
+}</code></pre>
+          <ul>
+            <li>
+              스토어 앱은 <code>next/font/local</code>로 폰트를 불러오지만 Storybook에는 Next.js가 없다. 그래서
+              <strong>같은 폰트 파일을 표준 CSS <code>@font-face</code>로</strong> 직접 불러온다.
+            </li>
+            <li>
+              <code>font-weight: 45 920</code>: 가변(Variable) 폰트라 굵기 범위를 적는다. 범위 안의 어떤 굵기든 쓸
+              수 있다.
+            </li>
+            <li><code>font-display: swap</code>: 로딩 중에는 기본 폰트로 먼저 보여 주고, 로드되면 바꾼다.</li>
+            <li>
+              토큰의 <code>--font-sans</code>는 <code>--font-pretendard</code>를 읽는다. 스토어에서는
+              <code>next/font</code>가 이 변수를 만들고 Storybook에서는 <code>:root</code>가 만든다. 그래서
+              <strong>토큰 파일을 고치지 않고 양쪽에서 같은 폰트</strong>가 나온다.
+            </li>
+            <li><code>url('../node_modules/...')</code>는 Vite가 빌드할 때 파일을 찾아 결과물에 복사한다.</li>
+          </ul>
+        </section>
+
+        <section id="csf">
+          <h2>CSF의 두 규칙</h2>
+          <p>
+            스토리 파일은 <strong>CSF(Component Story Format)</strong>라는 규칙을 따른다. 규칙은 두 가지뿐이다.
+          </p>
+          <ol class="steps green">
+            <li>
+              <strong><code>export default</code> → meta</strong>
+              이 파일 전체에 대한 정보다. 사이드바 위치, 다루는 컴포넌트, 기본 props를 적는다.
+            </li>
+            <li>
+              <strong>이름 있는 <code>export</code> → 스토리 하나</strong>
+              export 하나가 사이드바 항목 하나가 된다. export 이름이 곧 스토리 이름이다.
+            </li>
+          </ol>
+          <p>
+            아래에서는 <code>badge.stories.tsx</code>를 <strong>파일 위에서 아래 순서로</strong> 읽는다. import →
+            톤 목록 → meta → 스토리 순이다.
+          </p>
+        </section>
+
+        <section id="import-type">
+          <h2>import type과 .js 확장자</h2>
+          <pre><code class="language-tsx">import type { Meta, StoryObj } from '@storybook/react-vite';
+import { Badge, type BadgeTone } from './badge.js';</code></pre>
+          <ul>
+            <li>
+              타입만 가져올 때는 <code>type</code>을 붙인다. tsconfig의 <code>verbatimModuleSyntax: true</code> 때문에
+              필수다. 컴파일된 JS에서 지워질 import임을 분명히 한다. <code>Meta</code>, <code>StoryObj</code>는
+              타입이라 줄 전체에, <code>BadgeTone</code>은 값인 <code>Badge</code>와 같은 줄이라 이름 앞에 붙였다.
+            </li>
+            <li>
+              <code>.tsx</code> 파일을 <code>./badge.js</code>로 import하는 것은 <code>moduleResolution: "nodenext"</code>
+              규칙이다. 빌드 후 실제 파일 이름에 맞춰 적는다.
+            </li>
+          </ul>
+        </section>
+
+        <section id="record">
+          <h2>tones: 톤 목록 만들기</h2>
+          <pre><code class="language-tsx">// Record로 적어 Badge에 톤이 추가되면 여기서 타입 오류가 난다.
+const toneSet = {
+  neutral: true,
+  primary: true,
+  success: true,
+  warning: true,
+  danger: true,
+} satisfies Record&lt;BadgeTone, true&gt;;
+const tones = Object.keys(toneSet) as BadgeTone[];</code></pre>
+          <p>
+            <code>tones</code>는 톤 5개 배열이다. 뒤에서 Controls 선택지(<code>argTypes</code>)와
+            <code>AllTones</code> 스토리가 함께 쓴다.
+          </p>
+          <ul>
+            <li>
+              <code>Record&lt;K, V&gt;</code>는 "키는 K 전부, 값은 V"인 객체 타입이다.
+              <code>Record&lt;BadgeTone, true&gt;</code>는 <strong>모든 톤이 키로 있어야</strong> 한다.
+            </li>
+            <li>
+              <code>satisfies</code>는 "이 타입에 맞는지 <strong>검사만</strong> 한다"는 뜻이다. meta에서 한 번 더
+              나오고, <a href="#satisfies">satisfies 절</a>에서 자세히 본다.
+            </li>
+            <li>
+              Badge에 <code>info</code> 톤을 추가하면 여기서 "info가 없다"는 오류가 난다. 배열
+              <code>['neutral', ...]</code>로 적으면 빠뜨려도 오류가 나지 않는다.
+            </li>
+            <li>
+              <code>Object.keys()</code>는 TypeScript에서 항상 <code>string[]</code>을 돌려줘서
+              <code>as BadgeTone[]</code>로 좁힌다. 바로 위에서 키를 검사했으니 안전한 단언이다.
+            </li>
+          </ul>
+        </section>
+
+        <section id="meta">
+          <h2>meta: 파일 정보</h2>
+          <pre><code class="language-tsx">const meta = {
+  title: 'Components/Badge',
+  component: Badge,
+  tags: ['autodocs'],
+  parameters: {
+    docs: {
+      description: { component: '**서버용** 컴포넌트다. ...' },
+    },
+  },
+  argTypes: {
+    tone: { control: 'inline-radio', options: tones },
+  },
+  args: {
+    children: '배지',
+  },
+} satisfies Meta&lt;typeof Badge&gt;;
+
+export default meta;</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>항목</th>
+                  <th>뜻</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>title</code></td>
+                  <td>
+                    사이드바 위치. <code>/</code>가 폴더 구분이라 <code>Components</code> 폴더 안의
+                    <code>Badge</code>가 된다. 토큰 화면은 <code>Foundations/Tokens</code>라 다른 폴더로 간다.
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>component</code></td>
+                  <td>
+                    이 스토리들이 다루는 컴포넌트. Storybook이 <strong>TypeScript props 타입을 분석해</strong> Docs
+                    페이지의 props 표와 Controls를 만든다. <code>SkeletonProps</code>의 <code>/** */</code> 주석도
+                    props 설명으로 나온다.
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>tags: ['autodocs']</code></td>
+                  <td>
+                    <strong>Docs 페이지를 자동 생성</strong>한다. 사이드바에 <code>Docs</code> 항목이 생기고 모든
+                    스토리가 한 페이지에 모인다. 토큰 화면에는 이 태그가 없어 <code>Docs</code> 항목 없이 스토리만
+                    보인다.
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>parameters</code></td>
+                  <td>
+                    스토리의 <strong>표시 방식</strong> 설정. <code>docs.description.component</code>는 Docs 페이지
+                    맨 위의 설명이고 마크다운이라 <code>**굵게**</code>, <code>`코드`</code>가 먹힌다.
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>argTypes</code></td>
+                  <td>
+                    prop을 <strong>Controls 패널에서 어떻게 조작할지</strong> 정한다. <a href="#arg-types">다음 절</a>에서
+                    자세히 본다.
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>args</code></td>
+                  <td>
+                    컴포넌트에 넘길 <strong>props 기본값</strong>. 이 파일의 모든 스토리에
+                    <code>children: '배지'</code>가 들어간다.
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>satisfies Meta&lt;...&gt;</code></td>
+                  <td>meta 형식이 맞는지 검사한다. 왜 <code>: Meta</code>가 아닌지는 <a href="#satisfies">뒤에서</a> 본다.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="arg-types">
+          <h2>argTypes: Controls 정하기</h2>
+          <pre><code class="language-tsx">argTypes: {
+  tone: { control: 'inline-radio', options: tones },
+},</code></pre>
+
+          <h3>args와 argTypes의 차이</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th><code>args</code></th>
+                  <th><code>argTypes</code></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>무엇</td>
+                  <td>prop에 넣을 <strong>값</strong></td>
+                  <td>그 prop을 <strong>어떻게 보여 주고 조작할지</strong></td>
+                </tr>
+                <tr>
+                  <td>예</td>
+                  <td><code>children: '배지'</code></td>
+                  <td><code>tone</code>은 라디오 버튼, 선택지는 5개</td>
+                </tr>
+                <tr>
+                  <td>비유</td>
+                  <td>입력칸에 든 내용</td>
+                  <td>입력칸의 종류(텍스트칸, 라디오, 드롭다운)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p><code>argTypes</code>는 값을 정하지 않는다. Controls 패널 UI만 정한다.</p>
+
+          <h3>한 줄씩 보기</h3>
+          <ul>
+            <li><code>tone:</code> Badge의 <code>tone</code> prop에 대한 설정이다.</li>
+            <li>
+              <code>control: 'inline-radio'</code>: 라디오 버튼을 가로 한 줄로 보여 준다. <code>'radio'</code>(세로),
+              <code>'select'</code>(드롭다운), <code>'check'</code>(여러 개 선택), <code>'text'</code>,
+              <code>'boolean'</code>, <code>'number'</code>, <code>'color'</code> 등도 있다. 선택지가 적으면 한눈에
+              보이는 <code>inline-radio</code>, 많으면 <code>select</code>가 낫다.
+            </li>
+            <li><code>options: tones</code>: 선택지다. <a href="#record">앞에서</a> 만든 톤 5개 배열이다.</li>
+          </ul>
+
+          <h3>왜 직접 적나</h3>
+          <p>
+            Storybook은 <code>component</code>의 TypeScript 타입을 분석해 Controls를 자동으로 만든다.
+            <code>tone?: 'neutral' | 'primary'</code>처럼 글자 그대로 적힌 유니언이면 선택지를 알아낸다. 그런데
+            Badge의 톤 타입은 <code>cva</code> 설정에서 계산해 뽑는다.
+          </p>
+          <pre><code class="language-ts">export type BadgeTone = NonNullable&lt;VariantProps&lt;typeof badgeVariants&gt;['tone']&gt;;</code></pre>
+          <p>
+            타입 분석기(react-docgen)는 코드를 실행하거나 이런 타입을 계산하지 않고 글자만 읽는다. 그래서 보통 다섯
+            값을 알아내지 못해, 쓸모없는 텍스트칸이 나오거나 control이 나오지 않는다. <code>argTypes</code>로 "이
+            prop은 이 다섯 중 하나"라고 직접 알려 준다.
+          </p>
+
+          <h3><code>options: tones</code>로 재사용하는 이유</h3>
+          <ol class="steps green">
+            <li><strong>Badge에 <code>info</code> 톤을 추가한다</strong> cva 설정에 한 줄 넣는다.</li>
+            <li>
+              <strong><code>toneSet</code>에서 타입 오류가 난다</strong>
+              <code>satisfies Record&lt;BadgeTone, true&gt;</code>가 <code>info</code>가 없다고 알린다.
+            </li>
+            <li><strong>고치면 <code>tones</code>에 <code>info</code>가 들어간다</strong></li>
+            <li>
+              <strong>Controls와 <code>AllTones</code>에 자동으로 생긴다</strong>
+              선택지를 여기 다시 적지 않았으므로 한 곳만 고치면 된다.
+            </li>
+          </ol>
+        </section>
+
+        <section id="story">
+          <h2>스토리와 args 합치기</h2>
+          <pre><code class="language-tsx">type Story = StoryObj&lt;typeof meta&gt;;
+
+export const Neutral: Story = { args: { tone: 'neutral' } };
+export const Primary: Story = { args: { tone: 'primary' } };</code></pre>
+          <ul>
+            <li>
+              export 이름이 스토리 이름이다. <code>Neutral</code>은 "Neutral", <code>AllTones</code>는 낱말을 띄어
+              "All Tones"로 나온다.
+            </li>
+            <li>
+              <strong>args는 합쳐진다.</strong> meta의 <code>{ children: '배지' }</code>와 스토리의
+              <code>{ tone: 'neutral' }</code>가 합쳐져 <code>&lt;Badge tone="neutral"&gt;배지&lt;/Badge&gt;</code>가
+              된다. 같은 키가 있으면 스토리 쪽이 이긴다.
+            </li>
+            <li>
+              <code>render</code>가 없으면 Storybook이 알아서 <code>&lt;meta.component {...args} /&gt;</code>로
+              그린다.
+            </li>
+            <li>
+              <code>type Story</code>는 <code>StoryObj&lt;typeof meta&gt;</code>를 짧게 부르는 별칭이다. 스토리가
+              6개라 매번 길게 적지 않으려고 만들었다.
+            </li>
+          </ul>
+        </section>
+
+        <section id="satisfies">
+          <h2>satisfies Meta와 StoryObj</h2>
+          <p>
+            <code>children</code>은 Badge의 필수 prop인데, 스토리는 <code>tone</code>만 적었다. 그래도 타입 오류가
+            없는 것은 meta가 <code>children</code>을 줬다는 사실을 TypeScript가 알기 때문이다. 이걸 가능하게 하는 것이
+            <code>satisfies</code>다.
+          </p>
+          <pre><code class="language-tsx">const meta = { ... } satisfies Meta&lt;typeof Badge&gt;;
+type Story = StoryObj&lt;typeof meta&gt;;</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>쓰는 법</th>
+                  <th>meta의 타입</th>
+                  <th>스토리의 props 검사</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>const meta: Meta&lt;typeof Badge&gt; = {...}</code></td>
+                  <td>넓은 <code>Meta&lt;...&gt;</code>로 <strong>덮어써진다</strong>. 어떤 args를 줬는지 잊는다.</td>
+                  <td>
+                    <span class="badge blue">허술</span> 모든 prop을 선택으로 본다. meta와 스토리 어디에도
+                    <code>children</code>이 없어도 오류가 나지 않는다.
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>const meta = {...} satisfies Meta&lt;typeof Badge&gt;</code></td>
+                  <td>형식만 검사하고 <strong>적은 내용을 기억한다</strong></td>
+                  <td>
+                    <span class="badge green">선택</span> meta에서 준 <code>children</code>만 선택이 되고, 나머지
+                    필수 prop은 계속 필수다. 빠뜨리면 오류가 난다.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout">
+            <p>
+              meta의 <code>args</code>에서 <code>children</code>을 지우면 <code>satisfies</code>에서는
+              <code>Neutral</code> 등에서 "children이 없다"는 오류가 난다. <code>: Meta</code>였다면 오류 없이 글자 없는
+              빈 배지를 그린다. <code>satisfies</code>는 <strong>필수 prop을 빠뜨린 실수를 잡아 준다.</strong>
+              Storybook 공식 문서도 이 패턴을 권한다.
+            </p>
+          </div>
+          <ul>
+            <li><code>typeof Badge</code>: <code>Badge</code> 값(함수)에서 타입을 뽑는다. Storybook이 거기서 props 타입을 읽는다.</li>
+            <li><code>typeof meta</code>: meta 객체의 타입을 뽑는다. meta가 준 args 정보가 여기 담겨 있다.</li>
+          </ul>
+        </section>
+
+        <section id="render">
+          <h2>render: 직접 그리기</h2>
+          <pre><code class="language-tsx">/** 톤 5개를 나란히 본다. 직접 그리므로 Controls는 끈다. 톤 하나를 골라 보려면 톤별 스토리를 쓴다. */
+export const AllTones: Story = {
+  parameters: { controls: { disable: true } },
+  render: () =&gt; (
+    &lt;div className="flex flex-wrap gap-sm"&gt;
+      {tones.map((tone) =&gt; (
+        &lt;Badge key={tone} tone={tone}&gt;
+          {tone}
+        &lt;/Badge&gt;
+      ))}
+    &lt;/div&gt;
+  ),
+};</code></pre>
+          <p>
+            컴포넌트 하나가 아니라 <strong>여러 개를 조합하거나 감싸야 할 때</strong> <code>render</code>를 쓴다.
+          </p>
+          <ul>
+            <li>
+              <code>render</code>는 <code>(args) =&gt; ...</code>로 args를 받을 수 있는데, 여기서는 받지 않아
+              <code>()</code>다. 그래서 Controls를 바꿔도 화면이 바뀌지 않는다.
+            </li>
+            <li>
+              바꿔도 소용없는 패널은 헷갈리므로 <code>parameters: { controls: { disable: true } }</code>로 이
+              스토리만 Controls를 끈다. 스토리의 <code>parameters</code>는 meta의 <code>parameters</code> 위에
+              덮인다.
+            </li>
+          </ul>
+          <p>
+            <code>skeleton.stories.tsx</code>의 <code>PosterCard</code>도 같은 방식이다. Skeleton 세 개를
+            <code>aria-busy="true"</code> 영역으로 감싸 "실제로는 이렇게 조합해 쓴다"를 보여 주고, Controls를 끈다.
+          </p>
+        </section>
+
+        <section id="jsdoc">
+          <h2>JSDoc 주석: 스토리 설명</h2>
+          <pre><code class="language-tsx">// packages/store-ui/src/skeleton.stories.tsx
+/** 포스터가 로드되기 전 같은 크기를 차지하는 3:4 자리 표시자. */
+export const Poster: Story = {
+  args: { className: 'aspect-[3/4] w-[180px]' },
+};</code></pre>
+          <p>
+            스토리 export 바로 위의 <code>/** */</code> 주석은 Docs 페이지에서 <strong>그 스토리의 설명</strong>으로
+            나온다. 일반 <code>//</code> 주석은 나오지 않는다. 그래서 독자에게 보일 설명은 <code>/** */</code>로,
+            코드 읽는 사람만 볼 메모는 <code>//</code>로 적는다. <code>PosterCard</code>의 "Controls는 끈다" 메모가
+            <code>//</code>인 이유다.
+          </p>
+        </section>
+
+        <section id="layout">
+          <h2>layout: 캔버스 배치</h2>
+          <pre><code class="language-tsx">// packages/store-ui/src/docs/tokens.stories.tsx
+parameters: {
+  layout: 'fullscreen',
+  // ...
+},</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>값</th>
+                  <th>모양</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>'padded'</code> <span class="badge blue">기본</span></td>
+                  <td>가장자리에 여백을 둔다. Badge, Skeleton 스토리가 이 모양이다.</td>
+                </tr>
+                <tr>
+                  <td><code>'centered'</code></td>
+                  <td>가운데 정렬한다.</td>
+                </tr>
+                <tr>
+                  <td><code>'fullscreen'</code> <span class="badge green">토큰 화면</span></td>
+                  <td>여백 없이 꽉 채운다. 페이지 전체를 쓰는 문서 화면에 맞는다.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="single">
+          <h2>스토리가 하나뿐인 경우</h2>
+          <pre><code class="language-tsx">export const Tokens: StoryObj&lt;typeof meta&gt; = {};</code></pre>
+          <div class="callout">
+            <p>
+              이 한 줄은 "사이드바에 <code>Tokens</code> 항목을 하나 만들고, 추가 설정 없이
+              <code>&lt;TokensPage /&gt;</code>를 그려라"라는 뜻이다.
+            </p>
+          </div>
+
+          <h3>왜 이 줄이 있어야 하나</h3>
+          <p>
+            <code>export default meta</code>만으로는 화면에 아무것도 나오지 않는다. meta는 "이 파일이 무엇에 관한
+            것인지"를 적은 정보일 뿐이다. 사이드바에 클릭할 항목이 생기려면 <strong>이름 있는 export가 하나
+            이상</strong> 있어야 한다. 보여 줄 화면이 하나뿐이어도 export는 하나 필요하다.
+          </p>
+
+          <h3>빈 객체 <code>{}</code>의 뜻</h3>
+          <p>
+            스토리 객체에는 <code>args</code>, <code>render</code>, <code>parameters</code>를 넣을 수 있다.
+            <code>{}</code>는 <strong>"따로 바꿀 설정이 없으니 기본대로 그려라"</strong>라는 뜻이다. 기본 동작은
+            <code>&lt;meta.component {...args} /&gt;</code>다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>스토리</th>
+                  <th>component</th>
+                  <th>합쳐진 args</th>
+                  <th>그려지는 것</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Badge의 <code>Neutral</code></td>
+                  <td><code>Badge</code></td>
+                  <td><code>{ children: '배지', tone: 'neutral' }</code></td>
+                  <td><code>&lt;Badge tone="neutral"&gt;배지&lt;/Badge&gt;</code></td>
+                </tr>
+                <tr>
+                  <td>토큰의 <code>Tokens</code></td>
+                  <td><code>TokensPage</code></td>
+                  <td><code>{}</code></td>
+                  <td><code>&lt;TokensPage /&gt;</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            <code>TokensPage</code>는 props를 받지 않고 혼자 <code>tokens.css</code>를 읽어 그린다. 넘길 args가
+            없으니 빈 객체면 충분하다. <code>TokensPage</code>는 라이브러리 컴포넌트가 아니라 이 파일 안의 문서
+            화면이지만, <code>component</code>에 넣으면 평소처럼 그려진다. 스토리가 꼭 실제 컴포넌트일 필요는 없다.
+          </p>
+
+          <h3>왜 <code>type Story</code> 별칭을 안 만들었나</h3>
+          <p>
+            Badge는 스토리가 6개라 <code>type Story</code> 별칭을 만들었다(<a href="#story">앞 절</a>). 토큰 화면은
+            1개라 별칭을 만들면 오히려 한 줄이 는다. 그래서 바로 적었고, 동작은 같다.
+          </p>
+          <pre><code class="language-tsx">// 지금 코드
+export const Tokens: StoryObj&lt;typeof meta&gt; = {};
+
+// 이렇게 써도 완전히 같다
+type Story = StoryObj&lt;typeof meta&gt;;
+export const Tokens: Story = {};</code></pre>
+          <p>
+            타입을 붙이는 이유는 오타 방지다. <code>{ arg: {...} }</code>처럼 잘못 적거나 <code>TokensPage</code>에
+            없는 prop을 넣으면 TypeScript가 바로 알려 준다.
+          </p>
+        </section>
+
+        <section id="tokens">
+          <h2>tokens.css를 읽어 그리기</h2>
+          <pre><code class="language-tsx">import tokensCss from '../tokens.css?raw';
+const tokens = readTokens(tokensCss);</code></pre>
+          <ul>
+            <li>
+              <code>?raw</code>는 파일 내용을 문자열 그대로 가져오는 Vite 기능이다. 그 문자열을
+              <code>readTokens()</code>로 파싱한다. 자세한 원리는
+              <a href="008-토큰-CSS를-읽는-파서.html#raw">008 문서</a>에 있다.
+            </li>
+            <li>
+              예시는 <code>var(--spacing-md)</code> 대신 읽은 값을 <code>style={{ width: s.value }}</code>처럼 인라인
+              스타일로 넣는다. Tailwind v4는 클래스로 쓰인 테마 변수만 CSS에 내보내서, 아무 데서도 쓰지 않은 토큰은
+              변수가 없기 때문이다(<a href="008-토큰-CSS를-읽는-파서.html#ours">008 문서</a>).
+            </li>
+          </ul>
+        </section>
+
+        <section id="grouping">
+          <h2>docs 폴더와 Foundations/Components</h2>
+          <p>이슈(#21) 스펙은 이 이름들을 정하지 않았다. 아래는 이 브랜치에서 고른 관례다.</p>
+
+          <h3><code>src/docs</code>: dist에 안 들어가는 문서용 코드</h3>
+          <p>
+            <code>src/docs/</code>에는 <code>tokens.stories.tsx</code>와 <code>read-tokens.ts</code>가 있다. 둘 다
+            Storybook 토큰 화면에서만 쓰고 스토어 앱은 쓰지 않는다. 이 구분은 <code>tsconfig.build.json</code>에서
+            쓰인다.
+          </p>
+          <pre><code class="language-json">"exclude": ["src/**/*.stories.tsx", "src/**/*.spec.ts", "src/docs"]</code></pre>
+          <ol class="steps blue">
+            <li>
+              <strong>스토리 파일은 이름으로 빠진다</strong>
+              <code>*.stories.tsx</code> 패턴에 걸린다.
+            </li>
+            <li>
+              <strong><code>read-tokens.ts</code>는 이름으로 못 뺀다</strong>
+              평범한 이름이라 그대로 두면 <code>dist</code>에 들어가, 스토어가 쓸 수 있는 코드처럼 보인다.
+            </li>
+            <li>
+              <strong>폴더째 뺀다</strong>
+              그래서 "<code>src/docs</code> 안 = 문서 전용, <code>dist</code>에 안 들어감"이라는 규칙이 된다.
+            </li>
+          </ol>
+          <div class="callout warn">
+            <p>
+              <code>src/docs</code>는 <strong>사이드바 위치와 상관없다.</strong> 사이드바 위치는 meta의
+              <code>title</code>이 정하고, <code>title</code>을 생략할 때만 Storybook이 파일 경로로 이름을 붙인다.
+              <code>tags: ['autodocs']</code>로 생기는 <strong>Docs 페이지와도 관계없다.</strong> Docs 페이지는 애드온
+              기능이고 <code>src/docs</code>는 우리가 정한 폴더 이름일 뿐이다.
+            </p>
+          </div>
+
+          <h3>Foundations와 Components</h3>
+          <p>디자인 시스템에서 흔히 쓰는 사이드바 분류다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>Foundations</th>
+                  <th>Components</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>무엇</td>
+                  <td>모든 화면이 공유하는 <strong>기본 규칙</strong>: 색, 글자 크기, 간격, 모서리</td>
+                  <td>규칙으로 만든 <strong>재사용 UI 조각</strong>: Badge, Skeleton</td>
+                </tr>
+                <tr>
+                  <td>앱에서 쓰는 법</td>
+                  <td><code>bg-primary</code>, <code>p-lg</code> 같은 클래스</td>
+                  <td><code>import { Badge } from '@openrun/store-ui'</code></td>
+                </tr>
+                <tr>
+                  <td>코드 위치</td>
+                  <td><code>src/tokens.css</code></td>
+                  <td><code>src/badge.tsx</code>, <code>src/skeleton.tsx</code></td>
+                </tr>
+                <tr>
+                  <td>Storybook 화면</td>
+                  <td>값을 보여 주는 문서 한 장. 조작할 props가 없다.</td>
+                  <td>컴포넌트마다 스토리 여러 개, Controls, Docs 페이지</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout">
+            <p>
+              <strong>Foundations는 재료, Components는 그 재료로 만든 결과물</strong>이다. Badge의
+              <code>tone="primary"</code>는 결국 Foundations의 <code>primary</code> 색을 쓴다. 타이포그래피 예시나
+              아이콘 목록처럼 값과 규칙을 보여 주는 문서는 <code>Foundations/</code>에, Button이나 Card 같은
+              컴포넌트는 <code>Components/</code>에 둔다.
+            </p>
+          </div>
+        </section>
+
+        <section id="build">
+          <h2>빌드와의 연결</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>파일</th>
+                  <th>설정</th>
+                  <th>뜻</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td rowspan="2"><code>store-ui/package.json</code></td>
+                  <td><code>storybook dev --port 6006</code></td>
+                  <td>개발 서버. 파일을 고치면 바로 반영된다(HMR).</td>
+                </tr>
+                <tr>
+                  <td><code>storybook build --quiet</code></td>
+                  <td>
+                    정적 사이트로 빌드해 <code>storybook-static/</code>에 내보낸다. 스토리가 깨지지 않았는지 검사하는
+                    데도 쓴다. <code>--quiet</code>는 로그를 줄인다.
+                  </td>
+                </tr>
+                <tr>
+                  <td rowspan="2">루트 <code>package.json</code></td>
+                  <td><code>"storybook": "pnpm --filter @openrun/store-ui storybook"</code></td>
+                  <td>루트에서 <code>pnpm storybook</code>만 쳐도 store-ui 스크립트를 실행한다.</td>
+                </tr>
+                <tr>
+                  <td><code>"build": "turbo run build build-storybook"</code></td>
+                  <td>스토리가 깨지면 <code>pnpm build</code>도 실패한다.</td>
+                </tr>
+                <tr>
+                  <td><code>turbo.json</code></td>
+                  <td><code>build-storybook.outputs</code></td>
+                  <td>
+                    결과물을 캐시해 바뀐 게 없으면 다시 빌드하지 않는다. <code>dependsOn</code>이 없어 tsc
+                    <code>build</code>를 기다리지 않는다. Storybook은 <code>dist</code>가 아니라 <code>src</code>를
+                    직접 읽기 때문이다.
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>tsconfig.json</code></td>
+                  <td><code>include</code>에 <code>.storybook</code>, <code>types: ["vite/client"]</code></td>
+                  <td>스토리와 설정 파일도 타입 검사를 받는다. <code>?raw</code> 타입도 여기서 온다.</td>
+                </tr>
+                <tr>
+                  <td><code>tsconfig.build.json</code></td>
+                  <td>스토리, 테스트, <code>src/docs</code> 제외, <code>types: []</code></td>
+                  <td>스토리 코드가 스토어가 가져다 쓰는 <code>dist</code>에 섞이지 않는다.</td>
+                </tr>
+                <tr>
+                  <td><code>.gitignore</code></td>
+                  <td><code>storybook-static/</code>, <code>debug-storybook.log</code></td>
+                  <td>빌드 결과물과, Storybook이 오류 날 때 남기는 로그를 커밋하지 않는다.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="check">
+          <h2>스스로 확인하기</h2>
+          <details>
+            <summary>1. main.ts의 stories 경로가 'src/**'가 아니라 '../src/**'인 이유는?</summary>
+            <p>
+              경로가 <code>.storybook/</code> 폴더 기준이기 때문이다. <code>.storybook/</code>에서 한 단계 올라가야
+              <code>src</code>가 있다.
+            </p>
+          </details>
+          <details>
+            <summary>2. preview.ts에서 import './storybook.css'를 지우면 스토리 화면은 어떻게 되나?</summary>
+            <p>
+              Tailwind 클래스, 토큰, 폰트가 모두 빠진다. <code>bg-primary</code>, <code>gap-sm</code> 같은 클래스가
+              CSS로 만들어지지 않아 컴포넌트가 스타일 없이 그려진다.
+            </p>
+          </details>
+          <details>
+            <summary>3. meta의 args에서 children을 지우면 어떻게 되나? meta를 : Meta로 적었다면?</summary>
+            <p>
+              지금처럼 <code>satisfies</code>면 <code>Neutral</code> 등 tone만 적은 스토리에서 "children이 없다"는
+              타입 오류가 난다. <code>: Meta</code>로 적었다면 모든 prop을 선택으로 보므로 오류 없이 글자 없는 빈
+              배지가 그려진다.
+            </p>
+          </details>
+          <details>
+            <summary>4. AllTones 스토리에는 왜 Controls 패널이 없나?</summary>
+            <p>
+              <code>render: () =&gt; ...</code>가 args를 받지 않고 <code>tones</code> 배열로 직접 그려서, Controls를
+              바꿔도 화면이 바뀌지 않는다. 그래서 <code>parameters: { controls: { disable: true } }</code>로 껐다.
+              args를 쓰려면 <code>render: (args) =&gt; ...</code>로 받아 넘겨야 한다.
+            </p>
+          </details>
+          <details>
+            <summary>5. tokens.stories.tsx에서 export const Tokens 줄을 지우면?</summary>
+            <p>
+              이름 있는 export가 없어 사이드바에 클릭할 스토리가 생기지 않는다. meta는 파일 정보일 뿐 스스로
+              화면을 만들지 않는다.
+            </p>
+          </details>
+          <details>
+            <summary>6. Badge에 info 톤을 추가하고 스토리를 고치지 않으면 어디서 알 수 있나?</summary>
+            <p>
+              <code>toneSet</code>의 <code>satisfies Record&lt;BadgeTone, true&gt;</code>에서 <code>info</code>가
+              없다는 타입 오류가 난다. <code>pnpm typecheck</code>에서 걸린다. 고치면 Controls 선택지와
+              <code>AllTones</code>에 <code>info</code>가 함께 생긴다.
+            </p>
+          </details>
+        </section>
+
+        <section id="more">
+          <h2>더 읽을거리</h2>
+          <ol>
+            <li><a href="https://storybook.js.org/docs/api/main-config/main-config">Storybook: main.ts 설정</a></li>
+            <li><a href="https://storybook.js.org/docs/api/csf">Storybook: Component Story Format (CSF)</a></li>
+            <li><a href="https://storybook.js.org/docs/writing-stories/args">Storybook: Args</a></li>
+            <li><a href="https://storybook.js.org/docs/api/arg-types">Storybook: ArgTypes</a></li>
+            <li><a href="https://storybook.js.org/docs/writing-docs/autodocs">Storybook: Autodocs</a></li>
+            <li><a href="https://storybook.js.org/docs/writing-tests/accessibility-testing">Storybook: 접근성 검사</a></li>
+            <li>
+              <a href="https://www.typescriptlang.org/docs/handbook/release-notes/typescript-4-9.html#the-satisfies-operator"
+                >TypeScript: satisfies 연산자</a
+              >
+            </li>
+            <li><a href="https://tailwindcss.com/docs/detecting-classes-in-source-files">Tailwind CSS: @source</a></li>
+          </ol>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

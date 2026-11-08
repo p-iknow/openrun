@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "turbo run dev",
-    "build": "turbo run build",
+    "storybook": "pnpm --filter @openrun/store-ui storybook",
+    "build": "turbo run build build-storybook",
     "openapi:generate": "turbo run openapi:generate --filter=@openrun/api",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
