@@ -4,6 +4,8 @@ import tokensCss from '../tokens.css?raw';
 import { cn } from '../cn.js';
 import { readTokens, type PaletteColor } from './read-tokens.js';
 
+// 예시는 CSS 변수(`var(--spacing-md)`) 대신 tokens.css에서 읽은 값을 직접 쓴다.
+// Tailwind는 클래스로 쓰인 테마 변수만 CSS에 내보내므로, 아무 데서도 쓰지 않은 토큰은 변수가 없다.
 const tokens = readTokens(tokensCss);
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -105,7 +107,7 @@ function TokensPage() {
             <tr key={t.name} className="border-b border-border">
               <td className={cn(cellClass, codeClass)}>text-{t.name}</td>
               <td className={cn(cellClass, codeClass)}>{t.value}</td>
-              <td className={cellClass} style={{ fontSize: `var(--text-${t.name})` }}>
+              <td className={cellClass} style={{ fontSize: t.value }}>
                 공연 예매 2026.12.24 55,000원
               </td>
             </tr>
@@ -126,7 +128,7 @@ function TokensPage() {
               <td className={cellClass}>
                 <span
                   className="block h-[16px] bg-primary"
-                  style={{ width: `var(--spacing-${s.name})` }}
+                  style={{ width: s.value }}
                 />
               </td>
             </tr>
@@ -140,7 +142,7 @@ function TokensPage() {
             <li key={r.name} className="flex flex-col items-center gap-sm">
               <span
                 className="block size-[80px] border border-border-strong bg-surface-muted"
-                style={{ borderRadius: `var(--radius-${r.name})` }}
+                style={{ borderRadius: r.value }}
               />
               <span className={codeClass}>rounded-{r.name}</span>
               <span className={cn(codeClass, 'text-text-secondary')}>{r.value}</span>
