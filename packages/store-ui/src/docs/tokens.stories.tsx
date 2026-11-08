@@ -17,6 +17,11 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
+/**
+ * 색 견본 칸. swatch는 천이나 페인트 가게의 색 견본 조각을 뜻하고,
+ * 디자인 도구(Photoshop의 Swatches 패널 등)에서 색 하나를 보여 주는 작은 칸을 부르는 이름이다.
+ * 흰색처럼 바탕과 비슷한 색도 경계가 보이게 테두리를 둔다.
+ */
 function Swatch({ hex, className }: { hex: string; className: string }) {
   return (
     <span
