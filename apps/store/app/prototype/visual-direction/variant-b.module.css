@@ -1,0 +1,670 @@
+/* PROTOTYPE: 방향 B(단정한 잡지형) */
+.root {
+  --radius: 2px;
+  --line: 1px solid var(--color-border);
+  --line-strong: 2px solid var(--color-text);
+  background: var(--color-surface);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* 헤더 */
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--color-surface);
+  border-bottom: var(--line-strong);
+}
+.testNotice {
+  font-size: 11px;
+  text-align: center;
+  padding: 3px;
+  background: var(--color-text);
+  color: #fff;
+  letter-spacing: 0.5px;
+}
+.headerInner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  gap: 32px;
+}
+.logo {
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: 1px;
+}
+.genreNav {
+  display: none;
+  gap: 24px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.search {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1.5px solid var(--color-text);
+  height: 36px;
+  width: 180px;
+}
+.search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  font: inherit;
+  background: transparent;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px 120px;
+}
+
+/* 목록 */
+.pageHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 28px 0 16px;
+  border-bottom: var(--line-strong);
+}
+.pageHead h1 {
+  margin: 0;
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -1px;
+}
+.pageHead p {
+  margin: 0;
+  color: var(--color-text-tertiary);
+}
+.pageHead b {
+  color: var(--color-primary);
+}
+.listLayout {
+  display: block;
+}
+.filterPanel {
+  display: none;
+}
+.filterHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 0 12px;
+  border-bottom: var(--line);
+}
+.filterHead h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+}
+.textButton {
+  border: 0;
+  background: none;
+  font-size: 13px !important;
+  color: var(--color-text-tertiary) !important;
+}
+.filterGroup {
+  padding: 16px 0;
+  border-bottom: var(--line);
+}
+.filterGroup h3 {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--color-text-tertiary);
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chip {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: var(--radius);
+  border: var(--line);
+  background: var(--color-surface);
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+.chipOn {
+  border-color: var(--color-primary);
+  color: var(--color-primary) !important;
+  font-weight: 700;
+}
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: var(--line);
+  margin-bottom: 8px;
+}
+.mobileFilterButton {
+  flex-shrink: 0;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--color-text);
+  background: var(--color-surface);
+  font-size: 13px !important;
+  font-weight: 700;
+}
+.mobileFilterButton b {
+  color: var(--color-primary);
+}
+.sortTabs {
+  display: flex;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.sortTab {
+  flex-shrink: 0;
+  border: 0;
+  background: none;
+  padding: 0 10px;
+  font-size: 13px !important;
+  color: var(--color-text-tertiary) !important;
+  border-left: var(--line);
+}
+.sortTab:first-child {
+  border-left: 0;
+}
+.sortTabOn {
+  color: var(--color-text) !important;
+  font-weight: 800;
+}
+
+/* 모바일: 가로형 행 */
+.grid {
+  display: flex;
+  flex-direction: column;
+}
+.card {
+  display: flex;
+  gap: 14px;
+  padding: 14px 0;
+  border-bottom: var(--line);
+}
+.posterWrap {
+  flex: 0 0 84px;
+  aspect-ratio: 3 / 4;
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--color-surface-muted);
+}
+.poster {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.cardBody {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.cardGenre {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-primary);
+}
+.cardTitle {
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.35;
+  margin: 2px 0 4px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.cardMeta {
+  font-size: 13px;
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.badgeRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+.badge {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--radius);
+  border: 1px solid currentColor;
+  font-size: 11px;
+  font-weight: 700;
+}
+.badgePrimary {
+  color: var(--color-primary);
+}
+.badgeNeutral {
+  color: var(--teal-700);
+}
+.badgeMuted {
+  color: var(--color-text-tertiary);
+}
+.badgeDanger {
+  color: var(--color-danger);
+}
+.almost {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--color-danger);
+}
+.rating {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 2px;
+  margin-top: 40px;
+}
+.pageNumber,
+.pageArrow {
+  min-width: 36px;
+  height: 36px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  font-size: 14px;
+  color: var(--color-text-tertiary);
+}
+.pageArrow {
+  padding: 0 10px;
+}
+.pageCurrent {
+  border-bottom-color: var(--color-text);
+  color: var(--color-text) !important;
+  font-weight: 800;
+}
+
+/* 바텀 시트 */
+.sheetBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(0, 23, 51, 0.46);
+  display: flex;
+  align-items: flex-end;
+}
+.sheet {
+  width: 100%;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface);
+  border-top: 3px solid var(--color-text);
+  padding: 0 20px;
+}
+.sheetHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 0;
+  border-bottom: var(--line-strong);
+}
+.sheetHead h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+}
+.sheetBody {
+  overflow-y: auto;
+}
+.sheetFooter {
+  display: flex;
+  gap: 8px;
+  padding: 12px 0 20px;
+}
+.primaryButton {
+  flex: 1;
+  height: 52px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--color-primary);
+  color: #fff !important;
+  font-size: 16px !important;
+  font-weight: 800;
+}
+.primaryButton:hover {
+  background: var(--color-primary-hover);
+}
+.primaryButton:disabled {
+  background: var(--color-surface-muted);
+  color: var(--color-text-tertiary) !important;
+  cursor: default;
+}
+.secondaryButton {
+  flex: 0 0 96px;
+  height: 52px;
+  border: 1px solid var(--color-text);
+  border-radius: 4px;
+  background: var(--color-surface);
+  font-weight: 700;
+}
+
+/* 상세 */
+.breadcrumb {
+  padding: 20px 0 0;
+  font-size: 13px;
+  color: var(--color-text-tertiary);
+}
+.detailHead {
+  padding: 8px 0 20px;
+  border-bottom: var(--line-strong);
+}
+.detailTitle {
+  margin: 8px 0;
+  font-size: 30px;
+  font-weight: 900;
+  letter-spacing: -1px;
+  line-height: 1.2;
+}
+.detailSub {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+}
+.detailSub span {
+  color: var(--color-border-strong);
+  margin: 0 6px;
+}
+.detailLayout {
+  display: block;
+}
+.summary {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 24px 0;
+}
+.detailPosterWrap {
+  width: 200px;
+  aspect-ratio: 3 / 4;
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.infoTable {
+  flex: 1;
+  border-collapse: collapse;
+  align-self: start;
+  width: 100%;
+}
+.infoTable th,
+.infoTable td {
+  padding: 10px 0;
+  border-bottom: var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+.infoTable th {
+  width: 88px;
+  font-weight: 700;
+  color: var(--color-text-tertiary);
+  font-size: 13px;
+}
+.priceRow {
+  display: flex;
+  justify-content: space-between;
+  max-width: 260px;
+}
+.tabs {
+  display: flex;
+  border-bottom: var(--line);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tab {
+  flex-shrink: 0;
+  padding: 14px 16px;
+  font-size: 14px;
+  color: var(--color-text-tertiary);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.tabOn {
+  color: var(--color-text);
+  font-weight: 800;
+  border-bottom-color: var(--color-text);
+}
+.section {
+  padding: 28px 0;
+}
+.section h2 {
+  margin: 0 0 10px;
+  font-size: 18px;
+  font-weight: 800;
+}
+.paragraph {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+.spacer {
+  height: 200px;
+}
+
+.bookingPanel {
+  display: none;
+}
+.stepTitle {
+  margin: 0;
+  padding: 14px 0 10px;
+  font-size: 15px;
+  font-weight: 800;
+  border-bottom: var(--line);
+}
+.stepTitle span {
+  color: var(--color-primary);
+  margin-right: 6px;
+}
+.calendarHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 4px 8px;
+  font-size: 15px;
+}
+.calendarHead button {
+  border: 0;
+  background: none;
+  font-size: 18px;
+  color: var(--color-text-tertiary) !important;
+}
+.calendar {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  text-align: center;
+  padding-bottom: 12px;
+}
+.weekday {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-text-tertiary);
+  padding-bottom: 4px;
+}
+.day {
+  height: 36px;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  font-size: 14px;
+  color: var(--grey-300) !important;
+}
+.dayOut {
+  visibility: hidden;
+}
+.dayAvailable {
+  color: var(--color-text) !important;
+  font-weight: 700;
+}
+.daySelected {
+  background: var(--color-text);
+  color: #fff !important;
+}
+.performanceList {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 16px;
+}
+.performance {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 12px 10px;
+  border: 0;
+  border-bottom: var(--line);
+  border-left: 3px solid transparent;
+  background: none;
+  text-align: left;
+}
+.performanceOn {
+  border-left-color: var(--color-primary);
+  background: var(--grey-50);
+}
+.performanceSoldOut {
+  opacity: 0.5;
+  cursor: default !important;
+}
+.performanceTime {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 18px;
+  font-weight: 800;
+}
+.performanceTime small {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-tertiary);
+}
+.remaining {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+.cast {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+}
+.bookButton {
+  width: 100%;
+}
+.notBookable {
+  padding: 24px 12px;
+  border: var(--line);
+  background: var(--grey-50);
+  text-align: center;
+  color: var(--color-text-secondary);
+}
+.mobileCta {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  padding: 10px 20px 16px;
+  background: var(--color-surface);
+  border-top: var(--line-strong);
+}
+
+/* 태블릿 */
+@media (min-width: 768px) {
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 28px 16px;
+    padding-top: 12px;
+  }
+  .card {
+    flex-direction: column;
+    gap: 10px;
+    padding: 0;
+    border-bottom: 0;
+  }
+  .posterWrap {
+    flex: none;
+    width: 100%;
+  }
+  .genreNav {
+    display: flex;
+  }
+  .summary {
+    flex-direction: row;
+  }
+  .search {
+    width: 220px;
+  }
+}
+
+/* 데스크톱 */
+@media (min-width: 1024px) {
+  .pageHead h1 {
+    font-size: 40px;
+  }
+  .listLayout {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: 32px;
+    align-items: start;
+  }
+  .filterPanel {
+    display: block;
+    position: sticky;
+    top: 90px;
+  }
+  .mobileFilterButton {
+    display: none;
+  }
+  .grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  .detailTitle {
+    font-size: 40px;
+  }
+  .detailLayout {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 40px;
+    align-items: start;
+  }
+  .detailPosterWrap {
+    width: 260px;
+  }
+  .bookingPanel {
+    display: block;
+    position: sticky;
+    top: 90px;
+    margin-top: 24px;
+    border-top: var(--line-strong);
+  }
+  .mobileCta {
+    display: none;
+  }
+  .container {
+    padding-bottom: 80px;
+  }
+}
