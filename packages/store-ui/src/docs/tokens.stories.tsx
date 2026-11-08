@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { ReactNode } from 'react';
 import tokensCss from '../tokens.css?raw';
+import { cn } from '../cn.js';
 import { readTokens, type PaletteColor } from './read-tokens.js';
 
 const tokens = readTokens(tokensCss);
@@ -17,7 +18,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 function Swatch({ hex, className }: { hex: string; className: string }) {
   return (
     <span
-      className={`block rounded-badge border border-border ${className}`}
+      className={cn('block rounded-badge border border-border', className)}
       style={{ backgroundColor: hex }}
     />
   );
@@ -67,9 +68,9 @@ function TokensPage() {
               <td className={cellClass}>
                 <Swatch hex={c.hex} className="size-[32px] shrink-0" />
               </td>
-              <td className={`${cellClass} ${codeClass}`}>{c.name}</td>
-              <td className={`${cellClass} ${codeClass}`}>{c.palette ?? '-'}</td>
-              <td className={`${cellClass} ${codeClass}`}>{c.hex}</td>
+              <td className={cn(cellClass, codeClass)}>{c.name}</td>
+              <td className={cn(cellClass, codeClass)}>{c.palette ?? '-'}</td>
+              <td className={cn(cellClass, codeClass)}>{c.hex}</td>
             </tr>
           ))}
         </Table>
@@ -89,7 +90,7 @@ function TokensPage() {
                   <li key={c.name} className="flex flex-col gap-xs">
                     <Swatch hex={c.hex} className="h-[40px]" />
                     <span className={codeClass}>{c.name.replace(`${family}-`, '')}</span>
-                    <span className={`${codeClass} text-text-secondary`}>{c.hex}</span>
+                    <span className={cn(codeClass, 'text-text-secondary')}>{c.hex}</span>
                   </li>
                 ))}
               </ul>
@@ -102,8 +103,8 @@ function TokensPage() {
         <Table head={['토큰', '크기', '예시']}>
           {tokens.textSizes.map((t) => (
             <tr key={t.name} className="border-b border-border">
-              <td className={`${cellClass} ${codeClass}`}>text-{t.name}</td>
-              <td className={`${cellClass} ${codeClass}`}>{t.value}</td>
+              <td className={cn(cellClass, codeClass)}>text-{t.name}</td>
+              <td className={cn(cellClass, codeClass)}>{t.value}</td>
               <td className={cellClass} style={{ fontSize: `var(--text-${t.name})` }}>
                 공연 예매 2026.12.24 55,000원
               </td>
@@ -120,8 +121,8 @@ function TokensPage() {
         <Table head={['토큰', '크기', '예시']}>
           {tokens.spacing.map((s) => (
             <tr key={s.name} className="border-b border-border">
-              <td className={`${cellClass} ${codeClass}`}>*-{s.name}</td>
-              <td className={`${cellClass} ${codeClass}`}>{s.value}</td>
+              <td className={cn(cellClass, codeClass)}>*-{s.name}</td>
+              <td className={cn(cellClass, codeClass)}>{s.value}</td>
               <td className={cellClass}>
                 <span
                   className="block h-[16px] bg-primary"
@@ -142,7 +143,7 @@ function TokensPage() {
                 style={{ borderRadius: `var(--radius-${r.name})` }}
               />
               <span className={codeClass}>rounded-{r.name}</span>
-              <span className={`${codeClass} text-text-secondary`}>{r.value}</span>
+              <span className={cn(codeClass, 'text-text-secondary')}>{r.value}</span>
             </li>
           ))}
         </ul>

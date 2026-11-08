@@ -54,6 +54,7 @@ pnpm build                  # API와 DB 없이 통과한다.
 - 토큰은 `@openrun/store-ui/tokens.css`에 있다. 스토어는 `apps/store/app/globals.css`에서 Tailwind 뒤에 불러오고, `@source`로 `dist`를 읽어 컴포넌트가 쓰는 클래스를 만든다.
 - Tailwind에는 의미 토큰만 노출한다. 색은 `bg-primary`, `text-text-secondary`처럼, 간격·글자 크기·모서리·최대 폭은 `p-lg`, `text-body`, `rounded-card`, `max-w-content`처럼 쓴다. `bg-blue-500`, `p-4`, `text-sm`, `max-w-7xl` 같은 기본 클래스는 만들어지지 않는다.
 - 컴포넌트는 `@openrun/store-ui`에서 import한다. 서버용 컴포넌트는 Server Component에서 바로 쓸 수 있다.
+- 클래스는 `@openrun/store-ui`의 `cn`으로 합친다. 조건부 클래스를 이어 붙이고(clsx), 같은 속성의 클래스는 뒤에 온 것만 남긴다(tailwind-merge). 의미 토큰 이름을 알도록 설정했으므로, `tokens.css`에 글자 크기·간격·모서리·그림자·최대 폭 토큰을 추가하면 `packages/store-ui/src/cn.ts`에도 추가한다. 글자 크기, 간격, 모서리는 빠뜨리면 `cn.spec.ts`가 실패한다.
 
 | 컴포넌트 | 구분 |
 | -------- | ---- |

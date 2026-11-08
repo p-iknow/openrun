@@ -5,5 +5,5 @@
     "types": []
   },
   "include": ["src"],
-  "exclude": ["src/**/*.stories.tsx", "src/docs"]
+  "exclude": ["src/**/*.stories.tsx", "src/**/*.spec.ts", "src/docs"]
 }

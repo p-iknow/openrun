@@ -1,3 +1,4 @@
+export { cn } from './cn.js';
 export { Badge } from './badge.js';
 export type { BadgeProps, BadgeTone } from './badge.js';
 export { Skeleton } from './skeleton.js';
