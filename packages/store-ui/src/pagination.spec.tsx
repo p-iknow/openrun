@@ -25,11 +25,10 @@ function ShowsPagination({
       {pages.map(({ page, isActive }) => (
         <Pagination.Link
           key={page}
+          page={page}
           active={isActive}
           render={<a href={href(page)} />}
-        >
-          {page}
-        </Pagination.Link>
+        />
       ))}
       <Pagination.Next
         disabled={!hasNextPage}
@@ -40,6 +39,9 @@ function ShowsPagination({
 }
 
 interface Anchor {
+  /** 접근 가능한 이름. aria-label이 있으면 그것, 없으면 보이는 글자. */
+  name: string;
+  /** 보이는 글자. */
   text: string;
   href: string | undefined;
   attrs: string;
@@ -48,21 +50,20 @@ interface Anchor {
 function anchors(html: string): Anchor[] {
   return [...html.matchAll(/<a\b([^>]*)>(.*?)<\/a>/g)].map((match) => {
     const attrs = match[1] ?? '';
-    const inner = match[2] ?? '';
+    // 아이콘 같은 태그를 지우고 보이는 글자만 남긴다.
+    const text = (match[2] ?? '').replaceAll(/<[^>]*>/g, '');
     return {
       attrs,
       href: /\shref="([^"]*)"/.exec(attrs)?.[1],
-      // 아이콘 같은 태그를 지우고 보이는 글자와 aria-label을 이름으로 쓴다.
-      text:
-        /\saria-label="([^"]*)"/.exec(attrs)?.[1] ??
-        inner.replaceAll(/<[^>]*>/g, ''),
+      name: /\saria-label="([^"]*)"/.exec(attrs)?.[1] ?? text,
+      text,
     };
   });
 }
 
-function find(html: string, { text }: { text: string }) {
-  const found = anchors(html).find((a) => a.text === text);
-  if (!found) throw new Error(`"${text}" 링크가 없다:\n${html}`);
+function find(html: string, { name }: { name: string }) {
+  const found = anchors(html).find((a) => a.name === name);
+  if (!found) throw new Error(`"${name}" 링크가 없다:\n${html}`);
   return found;
 }
 
@@ -85,8 +86,8 @@ describe('Pagination', () => {
       <ShowsPagination currentPage={2} totalPages={3} />,
     );
 
-    expect(find(html, { text: '1' }).href).toBe('/shows?page=1');
-    expect(find(html, { text: '3' }).href).toBe('/shows?page=3');
+    expect(find(html, { name: '1페이지' }).href).toBe('/shows?page=1');
+    expect(find(html, { name: '3페이지' }).href).toBe('/shows?page=3');
   });
 
   it('render로 넘긴 컴포넌트에 그대로 그리고, 쓰는 쪽의 속성을 지킨다', () => {
@@ -95,12 +96,14 @@ describe('Pagination', () => {
       return <a data-router="" {...props} />;
     }
     const html = renderToStaticMarkup(
-      <Pagination.Link active render={<RouterLink href="/shows?page=4" />}>
-        4
-      </Pagination.Link>,
+      <Pagination.Link
+        page={4}
+        active
+        render={<RouterLink href="/shows?page=4" />}
+      />,
     );
 
-    const link = find(html, { text: '4' });
+    const link = find(html, { name: '4페이지' });
     expect(link.attrs).toContain('data-router=""');
     expect(link.href).toBe('/shows?page=4');
     expect(link.attrs).toContain('aria-current="page"');
@@ -117,13 +120,33 @@ describe('Pagination', () => {
     expect(current.map((a) => a.text)).toEqual(['2']);
   });
 
+  it('번호 링크는 보이는 번호와 함께 "N페이지"라는 이름을 갖는다', () => {
+    const html = renderToStaticMarkup(
+      <ShowsPagination currentPage={2} totalPages={3} />,
+    );
+
+    const link = find(html, { name: '3페이지' });
+    expect(link.text).toBe('3');
+  });
+
+  it('render로 넘긴 요소에 aria-label을 주면 기본 이름을 덮어쓴다', () => {
+    const html = renderToStaticMarkup(
+      <Pagination.Link
+        page={3}
+        render={<a href="/shows?page=3" aria-label="3페이지로 이동" />}
+      />,
+    );
+
+    expect(find(html, { name: '3페이지로 이동' }).href).toBe('/shows?page=3');
+  });
+
   it('첫 페이지에서는 이전이 비활성이고 다음은 2페이지로 간다', () => {
     const html = renderToStaticMarkup(
       <ShowsPagination currentPage={1} totalPages={3} />,
     );
 
-    expect(isDisabled(find(html, { text: '이전 페이지' }))).toBe(true);
-    expect(find(html, { text: '다음 페이지' }).href).toBe('/shows?page=2');
+    expect(isDisabled(find(html, { name: '이전 페이지' }))).toBe(true);
+    expect(find(html, { name: '다음 페이지' }).href).toBe('/shows?page=2');
   });
 
   it('마지막 페이지에서는 다음이 비활성이고 이전은 앞 페이지로 간다', () => {
@@ -131,8 +154,8 @@ describe('Pagination', () => {
       <ShowsPagination currentPage={3} totalPages={3} />,
     );
 
-    expect(isDisabled(find(html, { text: '다음 페이지' }))).toBe(true);
-    expect(find(html, { text: '이전 페이지' }).href).toBe('/shows?page=2');
+    expect(isDisabled(find(html, { name: '다음 페이지' }))).toBe(true);
+    expect(find(html, { name: '이전 페이지' }).href).toBe('/shows?page=2');
   });
 
   it('전체 페이지가 1이면 이전과 다음이 모두 비활성이다', () => {
@@ -140,8 +163,8 @@ describe('Pagination', () => {
       <ShowsPagination currentPage={1} totalPages={1} />,
     );
 
-    expect(isDisabled(find(html, { text: '이전 페이지' }))).toBe(true);
-    expect(isDisabled(find(html, { text: '다음 페이지' }))).toBe(true);
+    expect(isDisabled(find(html, { name: '이전 페이지' }))).toBe(true);
+    expect(isDisabled(find(html, { name: '다음 페이지' }))).toBe(true);
     expect(pageNumbers(html)).toEqual(['1']);
   });
 
