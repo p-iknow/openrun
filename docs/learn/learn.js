@@ -31,7 +31,7 @@ const learnDocuments = [
   {
     file: '014-서버가-받는-use-client-이름표.html',
     title: "014 서버가 받는 'use client' 파일: 이름표 붙은 가짜",
-    tags: ['nextjs', 'design-system'],
+    tags: ['nextjs'],
   },
 ];
 
