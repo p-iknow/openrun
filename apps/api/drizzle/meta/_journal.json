@@ -8,6 +8,13 @@
       "when": 1794049204656,
       "tag": "0000_create_shows",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1794225322348,
+      "tag": "0001_create_venues_and_performances",
+      "breakpoints": true
     }
   ]
 }

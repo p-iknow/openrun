@@ -25,12 +25,14 @@ cp apps/store/.env.example apps/store/.env
 
 pnpm infra:up               # PostgreSQL, Mailpit 실행
 pnpm db:migrate             # 마이그레이션 적용
-pnpm db:seed                # 공연 데이터 넣기
+pnpm db:seed                # 개발용 공연 데이터 넣기
 
 pnpm dev                    # 스토어, API, store-ui 감시 빌드 함께 실행
 ```
 
-<http://localhost:3001>을 열면 DB에 저장된 공연 제목이 보인다. API는 <http://localhost:3000/shows>에서 응답한다.
+<http://localhost:3001>을 열면 공연 카드 목록이 보인다. API는 <http://localhost:3000/shows>에서 응답한다.
+
+`pnpm db:seed`는 공연장 3곳, 공연 20개, 공연마다 3~15회차를 넣는다. 다시 실행하면 비우고 다시 넣는다. Faker 시드 값이 고정이라 공연 구성(제목, 장르, 공연장, 회차 수)은 늘 같고, 날짜만 실행 시각 기준으로 다시 만든다.
 
 `pnpm dev`는 `packages/store-ui`를 감시 빌드하므로 토큰이나 컴포넌트를 고치면 스토어에 바로 반영된다.
 
