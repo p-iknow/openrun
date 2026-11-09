@@ -24,6 +24,7 @@
 | `nextjs` | Next.js의 렌더링, 캐시, 앱 구조 |
 | `openapi` | OpenAPI 계약, 생성 클라이언트, API 호출 방식 |
 | `design-system` | `store-ui`의 토큰, 컴포넌트, Storybook |
+| `base-ui` | Base UI의 API와 동작(`useRender`, 컴포넌트 부품, 데이터 속성 등) |
 
 ## 모듈
 
