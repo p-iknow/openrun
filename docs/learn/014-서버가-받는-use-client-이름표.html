@@ -298,12 +298,102 @@ export const Drawer = registerClientReference(function () { throw … }, 'drawer
           </ol>
           <p>
             컴포넌트에 정적 속성으로 붙여도(<code>Root.Trigger = Trigger</code>) 같다. 서버는 그 대입문도 실행하지 않으므로
-            가짜 <code>Root</code>에 <code>Trigger</code>가 생기지 않는다. 실제로 빌드해 보니 같은 오류로 실패했다.
+            가짜 <code>Root</code>에 <code>Trigger</code>가 생기지 않는다.
           </p>
-          <div class="callout warn">
+
+          <h3>직접 확인하기</h3>
+          <p>
+            정말 그런지 임시 파일로 확인했다. <code>'use client'</code> 파일 하나에서 세 가지 방식으로 내보내고, Server
+            Component 페이지가 받은 값을 그리지 않고 그대로 들여다봤다.
+          </p>
+          <pre><code class="language-ts">// __probe-obj.tsx (임시)
+'use client';
+function ObjRoot() { /* … */ }
+function ObjPart() { /* … */ }
+export const ProbeObj = { Root: ObjRoot, Part: ObjPart }; // ① 객체로 묶기
+
+function StaticRoot() { /* … */ }
+StaticRoot.Part = ObjPart;
+export const ProbeStatic = StaticRoot; // ② 정적 속성으로 붙이기
+
+export { ObjRoot as ProbeNamedRoot }; // ③ 이름 단위로 내보내기 (비교용)</code></pre>
+          <pre><code class="language-ts">// app/probe-obj/page.tsx (임시, Server Component)
+import { ProbeNamedRoot, ProbeObj, ProbeStatic } from '@openrun/store-ui';
+
+function describe(name: string, value: any) {
+  return {
+    name,
+    typeof: typeof value,
+    $$typeof: String(value.$$typeof),
+    $$id: String(value.$$id),
+    Root: typeof value.Root,
+    Part: typeof value.Part,
+    ownKeys: Object.getOwnPropertyNames(value).join(','),
+  };
+}
+
+export default function ProbePage() {
+  const rows = [describe('ProbeObj', ProbeObj), describe('ProbeStatic', ProbeStatic), describe('ProbeNamedRoot', ProbeNamedRoot)];
+  return &lt;pre&gt;{JSON.stringify(rows, null, 2)}&lt;/pre&gt;;
+}</code></pre>
+          <p><code>next build</code>가 만든 페이지 HTML에 찍힌 결과는 이렇다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>서버가 받은 값</th>
+                  <th><code>typeof</code></th>
+                  <th><code>$$id</code> (이름표)</th>
+                  <th><code>.Root</code> / <code>.Part</code></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>① <code>ProbeObj</code></td>
+                  <td><span class="badge blue">function</span> 객체가 아님</td>
+                  <td><code>…/__probe-obj.js#ProbeObj</code></td>
+                  <td>undefined / undefined</td>
+                </tr>
+                <tr>
+                  <td>② <code>ProbeStatic</code></td>
+                  <td>function</td>
+                  <td><code>…/__probe-obj.js#ProbeStatic</code></td>
+                  <td>undefined / undefined</td>
+                </tr>
+                <tr>
+                  <td>③ <code>ProbeNamedRoot</code></td>
+                  <td>function</td>
+                  <td><code>…/__probe-obj.js#ProbeNamedRoot</code></td>
+                  <td>undefined / undefined</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <ul>
+            <li>
+              셋 다 <code>$$typeof</code>가 <code>Symbol(react.client.reference)</code>다. React가 "이건 이름표"라고 알아보는
+              표시다.
+            </li>
+            <li>
+              셋 다 자기 속성이 <code>length,name,prototype,$$typeof,$$id,$$async</code>뿐이다. 함수의 기본 속성과 이름표
+              정보만 있고, <code>Root</code>나 <code>Part</code>는 없다.
+            </li>
+            <li>
+              ①은 원래 객체였는데도 서버에서는 <strong>함수</strong>다. 서버는 export가 원래 무엇이었는지 모르고, 모든
+              export를 똑같이 이름표 붙은 가짜 함수로 바꾸기 때문이다.
+            </li>
+          </ul>
+          <p>같은 빌드의 서버용 결과물에서 이 파일의 대역 코드도 꺼냈다(줄바꿈만 넣었다).</p>
+          <pre><code class="language-js">let c = registerClientReference(function () { throw Error("Attempted to call ProbeNamedRoot() from the server …") },
+                                "[project]/packages/store-ui/dist/__probe-obj.js", "ProbeNamedRoot"),
+    d = registerClientReference(function () { throw Error("Attempted to call ProbeObj() from the server …") },
+                                "[project]/packages/store-ui/dist/__probe-obj.js", "ProbeObj"),
+    e = registerClientReference(function () { throw Error("Attempted to call ProbeStatic() from the server …") },
+                                "[project]/packages/store-ui/dist/__probe-obj.js", "ProbeStatic");</code></pre>
+          <div class="callout">
             <p>
-              객체를 내보낸 경우의 가짜 코드는 결과물에서 직접 꺼내 보지 않았다. 다만 함수 export에서 확인한 방식대로라면
-              나와야 하는 결과(undefined)가 실제 빌드 결과와 정확히 같다.
+              객체(①)와 정적 속성(②)도 함수 export(③)와 똑같은 가짜로 바뀐다. 대역 코드 어디에도 <code>{ Root, Part }</code>나
+              <code>StaticRoot.Part = …</code>가 없다. 서버가 아는 것은 export 이름 세 개뿐이다.
             </p>
           </div>
         </section>
