@@ -73,7 +73,7 @@
           "end"
         ]
       },
-      "SalesStatus": {
+      "ShowSalesStatus": {
         "type": "string",
         "enum": [
           "on_sale",
@@ -118,7 +118,7 @@
             "description": "공연 판매 상태. 회차들의 판매 상태 중 우선순위가 가장 높은 것이다.",
             "allOf": [
               {
-                "$ref": "#/components/schemas/SalesStatus"
+                "$ref": "#/components/schemas/ShowSalesStatus"
               }
             ]
           },

@@ -1,6 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { GENRES, type Genre } from '../db/schema/shows.js';
-import { SALES_STATUSES, type SalesStatus } from './show-sales-status.js';
+import {
+  SHOW_SALES_STATUSES,
+  type ShowSalesStatus,
+} from './show-sales-status.js';
 
 export class ShowPeriodDto {
   @ApiProperty({
@@ -35,12 +38,12 @@ export class ShowSummaryDto {
   period: ShowPeriodDto;
 
   @ApiProperty({
-    enum: SALES_STATUSES,
-    enumName: 'SalesStatus',
+    enum: SHOW_SALES_STATUSES,
+    enumName: 'ShowSalesStatus',
     description:
       '공연 판매 상태. 회차들의 판매 상태 중 우선순위가 가장 높은 것이다.',
   })
-  salesStatus: SalesStatus;
+  salesStatus: ShowSalesStatus;
 
   @ApiProperty({
     type: String,

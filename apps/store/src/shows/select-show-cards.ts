@@ -2,7 +2,7 @@ import type { components } from '@openrun/api-client';
 import type { BadgeTone } from '@openrun/store-ui';
 import type { ShowPage } from './fetch-shows';
 
-type SalesStatus = components['schemas']['SalesStatus'];
+type ShowSalesStatus = components['schemas']['ShowSalesStatus'];
 
 export interface SalesStatusBadgeData {
   label: string;
@@ -27,7 +27,7 @@ const SALES_STATUS_BADGES = {
   upcoming: { label: '판매 예정', tone: 'success' },
   cancelled: { label: '회차 취소', tone: 'danger' },
   ended: { label: '판매 종료', tone: 'neutral' },
-} satisfies Record<SalesStatus, SalesStatusBadgeData>;
+} satisfies Record<ShowSalesStatus, SalesStatusBadgeData>;
 
 // 서버의 시간대와 상관없이 한국 시각으로 보여 준다.
 const kstDateTime = new Intl.DateTimeFormat('ko-KR', {
