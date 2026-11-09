@@ -41,6 +41,7 @@ const learnDocuments = [
   { file: '016-server-component가-해결하는-문제.html', title: '016 Server Component가 해결하는 문제', tags: ['nextjs'] },
   { file: '017-hydration-자세히.html', title: '017 hydration 자세히', tags: ['nextjs'] },
   { file: '018-예외-필터와-APP_FILTER.html', title: '018 예외 필터와 APP_FILTER', tags: ['nestjs'] },
+  { file: '019-drizzle-테이블-관계와-enum.html', title: '019 Drizzle 테이블 관계와 enum', tags: ['drizzle'] },
 ];
 
 const currentFile = decodeURIComponent(location.pathname).split('/').pop();
