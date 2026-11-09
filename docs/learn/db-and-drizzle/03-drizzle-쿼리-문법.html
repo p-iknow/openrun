@@ -18,6 +18,7 @@
           <li><a href="#from">from</a></li>
           <li><a href="#join">innerJoin과 leftJoin</a></li>
           <li><a href="#eq">eq</a></li>
+          <li><a href="#ne">ne와 조건 재사용</a></li>
           <li><a href="#order-by">orderBy, asc, desc</a></li>
           <li><a href="#limit-offset">limit, offset</a></li>
           <li><a href="#aggregate">count, min, max와 groupBy</a></li>
@@ -25,6 +26,10 @@
           <li><a href="#parallel">쿼리 두 개를 함께 보내기</a></li>
           <li><a href="#insert">insert, values, returning</a></li>
           <li><a href="#execute">execute와 sql 템플릿</a></li>
+          <li><a href="#sql-fragment">sql 조각으로 식 조립하기</a></li>
+          <li><a href="#sql-raw">sql.raw</a></li>
+          <li><a href="#sql-join">sql.join</a></li>
+          <li><a href="#map-with">.mapWith</a></li>
           <li><a href="#transaction">transaction</a></li>
           <li><a href="#to-sql">toSQL로 SQL 확인하기</a></li>
         </ol>
@@ -186,6 +191,33 @@ eq(shows.id, 3); // "shows"."id" = $1, params: [3]</code></pre>
           </p>
         </section>
 
+        <section id="ne">
+          <h2>ne와 조건 재사용</h2>
+          <pre><code class="language-ts">import { ne } from 'drizzle-orm';
+
+const isListed = ne(salesStatus.salesStatus, 'ended'); // "sales_status" &lt;&gt; $1, params: ['ended']
+
+this.db.select({ ... }).from(shows).innerJoin(salesStatus, ...).where(isListed); // 목록
+this.db.select({ count: count() }).from(shows).innerJoin(salesStatus, ...).where(isListed); // 개수</code></pre>
+          <p>
+            <code>ne</code>는 not equal, "두 값이 다르다"는 조건이다. SQL로는 <code>&lt;&gt;</code>다. 쓰는 법은
+            <a href="#eq"><code>eq</code></a>와 같다. 같은 줄의 비교 함수로 <code>gt</code>(&gt;), <code>gte</code>(&gt;=),
+            <code>lt</code>(&lt;), <code>lte</code>(&lt;=)가 있다.
+          </p>
+          <p>
+            <code>eq</code>, <code>ne</code>가 돌려주는 조건도 <a href="#lazy">쿼리 빌더</a>처럼 SQL 조각을 담은 객체다. 그래서
+            변수에 담아 두고 여러 쿼리의 <code>.where()</code>에 넘길 수 있다. 목록 쿼리와 개수 쿼리가 같은 조건을 써야 할 때
+            이렇게 하면, 조건을 바꿀 때 한쪽만 고치는 실수를 막는다. 조건 여러 개는 <code>and(a, b)</code>,
+            <code>or(a, b)</code>로 묶는다.
+          </p>
+          <p>
+            비교 대상이 <code>NULL</code>이면 <code>ne</code>도 참이 되지 않는다(<a
+              href="01-프론트엔드-개발자를-위한-DB-개념.html#null"
+              >NULL</a
+            >). <code>NULL</code>인지 보려면 <code>isNull(col)</code>, <code>isNotNull(col)</code>을 쓴다.
+          </p>
+        </section>
+
         <section id="order-by">
           <h2>orderBy, asc, desc</h2>
           <pre><code class="language-ts">import { asc } from 'drizzle-orm';
@@ -317,7 +349,24 @@ inner join (
             <code>showId: performances.showId</code>처럼 테이블 컬럼을 그대로 고른 값은 이미 컬럼 이름(<code>show_id</code>)이
             있어서 별칭이 필요 없다.
           </p>
-        </section>
+          <h3>서브쿼리를 돌려주는 함수</h3>
+          <pre><code class="language-ts">// apps/api/src/shows/show-sales-status.ts
+export function showSalesStatusSubquery(db: Database, { now }: { now: Date }) {
+  return db
+    .select({ showId: performances.showId, salesStatus: /* ... */, salesOpenAt: /* ... */ })
+    .from(performances)
+    .groupBy(performances.showId)
+    .as('show_sales_status');
+}
+
+// 쓰는 곳
+const salesStatus = showSalesStatusSubquery(this.db, { now: this.clock.now() });
+this.db.select({ status: salesStatus.salesStatus }).from(shows).innerJoin(salesStatus, eq(salesStatus.showId, shows.id));</code></pre>
+          <p>
+            서브쿼리도 실행 전의 객체라서 함수가 만들어 돌려줄 수 있다. 여러 쿼리가 같은 계산을 JOIN해야 할 때(예: 공연 목록과
+            공연 상세가 같은 공연 판매 상태를 써야 할 때) 계산을 한 곳에 둘 수 있다. 계산에 필요한 값(<code>now</code>)은
+            인자로 받는다. 함수를 부를 때마다 새 서브쿼리 객체가 생기므로, 한 쿼리 안에서는 한 번 만든 객체를 같이 쓴다.
+          </p>
 
         <section id="parallel">
           <h2>쿼리 두 개를 함께 보내기</h2>
@@ -423,6 +472,181 @@ await tx.execute(sql`TRUNCATE ${performances}, ${shows}, ${venues} RESTART IDENT
           <p>
             <code>sql</code>은 <code>select</code> 객체의 값으로도 쓸 수 있다. 예: <code>sql&lt;number&gt;`count(*)`</code>.
             제네릭으로 결과 타입을 알려 주지만, Drizzle은 그 타입이 맞는지 검사하지 않는다.
+          </p>
+        </section>
+
+        <section id="sql-fragment">
+          <h2>sql 조각으로 식 조립하기</h2>
+          <p>
+            Drizzle에 함수가 없는 SQL(예: <a href="01-프론트엔드-개발자를-위한-DB-개념.html#case"><code>CASE</code></a>,
+            <a href="01-프론트엔드-개발자를-위한-DB-개념.html#filter"><code>FILTER</code></a>)은 <code>sql</code> 템플릿으로 식을
+            직접 만든다. <code>sql`...`</code>이 돌려주는 값을 <strong>SQL 조각</strong>(타입 이름 <code>SQL</code>)이라고 부른다.
+            조각은 실행되지 않는 SQL 텍스트와 파라미터의 묶음이다.
+          </p>
+          <pre><code class="language-ts">import { type SQL, sql } from 'drizzle-orm';
+
+// 조각을 돌려주는 함수
+function performancePriority(now: Date): SQL&lt;number&gt; {
+  return sql&lt;number&gt;`case
+    when ${performances.isCancelled} then 2
+    when ${performances.startsAt} &lt;= ${now} then 3
+    else 0
+  end`;
+}
+
+const priority = performancePriority(now);
+const showPriority = sql`min(${priority})`; // 조각 안에 조각을 넣는다</code></pre>
+          <pre><code class="language-sql">min(case
+    when "performances"."is_cancelled" then 2
+    when "performances"."starts_at" &lt;= $1 then 3
+    else 0
+  end)
+-- params: [2026-11-10T03:00:00.000Z]</code></pre>
+          <h3><code>${...}</code>에 넣을 수 있는 것</h3>
+          <p>
+            <a href="#execute">execute 절의 표</a>에 하나가 더 있다. <strong>다른 SQL 조각</strong>을 넣으면 그 조각의 SQL이
+            그 자리에 그대로 끼워지고, 조각의 파라미터도 함께 따라온다. 그래서 작은 조각을 함수로 만들어 두고 레고처럼 쌓아
+            큰 식을 만들 수 있다.
+          </p>
+          <p>
+            <code>Date</code> 같은 값을 넣으면 다른 값처럼 파라미터가 된다. <code>pg</code> 드라이버가 보낼 때 시간대가 붙은
+            시각 문자열로 바꾸고, PostgreSQL은 <code>starts_at</code>(timestamptz)과 비교하는 것을 보고 그 파라미터를
+            timestamptz로 읽는다.
+          </p>
+          <h3><code>sql&lt;T&gt;</code>는 타입 약속이다</h3>
+          <p>
+            <code>sql&lt;number&gt;</code>의 <code>&lt;number&gt;</code>는 TypeScript에게 "이 식의 결과는 number다"라고 알려
+            주기만 한다. 실행할 때 값을 바꾸거나 검사하지 않는다. <code>as number</code>처럼 틀리게 적어도 컴파일러가 모른다.
+            값을 실제로 바꾸려면 <a href="#map-with"><code>.mapWith()</code></a>를 붙인다.
+          </p>
+          <h3><code>select</code>에 넣을 때는 <code>.as()</code></h3>
+          <pre><code class="language-ts">.select({
+  salesStatus: sql&lt;ShowSalesStatus&gt;`case ${showPriority} ${toStatus} end`.as('sales_status'),
+})</code></pre>
+          <p>
+            조각을 <a href="#subquery">서브쿼리</a>의 결과로 내보낼 때는 컬럼 이름이 없으므로 <code>.as('이름')</code>으로
+            별칭을 붙인다. <code>min(...).as('start')</code>와 같은 이유다.
+          </p>
+          <div class="callout warn">
+            <p>
+              <strong>조각은 넣는 곳마다 펼쳐진다.</strong> 자바스크립트 변수 <code>priority</code>는 하나지만, SQL에는 넣은
+              횟수만큼 같은 식이 복사되고 파라미터도 그만큼 늘어난다. JS 변수가 SQL 변수가 되지는 않는다. 아래 코드는 같은
+              <code>CASE</code>를 SQL에 세 번 쓰고 <code>now</code>를 파라미터 세 개(<code>$1</code>~<code>$3</code>)로 보낸다.
+            </p>
+            <pre><code class="language-ts">sql`min(${priority})`;
+sql`min(${priority}) = 1`;
+sql`filter (where ${priority} = 1)`;</code></pre>
+            <p>
+              결과는 맞지만 SQL이 길어지고 DB가 같은 계산을 여러 번 한다. 한 번만 계산하려면 그 식을 안쪽 서브쿼리의 컬럼으로
+              먼저 만들고 바깥 쿼리에서 이름으로 부른다.
+            </p>
+          </div>
+        </section>
+
+        <section id="sql-raw">
+          <h2>sql.raw: 문자열을 SQL에 그대로 넣기</h2>
+          <pre><code class="language-ts">sql`then ${2}`; // then $1, params: [2]
+sql`then ${sql.raw('2')}`; // then 2
+sql`then ${sql.raw(`'on_sale'`)}`; // then 'on_sale'</code></pre>
+          <p>
+            <code>sql.raw(문자열)</code>은 문자열을 파라미터로 보내지 않고 <strong>SQL 문장에 글자 그대로 박아 넣는다</strong>.
+            <code>${...}</code>에 그냥 값을 넣는 것과 정반대다.
+          </p>
+          <div class="callout warn">
+            <p>
+              <code>sql.raw</code>에 사용자 입력을 넣으면 그대로 <a href="01-프론트엔드-개발자를-위한-DB-개념.html#parameter"
+                >SQL 인젝션</a
+              >이다. 코드에 고정된 상수에만 쓴다. React의 <code>dangerouslySetInnerHTML</code>과 같은 무게로 다룬다.
+            </p>
+          </div>
+          <h3>상수인데 왜 파라미터로 보내지 않았나</h3>
+          <p>
+            파라미터에는 타입이 붙어 있지 않다. DB는 파라미터 주변을 보고 타입을 짐작하는데,
+            <a href="01-프론트엔드-개발자를-위한-DB-개념.html#case"><code>CASE</code></a>의 결과 자리가 모두 파라미터면 짐작할
+            단서가 없어 <code>text</code>로 정한다. 그러면 숫자로 쓰려던 값이 문자로 비교된다. 이 저장소의 PostgreSQL 18에서
+            확인한 결과다.
+          </p>
+          <pre><code class="language-sql">-- 결과 자리가 파라미터: 타입이 text가 된다
+PREPARE p AS SELECT pg_typeof(CASE WHEN true THEN $1 ELSE $2 END);
+EXECUTE p(2, 10);                                  -- text
+
+-- text끼리 min을 구하면 글자 순서로 비교한다
+min('10', '9') → '10'                              -- '1'이 '9'보다 앞이라서
+
+-- 결과 자리가 숫자 리터럴: integer가 된다
+SELECT pg_typeof(CASE WHEN true THEN 2 ELSE 0 END); -- integer</code></pre>
+          <p>
+            그래서 판매 상태 순번(<code>0</code>~<code>3</code>)과 상태 이름(<code>'on_sale'</code>)처럼 코드에 고정된 상수는
+            <code>sql.raw</code>로 리터럴로 넣었다. SQL을 읽을 때도 <code>then $3</code>보다 <code>then 2</code>가 뜻이 바로
+            보인다. 반대로 <code>now</code>처럼 실행할 때마다 달라지는 값은 파라미터로 보낸다.
+          </p>
+          <pre><code class="language-ts">// apps/api/src/shows/show-sales-status.ts
+function priorityOf(status: ShowSalesStatus): SQL {
+  return sql.raw(String(SHOW_SALES_STATUSES.indexOf(status))); // 'cancelled' → 2
+}
+function literalOf(status: ShowSalesStatus): SQL {
+  return sql.raw(`'${status}'`); // 'on_sale' → 'on_sale'(작은따옴표 포함)
+}</code></pre>
+          <p>
+            인자 타입이 <code>ShowSalesStatus</code>라서 정해진 네 값 말고는 들어올 수 없다. 이렇게 타입으로 입력을 막아 두면
+            <code>sql.raw</code>를 써도 안전하다는 것을 코드만 보고 알 수 있다.
+          </p>
+        </section>
+
+        <section id="sql-join">
+          <h2>sql.join: 조각 배열을 하나로 잇기</h2>
+          <pre><code class="language-ts">const toStatus = sql.join(
+  SHOW_SALES_STATUSES.map((status) =&gt; sql`when ${priorityOf(status)} then ${literalOf(status)}`),
+  sql` `, // 조각 사이에 넣을 구분자
+);</code></pre>
+          <pre><code class="language-sql">when 0 then 'on_sale' when 1 then 'upcoming' when 2 then 'cancelled' when 3 then 'ended'</code></pre>
+          <p>
+            <code>sql.join(조각 배열, 구분자)</code>는 <code>Array.prototype.join</code>의 SQL 조각 버전이다. 문자열이 아니라
+            조각을 잇기 때문에, 각 조각의 파라미터도 순서대로 함께 이어진다. 구분자도 조각으로 넘긴다. 쉼표로 이으려면
+            <code>sql`, `</code>를 넘긴다.
+          </p>
+          <p>
+            배열에서 SQL을 만들면 배열이 바뀔 때 SQL도 따라 바뀐다. 판매 상태에 <code>sold_out</code>을 더하면 배열에 한
+            줄만 넣으면 되고, 순번과 위 매핑은 다시 손으로 고치지 않는다.
+          </p>
+        </section>
+
+        <section id="map-with">
+          <h2>.mapWith: DB 값을 JS 값으로 바꾸기</h2>
+          <pre><code class="language-ts">salesOpenAt: sql&lt;Date | null&gt;`case when ... then min(${performances.salesOpenAt}) end`
+  .mapWith(performances.salesOpenAt) // timestamptz 컬럼과 같은 방법으로 바꾼다 → Date
+  .as('sales_open_at'),</code></pre>
+          <p>
+            DB가 돌려준 값은 드라이버를 거쳐 문자열 같은 원시 값으로 올 수 있다. 테이블 컬럼을 고르면 Drizzle이 컬럼 정의를
+            보고 알맞은 JS 값(예: timestamptz → <code>Date</code>)으로 바꿔 준다. 그런데 직접 쓴 <code>sql</code> 조각은
+            Drizzle이 무슨 값인지 모르므로 바꾸지 않고 그대로 넘긴다.
+          </p>
+          <p>
+            <code>.mapWith(...)</code>는 이 조각의 결과를 어떻게 바꿀지 알려 준다.
+          </p>
+          <ul>
+            <li>
+              <strong>컬럼을 넘기면</strong> 그 컬럼과 같은 방법으로 바꾼다. <code>.mapWith(performances.salesOpenAt)</code>이면
+              <code>Date</code>가 된다. <code>NULL</code>은 바꾸지 않고 <code>null</code>로 둔다.
+            </li>
+            <li>
+              <strong>함수를 넘기면</strong> 그 함수로 바꾼다. 예: <code>sql`count(*)`.mapWith(Number)</code>. PostgreSQL은 큰
+              정수를 문자열로 주므로 숫자로 바꿀 때 쓴다.
+            </li>
+          </ul>
+          <p>
+            <code>sql&lt;Date | null&gt;</code>(타입 약속)과 <code>.mapWith</code>(실제 변환)는 짝이다. 타입만 적고
+            <code>.mapWith</code>를 빼면, TypeScript는 <code>Date</code>라고 믿는데 실제로는 문자열이 와서
+            <code>.toISOString()</code>이 실행 중에 실패할 수 있다. <a href="#aggregate"><code>min(col)</code></a>이 따로 말하지
+            않아도 <code>Date</code>를 돌려주는 것은, Drizzle의 <code>min</code> 헬퍼가 안에서 <code>mapWith(col)</code>을 해
+            주기 때문이다.
+          </p>
+          <p>
+            이 저장소가 쓰는 node-postgres 드라이버에서 Drizzle은 timestamptz를 <code>Date</code>로 바꾸지 않고 문자열 그대로
+            받도록 설정해 두고, 컬럼 정의를 보고 직접 바꾼다. 그래서 조각에 <code>.mapWith</code>를 빼면 정말로 문자열이
+            온다. <code>min()</code> 헬퍼도 컬럼이 아닌 조각을 넘기면(<code>min(sql`...`)</code>) 결과를
+            <code>String</code>으로 바꾼다. 판매 오픈 일시는 <code>min</code>을 <code>CASE</code>와 <code>FILTER</code>로
+            감싸야 해서 헬퍼를 쓸 수 없었고, 직접 쓴 조각이라 <code>.mapWith(performances.salesOpenAt)</code>을 붙였다.
           </p>
         </section>
 

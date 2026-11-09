@@ -644,6 +644,14 @@ this.db.select().from(shows).innerJoin(performances, eq(performances.showId, sho
               <code>where</code>를 목록 쿼리와 개수 쿼리 양쪽에 넣어야 한다. 한쪽만 넣으면 이 절의 문제가 다시 생긴다.
             </li>
           </ul>
+          <div class="callout">
+            <p>
+              이 문서는 #39 시점의 코드다. #40에서 판매 종료 공연을 빼는 조건이 실제로 두 쿼리에 함께 들어갔고, 개수 쿼리는
+              <code>period</code> 대신 판매 상태 서브쿼리를 JOIN하게 바뀌었다. <a href="06-판매-상태-쿼리-읽기.html#service"
+                >db-and-drizzle 06 문서</a
+              >에 있다.
+            </p>
+          </div>
         </section>
 
         <section id="response">
