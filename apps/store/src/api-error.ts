@@ -16,29 +16,25 @@ export class ApiError extends Error {
   }
 }
 
-// openapi-fetch의 응답({ data, error, response })을 성공 값으로 바꾸고, 오류면 ApiError를 던진다.
-// 본문 없는 성공 응답(204)을 돌려주는 경로는 아직 없으므로, 값이 없으면 오류로 본다.
-export function selectData<T>(result: {
-  data?: T;
-  error?: unknown;
+// 오류 응답 본문을 ApiError로 바꾼다. 이름은 RTK Query의 transformErrorResponse를 따랐다.
+export function transformErrorResponse({
+  error,
+  response,
+}: {
+  error: unknown;
   response: Response;
-}): T {
-  if (result.data !== undefined) {
-    return result.data;
-  }
-
-  const { status } = result.response;
-  if (isProblemDetails(result.error)) {
-    throw new ApiError({
-      status,
-      code: result.error.code,
-      message: result.error.detail,
+}): ApiError {
+  if (isProblemDetails(error)) {
+    return new ApiError({
+      status: response.status,
+      code: error.code,
+      message: error.detail,
     });
   }
-  throw new ApiError({
-    status,
+  return new ApiError({
+    status: response.status,
     code: 'UNKNOWN',
-    message: `API가 오류로 응답했습니다 (HTTP ${status})`,
+    message: `API가 오류로 응답했습니다 (HTTP ${response.status})`,
   });
 }
 
