@@ -13,3 +13,7 @@ export type {
   PaginationRootProps,
   PaginationStepProps,
 } from './pagination.js';
+export { TextField } from './text-field.js';
+export type { TextFieldProps } from './text-field.js';
+export { Select } from './select.js';
+export type { SelectItem, SelectProps } from './select.js';
