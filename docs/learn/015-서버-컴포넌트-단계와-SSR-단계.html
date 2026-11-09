@@ -22,6 +22,7 @@
           <li><a href="#ssr">2단계: HTML 만들기</a></li>
           <li><a href="#hydrate">3단계: 브라우저의 하이드레이션</a></li>
           <li><a href="#navigate">링크로 이동할 때는 2단계가 없다</a></li>
+          <li><a href="#payload">RSC payload 자세히</a></li>
           <li><a href="#when">언제 하나: 빌드 때와 요청 때</a></li>
           <li><a href="#answer">두 문장 다시 보기</a></li>
           <li><a href="#cause">문제는 빌드 때 생기고, 터지는 때는 다르다</a></li>
@@ -298,7 +299,10 @@ export default function ProbeStages() {
 
         <section id="read">
           <h2>설계도 읽는 법</h2>
-          <p>설계도의 줄은 두 종류만 알면 읽을 수 있다.</p>
+          <p>
+            이 문서에서 "설계도"라고 부르는 것의 정식 이름은 <strong>RSC payload</strong>다. 형식, 실려 오는 곳, 스트리밍은
+            <a href="#payload">아래 "RSC payload 자세히"</a>에서 따로 다룬다. 여기서는 두 종류의 줄만 알면 된다.
+          </p>
           <ol class="steps blue">
             <li>
               <strong>요소: <code>["$", 종류, key, props]</code></strong>
@@ -365,7 +369,8 @@ export default function ProbeStages() {
             </li>
             <li>
               <strong>JS와 설계도 받기</strong>
-              HTML 안에 함께 실려 온 설계도를 읽고, 이름표에 적힌 JS 파일(Button 코드)을 받는다. Badge 코드는 받지 않는다.
+              HTML 안에 함께 실려 온 설계도(<code>&lt;script&gt;self.__next_f.push(…)&lt;/script&gt;</code>,
+              <a href="#payload-where">아래</a>)를 읽고, 이름표에 적힌 JS 파일(Button 코드)을 받는다. Badge 코드는 받지 않는다.
               설계도에 Badge는 이미 <code>&lt;span&gt;</code> 결과로만 있기 때문이다.
             </li>
             <li>
@@ -448,6 +453,265 @@ curl -s -L -D - -H "RSC: 1" http://127.0.0.1:3100/probe-b</code></pre>
               2단계(SSR)는 <strong>첫 화면을 빨리 보여 주기 위한 단계</strong>라서 처음 열 때만 한다. 1단계(Server
               Component)는 처음 열 때든 링크로 이동할 때든 늘 한다. 서버에서 데이터를 읽어 화면을 정하는 일이 이 단계이기
               때문이다.
+            </p>
+          </div>
+        </section>
+
+        <section id="payload">
+          <h2>RSC payload 자세히</h2>
+          <p>
+            지금까지 "설계도"라고 부른 것이 <strong>RSC payload</strong>다. RSC는 React Server Components, payload는 "실어
+            보내는 내용물"이라는 뜻이다.
+          </p>
+          <div class="callout">
+            <p>
+              RSC payload는 <strong>1단계(Server Component 단계)가 만든 컴포넌트 트리를, 브라우저로 보낼 수 있게 글자로 적은
+              것</strong>이다. 2단계(SSR)는 이것을 받아 HTML로 바꾸고, 브라우저의 React는 이것을 읽어 하이드레이션하거나 화면을
+              바꾼다.
+            </p>
+          </div>
+
+          <h3>무엇이 들어 있나</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>들어 있는 것</th>
+                  <th>실험 페이지에서 본 모습</th>
+                  <th>설계도 비유</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>실행이 끝난 Server Component의 결과</td>
+                  <td><code>["$","span",null,{"className":"…","children":"서버용 배지"}]</code></td>
+                  <td>이미 완성된 부분</td>
+                </tr>
+                <tr>
+                  <td>Client Component를 가리키는 이름표</td>
+                  <td><code>a:I[86223,[…JS 파일들],"Button"]</code></td>
+                  <td>"OO업체 담당" 쪽지</td>
+                </tr>
+                <tr>
+                  <td>그 자리에 넘길 props</td>
+                  <td><code>["$","$La",null,{"variant":"secondary",…}]</code></td>
+                  <td>쪽지에 적힌 설치 사양</td>
+                </tr>
+                <tr>
+                  <td>미리 받아 둘 자원</td>
+                  <td><code>:HL["/_next/static/chunks/…css","style"]</code>, 글꼴 파일</td>
+                  <td>미리 주문할 자재 목록</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            Server Component의 <strong>코드</strong>는 들어 있지 않다. 실행 결과만 들어 있다. Client Component의 코드도 들어 있지
+            않다. 코드가 든 JS 파일의 위치만 이름표에 적혀 있다.
+          </p>
+
+          <h3>형식: 줄마다 번호가 붙는다</h3>
+          <p>RSC payload는 한 덩어리 JSON이 아니라 <code>번호:값</code> 꼴의 줄이 이어진 것이다.</p>
+          <pre><code>1:"$Sreact.fragment"
+2:"/_next/static/chunks/2qj-s9lpzec8-.js"
+a:I[86223,["$2","$9"],"Button"]
+:HL["/_next/static/chunks/1hq86fhdfh4j3.css","style"]
+0:{…페이지 트리…}</code></pre>
+          <p>자주 보이는 표시는 이렇다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>표시</th>
+                  <th>뜻</th>
+                  <th>예</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>["$", 종류, key, props]</code></td>
+                  <td>요소 하나. JSX 하나에 해당한다</td>
+                  <td><code>["$","main",null,{"children":[…]}]</code></td>
+                </tr>
+                <tr>
+                  <td><code>I[…]</code></td>
+                  <td>Client Component 이름표 (모듈 번호, JS 파일들, export 이름)</td>
+                  <td><code>a:I[86223,[…],"Button"]</code></td>
+                </tr>
+                <tr>
+                  <td><code>"$L번호"</code></td>
+                  <td>"<code>번호</code> 줄을 여기 넣어라". 이름표 줄일 수도 있고, 아직 도착하지 않은 줄일 수도 있다</td>
+                  <td><code>"$La"</code>, <code>"$L15"</code></td>
+                </tr>
+                <tr>
+                  <td><code>"$S…"</code></td>
+                  <td>React가 쓰는 특별한 기호</td>
+                  <td><code>"$Sreact.fragment"</code>, <code>"$Sreact.suspense"</code></td>
+                </tr>
+                <tr>
+                  <td><code>"$번호"</code></td>
+                  <td>다른 줄의 값을 가져다 쓴다 (같은 글자를 반복하지 않으려고)</td>
+                  <td><code>["$2","$9"]</code>는 2번, 9번 줄의 JS 파일 주소</td>
+                </tr>
+                <tr>
+                  <td><code>:HL[…]</code></td>
+                  <td>미리 받아 둘 자원 힌트. 브라우저가 CSS와 글꼴을 일찍 받기 시작하게 한다</td>
+                  <td><code>:HL["/…css","style"]</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout warn">
+            <p>
+              이 형식은 React 내부 규칙이라 버전에 따라 바뀔 수 있다. 공부하거나 디버깅할 때 읽는 용도이고, 앱 코드에서 직접
+              읽거나 만들면 안 된다.
+            </p>
+          </div>
+
+          <h3 id="payload-where">어디에 실려 오나</h3>
+          <p>같은 RSC payload가 상황에 따라 세 곳에 나타난다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>곳</th>
+                  <th>언제</th>
+                  <th>모습</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>.next/server/app/*.rsc</code> 파일</td>
+                  <td>정적 페이지를 빌드할 때</td>
+                  <td>1단계 결과를 그대로 저장한 파일</td>
+                </tr>
+                <tr>
+                  <td>HTML 안의 <code>&lt;script&gt;</code></td>
+                  <td>페이지 열기 요청</td>
+                  <td><code>self.__next_f.push([1,"1:…\n2:…"])</code></td>
+                </tr>
+                <tr>
+                  <td><code>?_rsc=…</code> 응답</td>
+                  <td>링크 이동 요청, 미리 받기</td>
+                  <td>Content-Type <code>text/x-component</code>. 줄들 그대로</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            빌드된 <code>_not-found.html</code>을 열어 보면 <code>&lt;script&gt;self.__next_f.push([1,"1:\"$Sreact.fragment\"\n2:…"])&lt;/script&gt;</code>
+            같은 태그가 4개 있다. 안에 든 <code>1:</code>, <code>2:</code>, <code>3:I[…]</code> 줄이 같은 페이지의
+            <code>_not-found.rsc</code> 내용과 같다. 그래서 페이지를 열 때 브라우저가 받는 것은 두 가지다.
+          </p>
+          <ul>
+            <li><strong>HTML:</strong> 브라우저가 바로 그리는 용도 (2단계 결과)</li>
+            <li><strong>HTML 안에 실린 RSC payload:</strong> 하이드레이션 때 React가 읽는 용도 (1단계 결과)</li>
+          </ul>
+          <p>
+            HTML만으로는 어느 <code>&lt;button&gt;</code>이 어떤 Client Component인지, props가 무엇이었는지 알 수 없다. React는
+            payload의 이름표와 props를 보고 Button JS를 받아, 이미 그려진 HTML과 맞춰 이벤트를 붙인다.
+          </p>
+
+          <h3>스트리밍: 준비된 줄부터 보낸다</h3>
+          <p>
+            줄 단위 형식이라 다 만들 때까지 기다리지 않고 준비된 줄부터 보낼 수 있다. 느린 Server Component를
+            <code>&lt;Suspense&gt;</code>로 감싼 동적 페이지로 확인했다(실험 뒤 지웠다).
+          </p>
+          <pre><code class="language-tsx">async function Slow() {
+  await new Promise((resolve) =&gt; setTimeout(resolve, 2000)); // 느린 데이터 읽기 흉내
+  return &lt;Badge tone="success"&gt;2초 뒤 도착&lt;/Badge&gt;;
+}
+
+export default async function ProbeStream() {
+  await connection();
+  return (
+    &lt;main&gt;
+      &lt;Badge tone="primary"&gt;바로 보이는 배지&lt;/Badge&gt;
+      &lt;Button variant="secondary"&gt;클라이언트 버튼&lt;/Button&gt;
+      &lt;Suspense fallback={&lt;p&gt;불러오는 중…&lt;/p&gt;}&gt;
+        &lt;Slow /&gt;
+      &lt;/Suspense&gt;
+    &lt;/main&gt;
+  );
+}</code></pre>
+          <p>응답이 조각으로 도착하는 시각을 쟀다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>요청</th>
+                  <th>0.0초에 온 조각</th>
+                  <th>2.0초에 온 조각</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>링크 이동 (<code>text/x-component</code>)</td>
+                  <td>4,288바이트. 바로 보이는 배지, 버튼 이름표, "불러오는 중…"</td>
+                  <td>185바이트. "2초 뒤 도착" 한 줄</td>
+                </tr>
+                <tr>
+                  <td>페이지 열기 (<code>text/html</code>)</td>
+                  <td>바로 보이는 배지, 버튼 HTML, "불러오는 중…"</td>
+                  <td>"2초 뒤 도착"의 payload 줄과 HTML 조각</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>먼저 온 조각에서 Suspense 부분은 이렇게 생겼다.</p>
+          <pre><code>b:"$Sreact.suspense"
+…
+["$","$b",null,{"fallback":["$","p",null,{"children":"불러오는 중…"}],"children":"$L15"}]</code></pre>
+          <ol class="steps blue">
+            <li>
+              <strong>먼저 보내기</strong>
+              <code>$b</code>는 Suspense다. <code>fallback</code>("불러오는 중…")은 바로 적고, <code>children</code>에는 아직 없는
+              15번 줄을 가리키는 <code>"$L15"</code>만 적어 보낸다.
+            </li>
+            <li>
+              <strong>나중에 채우기</strong>
+              2초 뒤 <code>15:["$","span",null,{…,"children":"2초 뒤 도착"}]</code> 한 줄이 따로 온다. React는 15번 줄이
+              도착하면 "불러오는 중…" 자리를 이 내용으로 바꾼다.
+            </li>
+            <li>
+              <strong>HTML도 같은 방식</strong>
+              페이지 열기 요청에서도 2초 뒤 조각에 <code>self.__next_f.push([1,"16:[…2초 뒤 도착…]"])</code>와 함께
+              <code>&lt;div hidden id="S:0"&gt;</code>에 담긴 HTML 조각이 왔다. 숨겨서 보낸 HTML을 "불러오는 중…" 자리에 끼워
+              넣는 방식이다.
+            </li>
+          </ol>
+          <p>
+            덕분에 느린 데이터 하나 때문에 화면 전체가 기다리지 않는다. 빠른 부분은 0초에 보이고, 느린 부분만 나중에 채워진다.
+          </p>
+
+          <h3>담을 수 있는 것과 없는 것</h3>
+          <p>RSC payload는 글자라서 글자로 적을 수 있는 값만 담긴다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Client Component에 넘기는 props</th>
+                  <th>payload에</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>문자열, 숫자, 불리언, null, 배열, 일반 객체, JSX 요소</td>
+                  <td><span class="badge green">담긴다</span></td>
+                </tr>
+                <tr>
+                  <td>함수 (<code>onClick={() =&gt; …}</code>)</td>
+                  <td><span class="badge blue">못 담는다</span> 오류가 난다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout warn">
+            <p>
+              Client Component에 넘긴 props는 payload에 <strong>글자 그대로</strong> 실린다. 실험에서도
+              <code>"variant":"secondary"</code>가 그대로 보였다. 브라우저 개발자 도구에서 누구나 볼 수 있으니, 비밀번호나 내부용
+              필드가 든 객체를 통째로 넘기지 말고 화면에 필요한 값만 골라 넘긴다. 반대로 Server Component 안에서만 쓰고 화면에
+              그리지 않은 값은 payload에 실리지 않는다.
             </p>
           </div>
         </section>
@@ -760,6 +1024,28 @@ export default async function ProbeDyn() {
               원인은 빌드의 코드 준비에서 생긴다. 'use client' 파일 안에서 만든 Drawer 객체가 서버용 코드에서 이름표 하나로
               바뀌어 Root 속성이 없어진다. 오류는 1단계에서 &lt;Drawer.Root&gt;를 렌더링할 때 드러난다. 정적 페이지면 빌드 중에
               실패하고, 동적 페이지면 빌드는 통과하고 요청 때 500이 난다.
+            </p>
+          </details>
+          <details>
+            <summary>9. RSC payload에는 무엇이 들어 있고, 무엇이 들어 있지 않나?</summary>
+            <p>
+              실행이 끝난 Server Component의 결과(요소), Client Component의 이름표와 그 props, 미리 받을 자원 힌트가 들어 있다.
+              Server Component의 코드와 Client Component의 코드는 들어 있지 않다. Client Component 코드는 이름표에 적힌 JS
+              파일에 따로 있다.
+            </p>
+          </details>
+          <details>
+            <summary>10. 페이지를 처음 열 때 RSC payload는 어디에 있나? 왜 HTML과 함께 오나?</summary>
+            <p>
+              HTML 안의 &lt;script&gt;self.__next_f.push(…)&lt;/script&gt;에 실려 온다. HTML만으로는 어느 요소가 어떤 Client
+              Component이고 props가 무엇인지 알 수 없어서, 하이드레이션 때 React가 이 payload를 읽는다.
+            </p>
+          </details>
+          <details>
+            <summary>11. &lt;Suspense&gt;로 감싼 느린 Server Component는 payload에서 어떻게 보내지나?</summary>
+            <p>
+              먼저 보내는 조각에 fallback과 함께 아직 없는 줄을 가리키는 "$L15" 같은 표시만 적는다. 데이터가 준비되면 15번 줄만
+              따로 보내고, React가 fallback 자리를 그 내용으로 바꾼다. 실험에서는 0초에 4,288바이트, 2초 뒤에 185바이트가 왔다.
             </p>
           </details>
         </section>
