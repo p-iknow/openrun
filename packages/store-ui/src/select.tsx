@@ -99,8 +99,10 @@ export function Select({
                   className={cn(
                     'flex cursor-default items-center justify-between gap-lg rounded-badge px-md py-sm text-body text-text outline-none select-none',
                     // 키보드와 마우스 모두 data-highlighted로 지금 가리키는 항목을 보인다.
-                    'data-highlighted:bg-surface-muted',
-                    'data-selected:font-semibold data-selected:text-primary-strong',
+                    // 연한 바탕은 흰 팝업과 대비가 약하므로, 글자색을 파랑으로 바꿔 위치를 드러낸다.
+                    'data-highlighted:bg-primary-subtle data-highlighted:text-primary-strong',
+                    // 고른 항목은 글자색을 바꾸지 않고 굵기와 체크 표시로만 구분해, 가리킨 항목과 겹치지 않게 한다.
+                    'data-selected:font-semibold',
                   )}
                 >
                   <BaseSelect.ItemText>{item.label}</BaseSelect.ItemText>
