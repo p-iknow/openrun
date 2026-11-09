@@ -66,30 +66,40 @@ export function ToggleGroup({
             value={item.value}
             disabled={item.disabled}
             className={cn(
-              'group inline-flex h-[40px] items-center gap-xs rounded-full bg-surface-muted px-lg text-body-sm font-semibold text-text-secondary transition-colors select-none',
+              // 고르기 전후로 칩 크기가 그대로이도록 테두리는 두 상태 모두 1px로 두고 색만 바꾼다.
+              'inline-flex h-[40px] items-center rounded-full border border-border-strong bg-surface px-lg text-body-sm text-text transition-colors select-none',
               // 테두리 색은 평소에 정해 둔다. 포커스 때 정하면 transition-colors가 깜빡인다.
               'outline-primary focus-visible:outline-2 focus-visible:outline-offset-2',
-              'hover:not-data-disabled:not-data-pressed:bg-border',
-              // primary(blue500)는 primary-subtle 위에서 대비가 약 3.3:1이라, 작은 글자용 primary-strong을 쓴다.
-              'data-pressed:bg-primary-subtle data-pressed:not-data-disabled:text-primary-strong',
-              // 고른 칩이 비활성이어도 바탕은 연한 파랑을 유지해, 고른 상태였음을 알 수 있게 한다.
-              'data-disabled:cursor-not-allowed data-disabled:text-text-tertiary',
+              'hover:not-data-disabled:not-data-pressed:bg-surface-muted',
+              // 색만으로 구분하지 않도록 고른 칩은 테두리와 글자 굵기도 바꾼다.
+              // primary(blue500)는 primary-subtle 위에서 대비가 약 3.3:1이라, 글자는 작은 글자용 primary-strong을 쓴다.
+              'data-pressed:border-primary data-pressed:bg-primary-subtle data-pressed:font-bold data-pressed:not-data-disabled:text-primary-strong',
+              // 고른 칩이 비활성이어도 테두리와 바탕은 파랑을 유지해, 고른 상태였음을 알 수 있게 한다.
+              'data-disabled:cursor-not-allowed data-disabled:text-text-tertiary data-disabled:not-data-pressed:bg-surface-muted',
             )}
           >
-            {/* 색만으로 구분하지 않도록 고른 칩에는 체크 표시를 둔다. */}
-            <svg
-              aria-hidden="true"
-              viewBox="0 0 20 20"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="hidden size-[16px] group-data-pressed:block"
-            >
-              <path d="M4.5 10.5l3.5 3.5 7.5-8" />
-            </svg>
-            {item.label}
+            {/*
+              고르면 글자가 굵어지며 폭이 달라져, 칩 크기가 바뀌고 옆 칩이 밀린다.
+              같은 칸에 보통 글자와 굵은 글자를 보이지 않게 겹쳐 두어, 칩 폭을 늘 둘 중 넓은 쪽으로 잡는다.
+              한글은 굵은 글자가 더 좁을 때도 있어 둘 다 둔다.
+            */}
+            <span className="grid">
+              <span
+                aria-hidden="true"
+                className="invisible col-start-1 row-start-1 font-normal"
+              >
+                {item.label}
+              </span>
+              <span
+                aria-hidden="true"
+                className="invisible col-start-1 row-start-1 font-bold"
+              >
+                {item.label}
+              </span>
+              <span className="col-start-1 row-start-1 text-center">
+                {item.label}
+              </span>
+            </span>
           </Toggle>
         ))}
       </BaseToggleGroup>
