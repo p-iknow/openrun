@@ -59,7 +59,6 @@ export function Select({
           className={cn(
             'flex h-[52px] w-full items-center justify-between gap-sm rounded-button border border-border-input bg-surface px-lg text-left text-body text-text transition-colors select-none',
             'hover:not-data-disabled:not-data-popup-open:border-border-input-hover',
-            // 키보드 포커스와 열린 상태는 TextField의 포커스처럼 2px 파란 테두리로 그린다(1px 테두리 + 안쪽 1px outline).
             // outline 색은 평소에 정해 둔다. 포커스 때 정하면 transition-colors가 글자색(검정)에서 파랑으로 넘어가며 깜빡인다.
             'outline-primary focus-visible:border-primary focus-visible:outline-1 focus-visible:-outline-offset-2',
             'data-popup-open:border-primary data-popup-open:outline-1 data-popup-open:-outline-offset-2',
