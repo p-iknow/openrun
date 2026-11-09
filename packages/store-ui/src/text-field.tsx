@@ -55,7 +55,8 @@ export function TextField({
           'placeholder:text-text-secondary',
           // 입력 칸은 마우스로 눌러도 어디에 쓰는지 보여야 하므로 focus-visible이 아니라 focus에 테두리를 그린다.
           // 안쪽으로 그려 옆 요소와 겹치지 않게 하고, 바탕을 흰색으로 바꿔 쓰는 중임을 드러낸다.
-          'focus:bg-surface focus:outline-2 focus:-outline-offset-2 focus:outline-primary',
+          // 테두리 색은 평소에 정해 둔다. 포커스 때 정하면 transition-colors가 글자색(검정)에서 파랑으로 넘어가며 깜빡인다.
+          'outline-primary focus:bg-surface focus:outline-2 focus:-outline-offset-2',
           'data-disabled:cursor-not-allowed data-disabled:text-text-tertiary',
         )}
       />

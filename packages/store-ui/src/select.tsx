@@ -59,7 +59,8 @@ export function Select({
           className={cn(
             // 방향 A: TextField와 같은 회색 면, 높이, 모서리를 쓴다.
             'flex h-[52px] w-full items-center justify-between gap-sm rounded-button bg-surface-muted px-lg text-left text-body text-text transition-colors select-none',
-            'focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary',
+            // 테두리 색은 평소에 정해 둔다. 포커스 때 정하면 transition-colors가 글자색(검정)에서 파랑으로 넘어가며 깜빡인다.
+            'outline-primary focus-visible:outline-2 focus-visible:-outline-offset-2',
             'hover:not-data-disabled:bg-border data-popup-open:bg-border',
             // 회색 면 위에서 대비 4.5:1을 넘는 글자 토큰은 text-secondary뿐이라 placeholder도 이 색을 쓴다.
             'data-placeholder:text-text-secondary',
