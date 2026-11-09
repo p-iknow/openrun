@@ -123,6 +123,8 @@
   --color-primary-subtle: var(--blue-50);
   /* `-subtle` 바탕 위의 작은 글자용. 대비 4.5:1 이상(WCAG AA)을 맞춘다. */
   --color-primary-strong: var(--blue-700);
+  /* `primary` 바탕 위의 글자와 아이콘. */
+  --color-on-primary: #ffffff;
 
   --color-text: var(--grey-900);
   --color-text-secondary: var(--grey-700);
