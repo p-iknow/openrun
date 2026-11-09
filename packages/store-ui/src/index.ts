@@ -20,4 +20,14 @@ export type { SelectItem, SelectProps } from './select.js';
 export { ToggleGroup } from './toggle-group.js';
 export type { ToggleGroupItem, ToggleGroupProps } from './toggle-group.js';
 export { Drawer } from './drawer.js';
-export type { DrawerProps } from './drawer.js';
+export type {
+  DrawerBodyProps,
+  DrawerCloseProps,
+  DrawerDescriptionProps,
+  DrawerFooterProps,
+  DrawerHeaderProps,
+  DrawerPopupProps,
+  DrawerRootProps,
+  DrawerTitleProps,
+  DrawerTriggerProps,
+} from './drawer.js';
