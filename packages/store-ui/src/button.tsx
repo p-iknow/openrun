@@ -42,7 +42,7 @@ export interface ButtonProps {
   type?: 'button' | 'submit' | 'reset';
   disabled?: boolean;
   /**
-   * 요청을 기다리는 중임을 보여 준다. 라벨 자리에 스피너를 겹쳐 폭을 유지하고, 누를 수 없지만 포커스는 잃지 않는다.
+   * 요청을 기다리는 중임을 보여 준다. 라벨 자리에 점 세 개를 겹쳐 폭을 유지하고, 누를 수 없지만 포커스는 잃지 않는다.
    * `disabled`와 함께 주면 `disabled`가 우선한다.
    */
   loading?: boolean;
