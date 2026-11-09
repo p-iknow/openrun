@@ -1,7 +1,10 @@
+import { useRender } from '@base-ui/react/use-render';
+import type { ReactElement, ReactNode } from 'react';
 import { cn } from './cn.js';
 
-// 서버용 컴포넌트다. 훅, 상태, 브라우저 API를 쓰지 않는다.
-// 이동은 일반 <a href>로 하므로 자바스크립트 없이도 동작하고, Next.js에 의존하지 않는다.
+// 서버용 컴포넌트다. 상태와 브라우저 API를 쓰지 않는다.
+// 모양과 접근성 속성만 맡고, 어떤 요소로 어디로 갈지(<a>, Next.js의 Link, 주소 규칙)는 쓰는 쪽이 render로 넘긴다.
+// useRender는 Base UI의 render 방식을 그대로 쓰기 위한 것이다. 서버에서는 ref를 합치는 훅을 건너뛰므로 Server Component에서 그려진다.
 // Tailwind가 dist에서 클래스를 찾을 수 있도록 클래스 이름을 문자열 그대로 둔다.
 
 const MAX_PAGE_LINKS = 5;
@@ -12,42 +15,27 @@ const linkClass = 'text-text-secondary hover:bg-surface-muted';
 const currentClass = 'bg-primary text-on-primary hover:bg-primary-hover';
 const disabledClass = 'cursor-not-allowed text-text-tertiary';
 
-export interface PaginationProps {
-  /** 1부터 센다. */
-  currentPage: number;
-  totalPages: number;
-  /** 링크의 바탕 주소. 이미 있는 쿼리(필터 등)는 유지하고 페이지 쿼리만 바꾼다. 예: `/shows?genre=musical`. */
-  baseUrl: string;
-  /** 페이지 번호를 담을 쿼리 이름. 기본은 `page`. */
-  queryName?: string;
+export interface PaginationModel {
+  /** 이전 페이지 번호. 첫 페이지면 없다. */
+  previousPage: number | undefined;
+  /** 보여 줄 번호. 현재 페이지 주변 최대 5개. */
+  pages: number[];
+  /** 다음 페이지 번호. 마지막 페이지면 없다. */
+  nextPage: number | undefined;
 }
 
-// 기본 주소의 경로와 해시는 그대로 두고 쿼리에서 페이지 값만 바꾼다.
-// 상대 주소도 받으므로 URL 대신 문자열을 나눠 URLSearchParams로 다룬다.
-function pageHref({
-  baseUrl,
-  queryName,
-  page,
-}: {
-  baseUrl: string;
-  queryName: string;
-  page: number;
-}) {
-  const [beforeHash = '', hash] = baseUrl.split(/#(.*)/s);
-  const [path = '', query] = beforeHash.split(/\?(.*)/s);
-  const params = new URLSearchParams(query);
-  params.set(queryName, String(page));
-  return `${path}?${params.toString()}${hash === undefined ? '' : `#${hash}`}`;
-}
-
-// 현재 페이지를 가운데에 두되, 끝에 닿으면 반대쪽으로 밀어 최대 5개를 채운다.
-function visiblePages({
+/**
+ * 번호 줄에 무엇을 보여 줄지 계산한다. 현재 페이지를 가운데에 두되, 끝에 닿으면 반대쪽으로 밀어 최대 5개를 채운다.
+ * 주소는 만들지 않는다. 결과로 쓰는 쪽이 링크를 만들어 각 컴포넌트의 `render`에 넘긴다.
+ */
+export function getPagination({
   currentPage,
   totalPages,
 }: {
+  /** 1부터 센다. */
   currentPage: number;
   totalPages: number;
-}) {
+}): PaginationModel {
   const count = Math.max(0, Math.min(MAX_PAGE_LINKS, totalPages));
   const first = Math.max(
     1,
@@ -56,38 +44,76 @@ function visiblePages({
       totalPages - count + 1,
     ),
   );
-  return Array.from({ length: count }, (_, i) => first + i);
+  return {
+    previousPage: currentPage > 1 ? currentPage - 1 : undefined,
+    pages: Array.from({ length: count }, (_, i) => first + i),
+    nextPage: currentPage < totalPages ? currentPage + 1 : undefined,
+  };
+}
+
+export interface PaginationRootProps {
+  /** `Pagination.Previous`, `Pagination.Link`, `Pagination.Next`. */
+  children: ReactNode;
+}
+
+function PaginationRoot({ children }: PaginationRootProps) {
+  return (
+    <nav aria-label="페이지">
+      <ul className="flex items-center justify-center gap-xs">{children}</ul>
+    </nav>
+  );
+}
+
+export interface PaginationLinkProps {
+  /** 이동할 링크 요소. 예: `<a href="/shows?page=2" />`, `<Link href="/shows?page=2" />`. 요소의 속성은 그대로 남고, 모양과 `aria-current`가 더해진다. */
+  render: ReactElement;
+  /** 현재 페이지이면 `primary`로 채우고 `aria-current="page"`를 붙인다. */
+  current?: boolean;
+  children: ReactNode;
+}
+
+function PaginationLink({
+  render,
+  current = false,
+  children,
+}: PaginationLinkProps) {
+  const element = useRender({
+    render,
+    defaultTagName: 'a',
+    props: {
+      'aria-current': current ? 'page' : undefined,
+      className: cn(itemClass, current ? currentClass : linkClass),
+      children,
+    },
+  });
+  return <li>{element}</li>;
 }
 
 // 이전과 다음은 이 표 하나로만 다르다.
 const steps = {
-  previous: { offset: -1, label: '이전 페이지', iconPath: 'M12 5l-5 5 5 5' },
-  next: { offset: 1, label: '다음 페이지', iconPath: 'M8 5l5 5-5 5' },
+  previous: { label: '이전 페이지', iconPath: 'M12 5l-5 5 5 5' },
+  next: { label: '다음 페이지', iconPath: 'M8 5l5 5-5 5' },
 } as const;
 
-type StepDirection = keyof typeof steps;
+export interface PaginationStepProps {
+  /** 이동할 링크 요소. 갈 곳이 없으면(첫 페이지의 이전, 마지막 페이지의 다음) 생략하고, 그러면 비활성으로 그린다. */
+  render?: ReactElement | undefined;
+}
 
-export function Pagination({
-  currentPage,
-  totalPages,
-  baseUrl,
-  queryName = 'page',
-}: PaginationProps) {
-  const href = (page: number) => pageHref({ baseUrl, queryName, page });
-
-  const stepLink = (direction: StepDirection) => {
-    const { offset, label, iconPath } = steps[direction];
-    const page = currentPage + offset;
-    // 갈 곳이 없으면 href를 빼서 이동과 포커스를 막고, role과 aria-disabled로 비활성 링크임을 알린다.
-    const disabled = page < 1 || page > totalPages;
-    return (
-      <a
-        href={disabled ? undefined : href(page)}
-        role={disabled ? 'link' : undefined}
-        aria-disabled={disabled || undefined}
-        aria-label={label}
-        className={cn(itemClass, disabled ? disabledClass : linkClass)}
-      >
+function PaginationStep({
+  direction,
+  render,
+}: PaginationStepProps & { direction: keyof typeof steps }) {
+  const { label, iconPath } = steps[direction];
+  const disabled = render === undefined;
+  const element = useRender({
+    // 갈 곳이 없으면 href 없는 <a>로 그려 이동과 포커스를 막고, role과 aria-disabled로 비활성 링크임을 알린다.
+    render: disabled ? <a role="link" aria-disabled="true" /> : render,
+    defaultTagName: 'a',
+    props: {
+      'aria-label': label,
+      className: cn(itemClass, disabled ? disabledClass : linkClass),
+      children: (
         <svg
           aria-hidden="true"
           viewBox="0 0 20 20"
@@ -100,30 +126,27 @@ export function Pagination({
         >
           <path d={iconPath} />
         </svg>
-      </a>
-    );
-  };
-
-  return (
-    <nav aria-label="페이지">
-      <ul className="flex items-center justify-center gap-xs">
-        <li>{stepLink('previous')}</li>
-        {visiblePages({ currentPage, totalPages }).map((page) => {
-          const isCurrent = page === currentPage;
-          return (
-            <li key={page}>
-              <a
-                href={href(page)}
-                aria-current={isCurrent ? 'page' : undefined}
-                className={cn(itemClass, isCurrent ? currentClass : linkClass)}
-              >
-                {page}
-              </a>
-            </li>
-          );
-        })}
-        <li>{stepLink('next')}</li>
-      </ul>
-    </nav>
-  );
+      ),
+    },
+  });
+  return <li>{element}</li>;
 }
+
+function PaginationPrevious(props: PaginationStepProps) {
+  return <PaginationStep direction="previous" {...props} />;
+}
+
+function PaginationNext(props: PaginationStepProps) {
+  return <PaginationStep direction="next" {...props} />;
+}
+
+/**
+ * Base UI처럼 부품을 조립해 쓴다.
+ * 모두 서버용이라 Server Component에서 `Pagination.Link`처럼 점으로 꺼내 써도 된다(클라이언트 컴포넌트였다면 점 접근이 서버·클라이언트 경계에서 깨진다).
+ */
+export const Pagination = {
+  Root: PaginationRoot,
+  Link: PaginationLink,
+  Previous: PaginationPrevious,
+  Next: PaginationNext,
+};

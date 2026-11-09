@@ -1,23 +1,66 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Pagination } from './pagination.js';
+import { getPagination, Pagination } from './pagination.js';
+
+// 쓰는 쪽이 조립하는 모습을 그대로 보여 준다. 주소 규칙은 쓰는 쪽(여기서는 이 스토리)이 정한다.
+function PaginationExample({
+  currentPage,
+  totalPages,
+}: {
+  currentPage: number;
+  totalPages: number;
+}) {
+  const { previousPage, pages, nextPage } = getPagination({
+    currentPage,
+    totalPages,
+  });
+  const href = (page: number) => `?page=${page}`;
+  return (
+    <Pagination.Root>
+      <Pagination.Previous
+        render={previousPage ? <a href={href(previousPage)} /> : undefined}
+      />
+      {pages.map((page) => (
+        <Pagination.Link
+          key={page}
+          current={page === currentPage}
+          render={<a href={href(page)} />}
+        >
+          {page}
+        </Pagination.Link>
+      ))}
+      <Pagination.Next
+        render={nextPage ? <a href={href(nextPage)} /> : undefined}
+      />
+    </Pagination.Root>
+  );
+}
+
+const usage = `\`\`\`tsx
+const { previousPage, pages, nextPage } = getPagination({ currentPage, totalPages });
+
+<Pagination.Root>
+  <Pagination.Previous render={previousPage ? <Link href={href(previousPage)} /> : undefined} />
+  {pages.map((page) => (
+    <Pagination.Link key={page} current={page === currentPage} render={<Link href={href(page)} />}>
+      {page}
+    </Pagination.Link>
+  ))}
+  <Pagination.Next render={nextPage ? <Link href={href(nextPage)} /> : undefined} />
+</Pagination.Root>
+\`\`\``;
 
 const meta = {
   title: 'Components/Pagination',
-  component: Pagination,
+  component: PaginationExample,
   tags: ['autodocs'],
   parameters: {
     docs: {
       description: {
-        component:
-          '**서버용** 컴포넌트다. 훅을 쓰지 않으므로 Server Component에서 바로 import한다. props는 직렬화할 수 있는 값(현재 페이지, 전체 페이지 수, 기본 주소, 쿼리 이름)만 받고 함수 prop은 받지 않는다. 각 번호는 `<a href>` 링크라서 주소(`?page=`)로 공유할 수 있고 자바스크립트 없이도 이동한다. 기본 주소에 있던 쿼리(필터 등)는 유지한다. 번호는 현재 페이지 주변 최대 5개만 보이고, 현재 페이지는 `primary`로 채우며 `aria-current="page"`를 붙인다. 처음과 끝에서는 이전·다음이 비활성이다. Storybook 안에서 링크를 누르면 실제로 주소가 바뀌므로 모양만 확인한다.',
+        component: `**서버용** 컴포넌트다. Server Component에서 바로 import한다. Base UI처럼 \`Pagination.Root\` 안에 \`Pagination.Previous\`, \`Pagination.Link\`, \`Pagination.Next\`를 조립한다. 모양과 접근성 속성만 맡고, 링크는 쓰는 쪽이 Base UI처럼 \`render\`로 넘긴다. 그래서 \`<a>\`를 쓸지 Next.js의 \`Link\`를 쓸지, 주소를 어떻게 만들지(\`?page=\`, 필터 유지 등)는 쓰는 쪽이 정한다. \`getPagination\`은 현재 페이지 주변 최대 5개 번호와 이전·다음 페이지를 계산만 한다. 현재 페이지는 \`primary\`로 채우고 \`aria-current="page"\`를 붙인다. 이전·다음은 \`render\`를 생략하면 비활성이 된다. Storybook 안에서 링크를 누르면 실제로 주소가 바뀌므로 모양만 확인한다.\n\n${usage}`,
       },
     },
   },
-  args: {
-    baseUrl: '/shows',
-    queryName: 'page',
-  },
-} satisfies Meta<typeof Pagination>;
+} satisfies Meta<typeof PaginationExample>;
 
 export default meta;
 
