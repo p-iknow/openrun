@@ -59,44 +59,83 @@ const groupA = [
 ];
 
 const groupB = [
-  { value: 'b1', label: '진행 중' },
-  { value: 'b2', label: '예정' },
-  { value: 'b3', label: '종료', disabled: true },
+  { value: 'b1', label: '빨강' },
+  { value: 'b2', label: '파랑' },
+  { value: 'b3', label: '초록', disabled: true },
 ];
+
+interface Filters {
+  a: string[];
+  b: string[];
+}
+
+const emptyFilters: Filters = { a: [], b: [] };
 
 /**
  * 모바일 필터 예시. 시트 안에 ToggleGroup 두 개를 넣고, 아래에 초기화와 적용 버튼을 둔다.
+ * 시트는 닫히면 내용을 지우므로, 적용한 값은 시트 밖(실제 화면에서는 주소)에 두고 열 때마다 `defaultValue`로 채운다.
+ * 시트 안에서 고르는 중인 값은 적용을 눌러야 반영되고, 적용 없이 닫으면 버린다.
  * 적용을 누르면 시트를 닫아야 하므로 `open`과 `onOpenChange`로 열림 상태를 제어한다.
- * 초기화는 ToggleGroup을 다시 그려 처음 값으로 되돌린다.
  */
 export const WithToggleGroup: Story = {
   parameters: { controls: { disable: true } },
   args: { triggerLabel: '필터', title: '필터', description: undefined },
   render: function Render(args) {
     const [open, setOpen] = useState(false);
+    const [applied, setApplied] = useState<Filters>({ a: ['a2'], b: [] });
+    const [draft, setDraft] = useState<Filters>(applied);
+    // 초기화할 때 ToggleGroup을 다시 그려 빈 값으로 되돌린다. ToggleGroup은 비제어로만 쓴다.
     const [resetKey, setResetKey] = useState(0);
     return (
-      <Drawer
-        {...args}
-        open={open}
-        onOpenChange={setOpen}
-        footer={
-          <>
-            <Button
-              variant="secondary"
-              onClick={() => setResetKey((k) => k + 1)}
-            >
-              초기화
-            </Button>
-            <Button onClick={() => setOpen(false)}>적용</Button>
-          </>
-        }
-      >
-        <div key={resetKey} className="flex flex-col gap-xl">
-          <ToggleGroup label="분류" items={groupA} defaultValue={['a2']} />
-          <ToggleGroup label="상태" items={groupB} />
-        </div>
-      </Drawer>
+      <div className="flex flex-col items-start gap-md">
+        <Drawer
+          {...args}
+          open={open}
+          onOpenChange={(nextOpen) => {
+            if (nextOpen) setDraft(applied);
+            setOpen(nextOpen);
+          }}
+          footer={
+            <>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setDraft(emptyFilters);
+                  setResetKey((k) => k + 1);
+                }}
+              >
+                초기화
+              </Button>
+              <Button
+                onClick={() => {
+                  setApplied(draft);
+                  setOpen(false);
+                }}
+              >
+                적용
+              </Button>
+            </>
+          }
+        >
+          <div key={resetKey} className="flex flex-col gap-xl">
+            <ToggleGroup
+              label="분류"
+              items={groupA}
+              defaultValue={draft.a}
+              onValueChange={(a) => setDraft((d) => ({ ...d, a }))}
+            />
+            <ToggleGroup
+              label="색"
+              items={groupB}
+              defaultValue={draft.b}
+              onValueChange={(b) => setDraft((d) => ({ ...d, b }))}
+            />
+          </div>
+        </Drawer>
+        <p className="text-body-sm text-text-secondary">
+          적용한 값: {[...applied.a, ...applied.b].join(', ') || '없음'}
+        </p>
+      </div>
     );
   },
 };

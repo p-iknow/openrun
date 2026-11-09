@@ -43,6 +43,7 @@ export function Drawer({
   return (
     <BaseDrawer.Root
       open={open}
+      // Base UI가 두 번째 인자로 주는 eventDetails는 공개 API에 드러내지 않는다.
       onOpenChange={(nextOpen) => onOpenChange?.(nextOpen)}
     >
       <BaseDrawer.Trigger className={buttonVariants({ variant: 'secondary' })}>

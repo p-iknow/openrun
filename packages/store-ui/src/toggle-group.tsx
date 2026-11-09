@@ -11,9 +11,9 @@ import { cn } from './cn.js';
 // Tailwind가 dist에서 클래스를 찾을 수 있도록 클래스 이름을 문자열 그대로 둔다.
 
 export interface ToggleGroupItem {
-  /** `onValueChange`로 받는 값. 예: `musical`. */
+  /** `onValueChange`로 받는 값. 예: `new`. */
   value: string;
-  /** 칩에 보이는 이름. 예: `뮤지컬`. */
+  /** 칩에 보이는 이름. 예: `새 항목`. */
   label: string;
   /** 이 칩만 누를 수 없게 한다. */
   disabled?: boolean;
@@ -54,6 +54,7 @@ export function ToggleGroup({
         multiple
         aria-labelledby={labelId}
         defaultValue={defaultValue}
+        // Base UI가 두 번째 인자로 주는 eventDetails는 공개 API에 드러내지 않는다.
         onValueChange={(nextValue) => onValueChange?.(nextValue)}
         disabled={disabled}
         // 좁은 화면에서는 칩이 다음 줄로 넘어간다.
