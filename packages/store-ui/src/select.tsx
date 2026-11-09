@@ -91,7 +91,7 @@ export function Select({
           sideOffset={4}
           className="z-10 outline-none"
         >
-          <BaseSelect.Popup className="max-h-[var(--available-height)] min-w-[var(--anchor-width)] overflow-y-auto rounded-card bg-surface p-xs shadow-floating outline-none">
+          <BaseSelect.Popup className="max-h-(--available-height) min-w-(--anchor-width) overflow-y-auto rounded-card bg-surface p-xs shadow-floating outline-none">
             <BaseSelect.List>
               {items.map((item) => (
                 <BaseSelect.Item

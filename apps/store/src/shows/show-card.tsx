@@ -16,7 +16,7 @@ function ShowCardFrame({ children }: { children: ReactNode }) {
   return (
     <li className="flex gap-md sm:flex-col sm:gap-sm">
       {/* 포스터는 뒤 티켓에서 넣는다. 그때도 같은 3:4 자리를 차지한다. */}
-      <Skeleton className="aspect-[3/4] w-[96px] shrink-0 sm:w-full" />
+      <Skeleton className="aspect-3/4 w-[96px] shrink-0 sm:w-full" />
       <div className="flex min-w-0 flex-1 flex-col gap-xs">{children}</div>
     </li>
   );

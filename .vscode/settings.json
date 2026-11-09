@@ -1,0 +1,5 @@
+{
+  // 짧은 문법은 oxlint(enforce-canonical-classes)가 검사한다. IntelliSense의 같은 경고는 끄고,
+  // IntelliSense만 하는 h-[16px] → h-lg 같은 토큰 치환 제안도 함께 끈다.
+  "tailwindCSS.lint.suggestCanonicalClasses": "ignore"
+}
