@@ -15,14 +15,16 @@
         <ol>
           <li><a href="#confusing">헷갈리는 두 문장</a></li>
           <li><a href="#overview">한눈에 보기</a></li>
+          <li><a href="#build">먼저: 빌드 때 코드 준비</a></li>
           <li><a href="#page">실험한 페이지</a></li>
-          <li><a href="#rsc">1단계: Server Component 단계</a></li>
+          <li><a href="#rsc">1단계: 설계도 만들기</a></li>
           <li><a href="#read">설계도 읽는 법</a></li>
-          <li><a href="#ssr">2단계: SSR 단계</a></li>
+          <li><a href="#ssr">2단계: HTML 만들기</a></li>
           <li><a href="#hydrate">3단계: 브라우저의 하이드레이션</a></li>
           <li><a href="#navigate">링크로 이동할 때는 2단계가 없다</a></li>
           <li><a href="#when">언제 하나: 빌드 때와 요청 때</a></li>
           <li><a href="#answer">두 문장 다시 보기</a></li>
+          <li><a href="#cause">문제는 빌드 때 생기고, 터지는 때는 다르다</a></li>
           <li><a href="#mistakes">자주 하는 오해</a></li>
         </ol>
         <strong>마무리</strong>
@@ -36,10 +38,11 @@
       <main>
         <h1>Server Component 단계와 SSR 단계</h1>
         <p class="lead">
-          Next는 페이지 하나를 만들 때 서버에서 일을 두 번에 나눠 한다. 먼저 Server Component만 실행해 화면의 설계도를
-          만들고(Server Component 단계), 그 설계도로 첫 화면 HTML을 만든다(SSR 단계). 그 뒤 브라우저가 HTML에 이벤트를
-          연결한다(하이드레이션). 스토어 앱에 임시 페이지를 만들어 단계마다 나오는 결과물을 직접 꺼내 보고, 링크로 이동할
-          때는 무엇이 달라지는지까지 정리한다.
+          Next 앱에서 컴포넌트가 화면이 되기까지는 네 가지 일이 있다. 빌드할 때 코드를 준비하고(코드 준비), 서버에서
+          Server Component만 실행해 화면의 설계도를 만들고(1단계, Server Component 단계), 그 설계도로 첫 화면 HTML을 만든
+          뒤(2단계, SSR 단계), 브라우저가 HTML에 이벤트를 연결한다(3단계, 하이드레이션). 스토어 앱에 임시 페이지를 만들어
+          단계마다 나오는 결과물을 직접 꺼내 보고, 링크로 이동할 때와 정적·동적 페이지에서 무엇이 달라지는지,
+          <code>Drawer.Root</code> 문제가 실제로 어느 때 생기는지까지 정리한다.
         </p>
 
         <section id="confusing">
@@ -59,8 +62,10 @@
           </ol>
           <div class="callout">
             <p>
-              둘 다 맞다. 두 문장이 말하는 "서버"가 서로 다른 단계다. 1번은 <strong>Server Component 단계</strong>, 2번은
-              <strong>SSR 단계</strong> 이야기다. 이 문서는 이 두 단계를 구분하는 것이 목표다.
+              둘 다 맞다. 두 문장이 말하는 "서버"가 서로 다른 단계다. 1번은 <strong>1단계(설계도 만들기, Server Component
+              단계)</strong>, 2번은 <strong>2단계(HTML 만들기, SSR 단계)</strong> 이야기다. 그리고 1번에서 "이름표 붙은 가짜"를
+              만들어 두는 일은 그보다 앞서 <strong>빌드할 때(코드 준비)</strong> 일어난다. 이 문서는 이 단계들을 구분하는 것이
+              목표다.
             </p>
           </div>
         </section>
@@ -69,17 +74,24 @@
           <h2>한눈에 보기</h2>
           <div class="flow">
             <div class="lane blue">
-              <div class="lane-title">처음 열 때 (주소창, 새로고침)</div>
+              <div class="lane-title">빌드할 때 (<code>next build</code>)</div>
               <ol class="chain">
-                <li><span>1. Server Component 단계 → 설계도</span></li>
-                <li><span>2. SSR 단계 → 첫 화면 HTML</span></li>
-                <li><span>3. 브라우저 하이드레이션 → 움직이는 화면</span></li>
+                <li><span>코드 준비: 'use client' 파일을 이름표로 바꿔 끼움</span></li>
+                <li><span>정적 페이지만: 1단계·2단계를 미리 해서 파일로 저장</span></li>
               </ol>
             </div>
             <div class="lane green">
-              <div class="lane-title">링크로 다른 페이지로 갈 때</div>
+              <div class="lane-title">페이지 열기 요청 (주소창, 새로고침)</div>
               <ol class="chain">
-                <li><span>1. Server Component 단계 → 설계도</span></li>
+                <li><span>1단계: 설계도 만들기</span></li>
+                <li><span>2단계: HTML 만들기</span></li>
+                <li><span>3단계: 브라우저 하이드레이션</span></li>
+              </ol>
+            </div>
+            <div class="lane green">
+              <div class="lane-title">링크 이동 요청 (<code>&lt;Link&gt;</code> 클릭)</div>
+              <ol class="chain">
+                <li><span>1단계: 설계도 만들기</span></li>
                 <li><span>브라우저가 설계도로 바로 그림</span></li>
               </ol>
             </div>
@@ -88,35 +100,40 @@
             <table>
               <thead>
                 <tr>
-                  <th></th>
-                  <th>1단계: Server Component</th>
-                  <th>2단계: SSR</th>
-                  <th>3단계: 하이드레이션</th>
+                  <th>단계</th>
+                  <th>언제</th>
+                  <th>무엇을 실행하나</th>
+                  <th><code>'use client'</code> 파일을</th>
+                  <th>결과물</th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
-                  <td>어디서</td>
-                  <td><span class="badge blue">서버</span></td>
-                  <td><span class="badge blue">서버</span></td>
-                  <td><span class="badge green">브라우저</span></td>
+                  <td><strong>코드 준비</strong></td>
+                  <td><span class="badge blue">빌드</span></td>
+                  <td>컴포넌트는 실행하지 않는다. 코드를 변환하고 나눈다</td>
+                  <td><strong>서버용 코드에서 이름표 붙은 가짜로 바꿔 끼운다</strong></td>
+                  <td>서버용 코드, 브라우저용 JS, manifest</td>
                 </tr>
                 <tr>
-                  <td>실행하는 컴포넌트</td>
+                  <td><strong>1단계</strong> 설계도 만들기<br />(Server Component 단계)</td>
+                  <td>정적: 빌드 때<br />동적: 요청 때</td>
                   <td>Server Component만</td>
-                  <td>Client Component까지</td>
-                  <td>Client Component</td>
-                </tr>
-                <tr>
-                  <td><code>'use client'</code> 파일을</td>
-                  <td>이름표로만 받는다 (실행 안 함)</td>
-                  <td>이름표를 보고 진짜 코드를 실행한다</td>
-                  <td>이름표를 보고 JS를 받아 실행한다</td>
-                </tr>
-                <tr>
-                  <td>결과물</td>
+                  <td>바꿔 끼운 가짜(이름표)만 쓴다</td>
                   <td>설계도 (RSC payload, <code>text/x-component</code>)</td>
+                </tr>
+                <tr>
+                  <td><strong>2단계</strong> HTML 만들기<br />(SSR 단계)</td>
+                  <td>정적: 빌드 때<br />동적: 페이지 열기 요청 때</td>
+                  <td>Client Component까지</td>
+                  <td>이름표를 보고 진짜 코드를 실행한다</td>
                   <td>첫 화면 HTML (<code>text/html</code>)</td>
+                </tr>
+                <tr>
+                  <td><strong>3단계</strong> 하이드레이션</td>
+                  <td><span class="badge green">브라우저</span></td>
+                  <td>Client Component</td>
+                  <td>이름표를 보고 JS를 받아 실행한다</td>
                   <td>클릭할 수 있는 화면</td>
                 </tr>
               </tbody>
@@ -125,9 +142,14 @@
           <p>건물 짓기로 비유하면 이렇다.</p>
           <ol class="steps green">
             <li>
+              <strong>자재 준비 (코드 준비)</strong>
+              공사 전에 자재를 나눈다. 현장에서 쓸 것(서버용 코드)과 전문 업체에 보낼 것(브라우저용 JS)으로 나누고, 업체에 맡길
+              부분은 현장 자재 목록에 "OO업체 담당"이라는 쪽지로만 적어 둔다.
+            </li>
+            <li>
               <strong>건축가 (1단계)</strong>
-              직접 지을 수 있는 부분(Badge)은 완성하고, 전문 업체가 맡을 부분(Button)에는 "OO업체가 이 사양으로 설치"라는
-              쪽지만 붙인 설계도를 만든다.
+              현장 자재로 직접 지을 수 있는 부분(Badge)은 완성하고, 쪽지로만 있는 부분(Button)에는 "OO업체가 이 사양으로
+              설치"라는 쪽지를 붙인 설계도를 만든다.
             </li>
             <li>
               <strong>모델하우스 (2단계)</strong>
@@ -138,6 +160,48 @@
               전문 업체(브라우저로 온 JS)가 와서 전기를 연결한다. 이제 버튼이 작동한다.
             </li>
           </ol>
+        </section>
+
+        <section id="build">
+          <h2>먼저: 빌드 때 코드 준비</h2>
+          <p>
+            1단계와 2단계는 이미 준비된 코드를 <strong>실행</strong>하는 일이다. 그 코드는 <code>next build</code>가 미리
+            만들어 둔다. 이 준비 과정에서 컴포넌트는 하나도 실행되지 않지만, 이후 단계의 규칙이 여기서 정해진다.
+          </p>
+          <ol class="steps blue">
+            <li>
+              <strong>변환</strong>
+              TS와 JSX를 JS로 바꾼다.
+            </li>
+            <li>
+              <strong>서버용 코드 만들기</strong>
+              1단계에서 실행할 서버용 코드(<code>page.js</code>와 그 묶음)를 만든다. 이때 import를 따라가다
+              <code>'use client'</code> 파일을 만나면, 그 파일의 내용을 넣지 않고
+              <strong>export 이름마다 이름표 붙은 가짜</strong>(<code>registerClientReference(…)</code>)로 바꿔 끼운다.
+              <a href="014-서버가-받는-use-client-이름표.html#stub">014 문서에서 꺼내 본 대역 코드</a>가 이것이다.
+            </li>
+            <li>
+              <strong>브라우저용 JS 만들기</strong>
+              <code>'use client'</code> 파일의 진짜 코드는 브라우저로 보낼 JS 파일(<code>/_next/static/chunks/…</code>)에
+              넣는다. 2단계(SSR)에서 쓸 서버 쪽 사본도 따로 만든다.
+            </li>
+            <li>
+              <strong>표 만들기</strong>
+              이름표(파일 경로)와 진짜 코드가 든 JS 파일을 잇는 표(client reference manifest)를 만든다.
+            </li>
+            <li>
+              <strong>정적 페이지만: 미리 실행</strong>
+              요청마다 달라질 게 없는 정적 페이지는 이어서 1단계와 2단계를 실행해 <code>.rsc</code>와 <code>.html</code>로
+              저장한다(<a href="#when">아래</a>).
+            </li>
+          </ol>
+          <div class="callout">
+            <p>
+              "서버는 <code>'use client'</code> 파일을 실행하지 않는다"의 정확한 뜻은 이렇다.
+              <strong>빌드 때 서버용 코드에서 그 파일이 이름표로 바뀌어 버렸기 때문에</strong>, 1단계가 실행할 진짜 코드가
+              애초에 서버용 코드 안에 없다. 1단계는 바꿔 끼워진 가짜를 그대로 쓸 뿐이다.
+            </p>
+          </div>
         </section>
 
         <section id="page">
@@ -183,10 +247,10 @@ export default function ProbeStages() {
         </section>
 
         <section id="rsc">
-          <h2>1단계: Server Component 단계</h2>
+          <h2>1단계: 설계도 만들기 (Server Component 단계)</h2>
           <p>
-            <strong>하는 일:</strong> Server Component만 실행해 화면의 설계도를 만든다. <code>'use client'</code> 컴포넌트는
-            실행하지 않고 그 자리에 이름표만 둔다.
+            <strong>하는 일:</strong> 빌드 때 준비한 서버용 코드로 Server Component만 실행해 화면의 설계도를 만든다.
+            <code>'use client'</code> 컴포넌트는 서버용 코드에 이름표로만 들어 있으니, 실행하지 않고 그 자리에 이름표를 둔다.
           </p>
           <p><code>probe-stages.rsc</code>에서 이 페이지에 해당하는 부분만 뽑았다(줄바꿈과 들여쓰기는 읽기 쉽게 넣었다).</p>
           <pre><code>a:I[86223,["/_next/static/chunks/2qj-s9lpzec8-.js","/_next/static/chunks/16f11qb2p8waj.js"],"Button"]
@@ -256,7 +320,7 @@ export default function ProbeStages() {
         </section>
 
         <section id="ssr">
-          <h2>2단계: SSR 단계</h2>
+          <h2>2단계: HTML 만들기 (SSR 단계)</h2>
           <p>
             <strong>하는 일:</strong> 1단계 설계도를 받아 브라우저가 바로 그릴 수 있는 HTML로 바꾼다. 이름표 자리를 채우려고
             <strong>진짜 Button 코드를 서버에서 실행</strong>한다. SSR은 Server-Side Rendering(서버에서 HTML 만들기)의
@@ -391,31 +455,44 @@ curl -s -L -D - -H "RSC: 1" http://127.0.0.1:3100/probe-b</code></pre>
         <section id="when">
           <h2>언제 하나: 빌드 때와 요청 때</h2>
           <p>
-            "빌드된 뒤 요청이 오면 그때 SSR을 하나?"는 페이지마다 다르다. 1·2단계가 하는 일은 같고,
-            <strong>언제 하느냐</strong>만 다르다.
+            단계마다 하는 일은 같고, <strong>언제 하느냐</strong>가 페이지 종류와 요청 종류에 따라 다르다. 요청은 두 종류다.
           </p>
+          <ul>
+            <li>
+              <strong>페이지 열기 요청:</strong> 주소창에 입력하거나 새로고침할 때. 브라우저에 아직 아무것도 없으니 HTML이
+              필요하다.
+            </li>
+            <li>
+              <strong>링크 이동 요청:</strong> 이미 열린 페이지에서 <code>&lt;Link&gt;</code>를 눌러 옮길 때. 브라우저에 React가
+              있으니 설계도면 된다.
+            </li>
+          </ul>
           <div class="table-wrap">
             <table>
               <thead>
                 <tr>
                   <th>페이지 종류 (<code>next build</code> 표시)</th>
-                  <th>1·2단계를 하는 때</th>
-                  <th>요청이 오면</th>
-                  <th>예</th>
+                  <th>빌드 때</th>
+                  <th>페이지 열기 요청이 오면</th>
+                  <th>링크 이동 요청이 오면</th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
-                  <td><span class="badge green">○ Static</span> 정적</td>
-                  <td><strong>빌드 때 한 번</strong></td>
-                  <td>미리 만든 <code>.html</code>(첫 로딩)이나 <code>.rsc</code>(링크 이동)를 그대로 보낸다. SSR을 다시 하지 않는다</td>
-                  <td>이 문서의 실험 페이지, <code>_not-found</code></td>
+                  <td>
+                    <span class="badge green">○ Static</span> 정적<br />예: 이 문서의 실험 페이지, <code>_not-found</code>
+                  </td>
+                  <td>코드 준비 + 1단계 + 2단계. 결과를 <code>.rsc</code>, <code>.html</code>로 저장</td>
+                  <td>저장해 둔 <code>.html</code>을 보낸다</td>
+                  <td>저장해 둔 <code>.rsc</code>를 보낸다</td>
                 </tr>
                 <tr>
-                  <td><span class="badge blue">ƒ Dynamic</span> 동적</td>
-                  <td><strong>요청마다</strong></td>
-                  <td>그때 1단계(설계도)를 하고, 첫 로딩이면 2단계(HTML)까지 한다</td>
-                  <td>스토어 홈 (<code>await connection()</code>으로 요청 때 렌더링)</td>
+                  <td>
+                    <span class="badge blue">ƒ Dynamic</span> 동적<br />예: 스토어 홈 (<code>await connection()</code>)
+                  </td>
+                  <td>코드 준비만</td>
+                  <td>1단계 + 2단계를 해서 HTML을 보낸다</td>
+                  <td>1단계만 해서 설계도를 보낸다</td>
                 </tr>
               </tbody>
             </table>
@@ -428,7 +505,7 @@ curl -s -L -D - -H "RSC: 1" http://127.0.0.1:3100/probe-b</code></pre>
                 <li>
                   <div class="tree-row">
                     <span class="tree-node">_not-found.{html,rsc}</span>
-                    <span class="tree-note"><span class="badge green">○</span> 빌드 때 만든 결과물이 파일로 있다</span>
+                    <span class="tree-note"><span class="badge green">○</span> 빌드 때 1·2단계까지 끝낸 결과물이 파일로 있다</span>
                   </div>
                 </li>
                 <li>
@@ -441,7 +518,8 @@ curl -s -L -D - -H "RSC: 1" http://127.0.0.1:3100/probe-b</code></pre>
                   <div class="tree-row">
                     <span class="tree-node">page.js</span>
                     <span class="tree-note"
-                      ><span class="badge blue">ƒ</span> 스토어 홈. 결과물 파일은 없고, 요청 때 실행할 코드만 있다</span
+                      ><span class="badge blue">ƒ</span> 스토어 홈. 코드 준비만 했다. 결과물 파일은 없고 요청 때 실행할 코드만
+                      있다</span
                     >
                   </div>
                 </li>
@@ -450,11 +528,10 @@ curl -s -L -D - -H "RSC: 1" http://127.0.0.1:3100/probe-b</code></pre>
           </ul>
           <ul>
             <li>
-              스토어 홈은 요청 때마다 API에서 최신 공연 목록을 읽어야 해서 동적이다. 그래서 빌드에 API와 DB가 필요 없다.
+              스토어 홈은 요청 때마다 API에서 최신 공연 목록을 읽어야 해서 동적이다. 빌드 때 1단계를 해 버리면 빌드 시점의
+              목록으로 굳는다. 덕분에 빌드에 API와 DB가 필요 없다.
             </li>
-            <li>
-              정적 페이지는 SSR을 빌드 때 미리 해 둔 것이다. 요청이 오면 서버는 파일을 보내기만 하므로 빠르다.
-            </li>
+            <li>정적 페이지는 1·2단계를 빌드 때 미리 해 둔 것이다. 요청이 오면 서버는 파일을 보내기만 하므로 빠르다.</li>
             <li>
               어떤 조건에서 정적·동적이 갈리는지, 정적 결과물을 다시 만드는 방법(재검증) 같은 내용은
               <a href="006-nextjs-렌더링-시점과-캐시.html">006 Next.js 렌더링 시점과 캐시</a>에서 다룬다.
@@ -462,8 +539,8 @@ curl -s -L -D - -H "RSC: 1" http://127.0.0.1:3100/probe-b</code></pre>
           </ul>
           <div class="callout">
             <p>
-              1단계와 2단계는 "무엇을 만드나"의 구분이고, 정적·동적은 "언제 만드나"의 구분이다. 정적 페이지는 둘 다 빌드 때,
-              동적 페이지는 둘 다 요청 때 한다. 링크 이동이면 어느 쪽이든 2단계 없이 설계도만 보낸다.
+              1단계와 2단계는 "무엇을 만드나"의 구분이고, 정적·동적은 "언제 만드나"의 구분이다. 코드 준비는 어느 페이지든
+              빌드 때 한다.
             </p>
           </div>
         </section>
@@ -494,11 +571,71 @@ curl -s -L -D - -H "RSC: 1" http://127.0.0.1:3100/probe-b</code></pre>
             </table>
           </div>
           <p>
-            <code>Drawer.Root</code>가 undefined였던 문제는 1단계에서 터졌다. 1단계가 설계도를 만들려면
-            <code>Drawer.Root</code>가 이름표여야 하는데, 서버 손에는 <code>Drawer</code> 이름표 하나뿐이고 그 안에
-            <code>Root</code>가 없었다. 자세한 내용은
-            <a href="014-서버가-받는-use-client-이름표.html#object">014 문서의 "객체로 묶으면 속이 비는 이유"</a>에 있다.
+            "서버는 'use client' 파일을 실행하지 않는다"에서 그 파일을 이름표로 바꿔 둔 것은 빌드 때 코드 준비다. 1단계는 그
+            결과를 쓸 뿐이다.
           </p>
+        </section>
+
+        <section id="cause">
+          <h2>문제는 빌드 때 생기고, 터지는 때는 다르다</h2>
+          <p>
+            <code>Drawer.Root</code>가 undefined였던 문제를 단계로 나눠 보면, 원인이 생기는 때와 오류가 드러나는 때가 다르다.
+          </p>
+          <ol class="steps blue">
+            <li>
+              <strong>원인이 생기는 때: 빌드의 코드 준비</strong>
+              <code>'use client'</code> 파일 안에서 만든 <code>Drawer</code> 객체가 서버용 코드에서 이름표 하나(가짜 함수)로
+              바뀐다. 객체를 만드는 코드는 서버용 코드에 들어가지 않는다. 이 순간 서버 쪽 <code>Drawer.Root</code>는 이미
+              undefined로 정해진다.
+            </li>
+            <li>
+              <strong>오류가 드러나는 때: 1단계를 실행할 때</strong>
+              설계도를 만들려고 <code>&lt;Drawer.Root&gt;</code>를 렌더링하는 순간 "Element type is invalid … got:
+              undefined"가 난다. 그런데 1단계를 언제 하느냐는 페이지 종류에 따라 다르다(<a href="#when">위</a>).
+            </li>
+          </ol>
+          <p>
+            그래서 같은 코드라도 페이지가 정적이냐 동적이냐에 따라 오류를 만나는 때가 달라진다. 임시 페이지로 확인했다.
+          </p>
+          <pre><code class="language-tsx">// 'use client' 파일 (임시)
+export const ProbeObj = { Root: ObjRoot };
+
+// app/probe-dyn/page.tsx (임시, 동적 페이지)
+export default async function ProbeDyn() {
+  await connection(); // 요청 때 렌더링하는 동적 페이지로 만든다
+  return &lt;ProbeObj.Root&gt;x&lt;/ProbeObj.Root&gt;;
+}</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>페이지</th>
+                  <th><code>next build</code></th>
+                  <th>요청</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><span class="badge green">○</span> 정적 (처음 겪은 경우)</td>
+                  <td><span class="badge blue">실패</span> 빌드 중 1단계를 미리 하다가 오류</td>
+                  <td>빌드가 안 되니 배포되지 않는다</td>
+                </tr>
+                <tr>
+                  <td><span class="badge blue">ƒ</span> 동적 (<code>probe-dyn</code>)</td>
+                  <td><span class="badge green">통과</span> 코드 준비만 하니 오류가 안 보인다</td>
+                  <td><span class="badge blue">500</span> 요청 때 1단계를 하다가 같은 오류</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout warn">
+            <p>
+              동적 페이지에서는 이 실수가 <strong>빌드를 통과해 배포까지 갈 수 있다</strong>. 원인은 빌드 때 이미 생겼지만,
+              빌드는 동적 페이지를 실행해 보지 않으니 잡지 못한다. 그래서 compound 컴포넌트를 묶는 위치처럼 빌드가 잡아 주지
+              않는 규칙은 처음부터 맞게 만들어 두고(<code>export * as Drawer</code>), 정적 페이지나 테스트로 한 번 렌더링해
+              확인하는 편이 안전하다.
+            </p>
+          </div>
         </section>
 
         <section id="mistakes">
@@ -611,10 +748,18 @@ curl -s -L -D - -H "RSC: 1" http://127.0.0.1:3100/probe-b</code></pre>
             </p>
           </details>
           <details>
-            <summary>7. Drawer.Root가 undefined였던 문제는 어느 단계에서 생겼나?</summary>
+            <summary>7. 빌드 때 코드 준비에서는 'use client' 파일을 어떻게 다루나?</summary>
             <p>
-              Server Component 단계다. 이 단계는 'use client' 파일을 이름표로만 받는데, 'use client' 파일 안에서 만든 Drawer
-              객체는 이름표 하나로 바뀌어 Root 속성이 없었다.
+              서버용 코드에는 그 파일의 내용을 넣지 않고 export 이름마다 이름표 붙은 가짜(registerClientReference)로 바꿔
+              끼운다. 진짜 코드는 브라우저용 JS에 넣고, 둘을 잇는 manifest를 만든다. 컴포넌트는 하나도 실행하지 않는다.
+            </p>
+          </details>
+          <details>
+            <summary>8. Drawer.Root가 undefined였던 문제는 어느 때 생기고, 어느 때 드러나나?</summary>
+            <p>
+              원인은 빌드의 코드 준비에서 생긴다. 'use client' 파일 안에서 만든 Drawer 객체가 서버용 코드에서 이름표 하나로
+              바뀌어 Root 속성이 없어진다. 오류는 1단계에서 &lt;Drawer.Root&gt;를 렌더링할 때 드러난다. 정적 페이지면 빌드 중에
+              실패하고, 동적 페이지면 빌드는 통과하고 요청 때 500이 난다.
             </p>
           </details>
         </section>

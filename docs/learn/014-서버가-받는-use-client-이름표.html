@@ -111,6 +111,11 @@ export const buttonVariants = registerClientReference(
               이름표에 적힌 정보는 이 둘뿐이다.
             </li>
           </ol>
+          <p>
+            이 바꿔 끼우기는 페이지를 렌더링할 때가 아니라 <code>next build</code>가 서버용 코드를 만들 때 일어난다. 빌드 때
+            무엇을 준비하고 그 뒤 단계들이 언제 실행되는지는
+            <a href="015-서버-컴포넌트-단계와-SSR-단계.html#build">015 문서의 "먼저: 빌드 때 코드 준비"</a>에 정리했다.
+          </p>
           <div class="callout">
             <p>
               "<code>'use client'</code> 파일은 서버에 참조만 넘긴다"는 말의 뜻이 이것이다. 서버가 받는 것은
