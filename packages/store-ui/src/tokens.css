@@ -139,6 +139,8 @@
 
   --color-surface: #ffffff;
   --color-surface-muted: var(--grey-100);
+  /* Drawer 같은 모달 뒤의 화면을 덮어 어둡게 한다. 팔레트에 검정이 없어 투명도를 넣은 값으로 둔다. */
+  --color-backdrop: rgb(0 0 0 / 0.4);
 
   --color-success: var(--green-500);
   --color-success-subtle: var(--green-50);
