@@ -10,7 +10,8 @@ import type { MouseEventHandler, ReactNode } from 'react';
 const buttonVariants = cva(
   [
     'group relative inline-flex h-[52px] items-center justify-center rounded-button px-xl text-body font-semibold transition-colors select-none',
-    'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary',
+    // 테두리 색은 평소에 정해 둔다. 포커스 때 정하면 transition-colors가 글자색(검정)에서 파랑으로 넘어가며 깜빡인다.
+    'outline-primary focus-visible:outline-2 focus-visible:outline-offset-2',
     // Base UI가 비활성일 때 data-disabled를 붙인다. 종류와 관계없이 같은 회색으로 그린다.
     // 로딩 중에도 data-disabled가 붙지만, 그때는 종류의 색을 유지하고 커서만 바꾼다.
     'data-disabled:not-data-loading:cursor-not-allowed data-disabled:not-data-loading:bg-surface-muted data-disabled:not-data-loading:text-text-tertiary',

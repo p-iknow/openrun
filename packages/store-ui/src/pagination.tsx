@@ -13,7 +13,8 @@ const MAX_PAGE_LINKS = 5;
 // 쓰는 쪽도 render 요소의 className에서 같은 속성으로 상태별 스타일을 덧댈 수 있다.
 const itemClass = cn(
   'inline-flex size-[40px] items-center justify-center rounded-full text-body-sm font-semibold text-text-secondary transition-colors',
-  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary',
+  // 테두리 색은 평소에 정해 둔다. 포커스 때 정하면 transition-colors가 글자색(검정)에서 파랑으로 넘어가며 깜빡인다.
+  'outline-primary focus-visible:outline-2 focus-visible:outline-offset-2',
   'hover:not-data-active:not-data-disabled:bg-surface-muted',
   'data-active:bg-primary data-active:text-on-primary data-active:hover:bg-primary-hover',
   'data-disabled:cursor-not-allowed data-disabled:text-text-tertiary',
