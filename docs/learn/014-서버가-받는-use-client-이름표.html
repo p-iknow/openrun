@@ -49,8 +49,8 @@ function Root() { /* … */ }
 function Trigger() { /* … */ }
 export const Drawer = { Root, Trigger };</code></pre>
           <p>Server Component인 스토어 페이지에서 이것을 렌더링하자 빌드가 실패했다.</p>
-          <pre><code>Error: Element type is invalid: expected a string (for built-in components) or a class/function
-(for composite components) but got: undefined.</code></pre>
+          <pre><code>Error: Element type is invalid: expected a string (for built-in components)
+or a class/function (for composite components) but got: undefined.</code></pre>
           <p>
             Client Component에서는 멀쩡히 동작하는 코드다. 서버에서만 <code>Drawer.Root</code>가 undefined가 된다. 그
             까닭은 서버가 <code>drawer.tsx</code>를 어떤 모습으로 받는지 보면 알 수 있다.
@@ -65,9 +65,22 @@ export const Drawer = { Root, Trigger };</code></pre>
           </p>
           <pre><code class="language-ts">// packages/store-ui/dist/button.js (원래 코드, 줄임)
 'use client';
-export const buttonVariants = cva([/* 클래스 목록 */], { variants: { /* … */ } });
-export function Button({ variant, type, disabled, loading, onClick, children }) {
-  return &lt;BaseButton className={buttonVariants({ variant })} …&gt;{children}&lt;/BaseButton&gt;;
+export const buttonVariants = cva([/* 클래스 목록 */], {
+  variants: { /* … */ },
+});
+export function Button({
+  variant,
+  type,
+  disabled,
+  loading,
+  onClick,
+  children,
+}) {
+  return (
+    &lt;BaseButton className={buttonVariants({ variant })} …&gt;
+      {children}
+    &lt;/BaseButton&gt;
+  );
 }</code></pre>
           <p>
             그런데 <code>next build</code>가 만든 서버용 결과물(<code>.next/server/chunks/ssr/…js</code>)에서
@@ -77,9 +90,11 @@ export function Button({ variant, type, disabled, loading, onClick, children }) 
 export const Button = registerClientReference(
   function () {
     throw Error(
-      "Attempted to call Button() from the server but Button is on the client. " +
+      'Attempted to call Button() from the server ' +
+        'but Button is on the client. ' +
         "It's not possible to invoke a client function from the server, " +
-        'it can only be rendered as a Component or passed to props of a Client Component.',
+        'it can only be rendered as a Component ' +
+        'or passed to props of a Client Component.',
     );
   },
   '[project]/packages/store-ui/dist/button.js', // 어느 파일의
@@ -138,7 +153,10 @@ export const buttonVariants = registerClientReference(
           <pre><code class="language-js">"[project]/packages/store-ui/dist/button.js": {
   "id": 86223,
   "name": "*",
-  "chunks": ["/_next/static/chunks/2qj-s9lpzec8-.js", "/_next/static/chunks/16f11qb2p8waj.js"],
+  "chunks": [
+    "/_next/static/chunks/2qj-s9lpzec8-.js",
+    "/_next/static/chunks/16f11qb2p8waj.js"
+  ],
   "async": false
 }</code></pre>
           <div class="table-wrap">
@@ -285,7 +303,13 @@ export const Drawer = { Root, Trigger };</code></pre>
             만든다.
           </p>
           <pre><code class="language-js">// 서버가 받는 것
-export const Drawer = registerClientReference(function () { throw … }, 'drawer.js', 'Drawer');</code></pre>
+export const Drawer = registerClientReference(
+  function () {
+    throw …;
+  },
+  'drawer.js',
+  'Drawer',
+);</code></pre>
           <ol class="steps blue">
             <li>
               <strong>서버 손의 Drawer</strong>
@@ -338,7 +362,11 @@ function describe(name: string, value: any) {
 }
 
 export default function ProbePage() {
-  const rows = [describe('ProbeObj', ProbeObj), describe('ProbeStatic', ProbeStatic), describe('ProbeNamedRoot', ProbeNamedRoot)];
+  const rows = [
+    describe('ProbeObj', ProbeObj),
+    describe('ProbeStatic', ProbeStatic),
+    describe('ProbeNamedRoot', ProbeNamedRoot),
+  ];
   return &lt;pre&gt;{JSON.stringify(rows, null, 2)}&lt;/pre&gt;;
 }</code></pre>
           <p><code>next build</code>가 만든 페이지 HTML에 찍힌 결과는 이렇다.</p>
@@ -389,12 +417,27 @@ export default function ProbePage() {
             </li>
           </ul>
           <p>같은 빌드의 서버용 결과물에서 이 파일의 대역 코드도 꺼냈다(줄바꿈만 넣었다).</p>
-          <pre><code class="language-js">let c = registerClientReference(function () { throw Error("Attempted to call ProbeNamedRoot() from the server …") },
-                                "[project]/packages/store-ui/dist/__probe-obj.js", "ProbeNamedRoot"),
-    d = registerClientReference(function () { throw Error("Attempted to call ProbeObj() from the server …") },
-                                "[project]/packages/store-ui/dist/__probe-obj.js", "ProbeObj"),
-    e = registerClientReference(function () { throw Error("Attempted to call ProbeStatic() from the server …") },
-                                "[project]/packages/store-ui/dist/__probe-obj.js", "ProbeStatic");</code></pre>
+          <pre><code class="language-js">let c = registerClientReference(
+    function () {
+      throw Error("Attempted to call ProbeNamedRoot() from the server …");
+    },
+    "[project]/packages/store-ui/dist/__probe-obj.js",
+    "ProbeNamedRoot",
+  ),
+  d = registerClientReference(
+    function () {
+      throw Error("Attempted to call ProbeObj() from the server …");
+    },
+    "[project]/packages/store-ui/dist/__probe-obj.js",
+    "ProbeObj",
+  ),
+  e = registerClientReference(
+    function () {
+      throw Error("Attempted to call ProbeStatic() from the server …");
+    },
+    "[project]/packages/store-ui/dist/__probe-obj.js",
+    "ProbeStatic",
+  );</code></pre>
           <div class="callout">
             <p>
               객체(①)와 정적 속성(②)도 함수 export(③)와 똑같은 가짜로 바뀐다. 대역 코드 어디에도 <code>{ Root, Part }</code>나

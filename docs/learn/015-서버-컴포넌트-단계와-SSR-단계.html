@@ -253,13 +253,31 @@ export default function ProbeStages() {
             <strong>하는 일:</strong> 빌드 때 준비한 서버용 코드로 Server Component만 실행해 화면의 설계도를 만든다.
             <code>'use client'</code> 컴포넌트는 서버용 코드에 이름표로만 들어 있으니, 실행하지 않고 그 자리에 이름표를 둔다.
           </p>
-          <p><code>probe-stages.rsc</code>에서 이 페이지에 해당하는 부분만 뽑았다(줄바꿈과 들여쓰기는 읽기 쉽게 넣었다).</p>
-          <pre><code>a:I[86223,["/_next/static/chunks/2qj-s9lpzec8-.js","/_next/static/chunks/16f11qb2p8waj.js"],"Button"]
+          <p>
+            <code>probe-stages.rsc</code>에서 이 페이지에 해당하는 부분만 뽑았다. 실제 파일은 한 줄에 붙어 있는데, 읽기 쉽게 줄바꿈과
+            들여쓰기, 띄어쓰기를 넣고 긴 클래스 이름은 <code>…</code>로 줄였다.
+          </p>
+          <pre><code>a:I[
+  86223,
+  [
+    "/_next/static/chunks/2qj-s9lpzec8-.js",
+    "/_next/static/chunks/16f11qb2p8waj.js"
+  ],
+  "Button"
+]
 …
-["$","main",null,{"children":[
-  ["$","span",null,{"className":"inline-flex h-[24px] items-center rounded-badge px-sm text-caption font-semibold bg-primary-subtle text-primary-strong","children":"서버용 배지"}],
-  ["$","$La",null,{"variant":"secondary","children":"클라이언트 버튼"}]
-]}]</code></pre>
+["$", "main", null, {
+  "children": [
+    ["$", "span", null, {
+      "className": "inline-flex … bg-primary-subtle text-primary-strong",
+      "children": "서버용 배지"
+    }],
+    ["$", "$La", null, {
+      "variant": "secondary",
+      "children": "클라이언트 버튼"
+    }]
+  ]
+}]</code></pre>
           <div class="table-wrap">
             <table>
               <thead>
@@ -396,9 +414,16 @@ export default function ProbeStages() {
           <h3>"$La"는 무엇을 가리키나</h3>
           <p>
             2번 칸의 <code>"$La"</code>는 <code>$L</code> + <code>a</code>로 나눠 읽는다. "<code>a</code>번 줄에 적힌 컴포넌트를
-            불러와 여기에 그려라"라는 뜻이다. 설계도 위쪽에 <code>a</code>번 줄이 있다.
+            불러와 여기에 그려라"라는 뜻이다. 설계도 위쪽에 <code>a</code>번 줄이 있다(실제로는 한 줄인데 읽기 쉽게 나눴다).
           </p>
-          <pre><code>a:I[86223,["/_next/static/chunks/2qj-s9lpzec8-.js","/_next/static/chunks/16f11qb2p8waj.js"],"Button"]</code></pre>
+          <pre><code>a:I[
+  86223,
+  [
+    "/_next/static/chunks/2qj-s9lpzec8-.js",
+    "/_next/static/chunks/16f11qb2p8waj.js"
+  ],
+  "Button"
+]</code></pre>
           <div class="table-wrap">
             <table>
               <thead>
@@ -462,12 +487,17 @@ export default function ProbeStages() {
           </p>
           <p>같은 방법을 Badge 줄에 해 보면 차이가 분명해진다.</p>
           <pre><code>① 설계도에 적힌 줄
-   ["$", "span", null, {"className":"inline-flex … bg-primary-subtle text-primary-strong", "children":"서버용 배지"}]
+   ["$", "span", null, {
+     "className": "inline-flex … bg-primary-subtle text-primary-strong",
+     "children": "서버용 배지"
+   }]
 
 ② 바꿔 넣을 것이 없다 ($L이 없다)
 
 ③ JSX 모양으로 옮긴다
-   &lt;span className="inline-flex … bg-primary-subtle text-primary-strong"&gt;서버용 배지&lt;/span&gt;</code></pre>
+   &lt;span className="inline-flex … bg-primary-subtle text-primary-strong"&gt;
+     서버용 배지
+   &lt;/span&gt;</code></pre>
           <p>
             원본은 <code>&lt;Badge tone="primary"&gt;서버용 배지&lt;/Badge&gt;</code>였는데, 되돌린 결과는
             <code>&lt;span …&gt;</code>이다. 원본으로 돌아가지 않는다. 서버가 Badge를 이미 실행해서 <strong>결과로 바꿔
@@ -510,8 +540,14 @@ export default function ProbeStages() {
           </p>
           <p><code>probe-stages.html</code>에서 같은 부분을 뽑았다.</p>
           <pre><code class="language-html">&lt;main&gt;
-  &lt;span class="inline-flex h-[24px] … bg-primary-subtle text-primary-strong"&gt;서버용 배지&lt;/span&gt;
-  &lt;button type="button" tabindex="0" class="group relative inline-flex h-[52px] …"&gt;
+  &lt;span class="inline-flex h-[24px] … bg-primary-subtle text-primary-strong"&gt;
+    서버용 배지
+  &lt;/span&gt;
+  &lt;button
+    type="button"
+    tabindex="0"
+    class="group relative inline-flex h-[52px] …"
+  &gt;
     &lt;span class="group-data-loading:opacity-0"&gt;클라이언트 버튼&lt;/span&gt;
   &lt;/button&gt;
 &lt;/main&gt;</code></pre>
@@ -836,10 +872,13 @@ export default async function ProbeStream() {
               </tbody>
             </table>
           </div>
-          <p>먼저 온 조각에서 Suspense 부분은 이렇게 생겼다.</p>
+          <p>먼저 온 조각에서 Suspense 부분은 이렇게 생겼다(읽기 쉽게 줄바꿈과 띄어쓰기를 넣었다).</p>
           <pre><code>b:"$Sreact.suspense"
 …
-["$","$b",null,{"fallback":["$","p",null,{"children":"불러오는 중…"}],"children":"$L15"}]</code></pre>
+["$", "$b", null, {
+  "fallback": ["$", "p", null, { "children": "불러오는 중…" }],
+  "children": "$L15"
+}]</code></pre>
           <ol class="steps blue">
             <li>
               <strong>먼저 보내기</strong>
