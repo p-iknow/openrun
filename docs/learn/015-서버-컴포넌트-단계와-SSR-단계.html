@@ -301,26 +301,204 @@ export default function ProbeStages() {
           <h2>설계도 읽는 법</h2>
           <p>
             이 문서에서 "설계도"라고 부르는 것의 정식 이름은 <strong>RSC payload</strong>다. 형식, 실려 오는 곳, 스트리밍은
-            <a href="#payload">아래 "RSC payload 자세히"</a>에서 따로 다룬다. 여기서는 두 종류의 줄만 알면 된다.
+            <a href="#payload">아래 "RSC payload 자세히"</a>에서 따로 다룬다. 여기서는 원본 코드와 한 줄씩 맞춰 보며 읽는 법을
+            익힌다.
           </p>
-          <ol class="steps blue">
-            <li>
-              <strong>요소: <code>["$", 종류, key, props]</code></strong>
-              JSX 하나가 배열 하나다. <code>["$","span",null,{…}]</code>는 <code>&lt;span …&gt;</code>이다. 종류 자리에
-              <code>"span"</code> 같은 HTML 태그 이름이 오면 그대로 그리고, <code>"$La"</code>처럼 <code>$L</code>로 시작하면
-              "<code>a</code> 줄의 클라이언트 컴포넌트를 불러와 그려라"는 뜻이다.
-            </li>
-            <li>
-              <strong>이름표: <code>a:I[모듈 번호, [JS 파일들], export 이름]</code></strong>
-              <code>a:I[86223,[…],"Button"]</code>은 "<code>86223</code>번 모듈(<code>button.js</code>)의
-              <code>Button</code> export, 코드는 이 JS 파일들에 있다"는 뜻이다.
-              <a href="014-서버가-받는-use-client-이름표.html#manifest">014 문서의 manifest</a>에 적혀 있던 그 번호와 파일들이다.
-            </li>
-          </ol>
+
+          <h3>원본 코드와 나란히 놓기</h3>
+          <p>실험 페이지의 JSX 세 줄이 설계도에서 각각 이렇게 바뀌었다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>원본 코드 (<code>page.tsx</code>)</th>
+                  <th>설계도 (<code>.rsc</code>)</th>
+                  <th>무슨 일이 있었나</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>&lt;main&gt;…&lt;/main&gt;</code></td>
+                  <td><code>["$","main",null,{"children":[…]}]</code></td>
+                  <td>
+                    <span class="badge green">그대로</span> HTML 태그라서 이름 <code>"main"</code>이 그대로 적혔다. 안의 두 줄은
+                    <code>children</code> 배열에 들어간다
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>&lt;Badge tone="primary"&gt;서버용 배지&lt;/Badge&gt;</code></td>
+                  <td>
+                    <code>["$","span",null,{"className":"inline-flex … bg-primary-subtle text-primary-strong","children":"서버용
+                    배지"}]</code>
+                  </td>
+                  <td>
+                    <span class="badge green">실행됨</span> <code>Badge</code>라는 이름이 사라지고 Badge가 그린
+                    <code>&lt;span&gt;</code>만 남았다. <code>tone="primary"</code>도 사라지고 그 결과인 클래스
+                    (<code>bg-primary-subtle …</code>)로 바뀌었다
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>&lt;Button variant="secondary"&gt;클라이언트 버튼&lt;/Button&gt;</code></td>
+                  <td><code>["$","$La",null,{"variant":"secondary","children":"클라이언트 버튼"}]</code></td>
+                  <td>
+                    <span class="badge blue">실행 안 됨</span> <code>&lt;button&gt;</code>으로 바뀌지 않았다. 이름 자리에
+                    <code>"$La"</code>가 들어가고, props(<code>variant</code>, 글자)는 쓴 그대로 남았다
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout">
+            <p>
+              Badge 줄과 Button 줄을 비교하면 핵심이 보인다. Server Component인 Badge는 <strong>결과</strong>(span, 클래스)가
+              적히고, Client Component인 Button은 <strong>주문서</strong>(누구를, 어떤 props로)가 적힌다.
+            </p>
+          </div>
+
+          <h3>배열 한 칸씩 읽기</h3>
           <p>
-            그러니까 <code>["$","$La",null,{"variant":"secondary",…}]</code>를 풀어 읽으면 "여기에 button.js의 Button을
-            <code>variant: 'secondary'</code>로 그려라"가 된다. 014 문서에서 말한 이름표가 실제 결과물에서는 이렇게 생겼다.
+            설계도의 <code>["$", …]</code> 배열은 JSX 태그 하나를 네 칸에 나눠 적은 것이다. Button 줄로 칸을 맞춰 보면 이렇다.
           </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>칸</th>
+                  <th>설계도의 값</th>
+                  <th>원본 JSX에서는</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>1. 표시</td>
+                  <td><code>"$"</code></td>
+                  <td>"이 배열은 요소 하나다"라는 표시. 늘 <code>"$"</code>다</td>
+                </tr>
+                <tr>
+                  <td>2. 무엇을 그리나</td>
+                  <td><code>"$La"</code></td>
+                  <td>태그 이름 <code>Button</code> 자리</td>
+                </tr>
+                <tr>
+                  <td>3. key</td>
+                  <td><code>null</code></td>
+                  <td><code>key</code>를 주지 않아서 비어 있다</td>
+                </tr>
+                <tr>
+                  <td>4. props</td>
+                  <td><code>{"variant":"secondary","children":"클라이언트 버튼"}</code></td>
+                  <td><code>variant="secondary"</code>와 태그 사이의 글자. 글자는 <code>children</code>이라는 이름으로 들어간다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>"$La"는 무엇을 가리키나</h3>
+          <p>
+            2번 칸의 <code>"$La"</code>는 <code>$L</code> + <code>a</code>로 나눠 읽는다. "<code>a</code>번 줄에 적힌 컴포넌트를
+            불러와 여기에 그려라"라는 뜻이다. 설계도 위쪽에 <code>a</code>번 줄이 있다.
+          </p>
+          <pre><code>a:I[86223,["/_next/static/chunks/2qj-s9lpzec8-.js","/_next/static/chunks/16f11qb2p8waj.js"],"Button"]</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>조각</th>
+                  <th>뜻</th>
+                  <th>원본에서는</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>a:</code></td>
+                  <td>이 줄의 번호. <code>"$La"</code>가 이 번호로 찾아온다</td>
+                  <td>없음 (설계도 안에서만 쓰는 번호)</td>
+                </tr>
+                <tr>
+                  <td><code>I[…]</code></td>
+                  <td>Client Component 이름표라는 표시 (Import의 I)</td>
+                  <td>파일 첫 줄의 <code>'use client'</code></td>
+                </tr>
+                <tr>
+                  <td><code>86223</code></td>
+                  <td>모듈 번호. manifest에서 이 번호가 <code>button.js</code>다</td>
+                  <td><code>import { Button } from '@openrun/store-ui'</code>가 가리키는 파일</td>
+                </tr>
+                <tr>
+                  <td><code>["…2qj….js","…16f1….js"]</code></td>
+                  <td>진짜 Button 코드가 든 브라우저 JS 파일들</td>
+                  <td>빌드가 만든 파일 (원본에는 없음)</td>
+                </tr>
+                <tr>
+                  <td><code>"Button"</code></td>
+                  <td>그 파일에서 꺼낼 export 이름</td>
+                  <td><code>import { Button }</code>의 <code>Button</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            이 이름표는 <a href="014-서버가-받는-use-client-이름표.html#stub">014 문서</a>에서 본 서버용 가짜
+            (<code>registerClientReference(…, "button.js", "Button")</code>)가 설계도에 적힌 모습이다.
+            <a href="014-서버가-받는-use-client-이름표.html#manifest">manifest</a>에 적혀 있던 번호와 JS 파일도 그대로다.
+          </p>
+
+          <h3>합쳐 읽으면: 원본 JSX로 되돌리기</h3>
+          <p>
+            설계도의 Button 줄을 한 번에 이해하기 어렵다면, 값을 하나씩 바꿔 넣어 원본 JSX로 되돌려 보면 된다. 수학에서 x에
+            값을 대입하는 것과 같다.
+          </p>
+          <pre><code>① 설계도에 적힌 줄
+   ["$", "$La",   null, {"variant":"secondary", "children":"클라이언트 버튼"}]
+
+② "$La"를 a번 줄로 바꾼다          ← a:I[86223, […], "Button"] = button.js의 Button
+   ["$", Button,  null, {"variant":"secondary", "children":"클라이언트 버튼"}]
+
+③ 배열 네 칸을 JSX 모양으로 옮긴다  ← [표시, 무엇을, key, props]
+   &lt;Button variant="secondary"&gt;클라이언트 버튼&lt;/Button&gt;</code></pre>
+          <p>
+            ③이 <code>page.tsx</code>에 쓴 원본과 글자 하나까지 같다. 서버가 Button을 실행하지 않고, "이 컴포넌트를 이 props로
+            그려 달라"는 주문을 <strong>원본 그대로</strong> 브라우저와 2단계(SSR)로 넘겼다는 뜻이다.
+          </p>
+          <p>같은 방법을 Badge 줄에 해 보면 차이가 분명해진다.</p>
+          <pre><code>① 설계도에 적힌 줄
+   ["$", "span", null, {"className":"inline-flex … bg-primary-subtle text-primary-strong", "children":"서버용 배지"}]
+
+② 바꿔 넣을 것이 없다 ($L이 없다)
+
+③ JSX 모양으로 옮긴다
+   &lt;span className="inline-flex … bg-primary-subtle text-primary-strong"&gt;서버용 배지&lt;/span&gt;</code></pre>
+          <p>
+            원본은 <code>&lt;Badge tone="primary"&gt;서버용 배지&lt;/Badge&gt;</code>였는데, 되돌린 결과는
+            <code>&lt;span …&gt;</code>이다. 원본으로 돌아가지 않는다. 서버가 Badge를 이미 실행해서 <strong>결과로 바꿔
+            버렸기</strong> 때문이다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>원본</th>
+                  <th>설계도를 JSX로 되돌린 것</th>
+                  <th>뜻</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Badge</td>
+                  <td><code>&lt;Badge tone="primary"&gt;</code></td>
+                  <td><code>&lt;span className="…"&gt;</code></td>
+                  <td><span class="badge green">다름</span> 서버가 실행해 결과를 적었다</td>
+                </tr>
+                <tr>
+                  <td>Button</td>
+                  <td><code>&lt;Button variant="secondary"&gt;</code></td>
+                  <td><code>&lt;Button variant="secondary"&gt;</code></td>
+                  <td><span class="badge blue">같음</span> 서버가 실행하지 않고 주문만 넘겼다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </section>
 
         <section id="ssr">
