@@ -23,10 +23,8 @@ export interface SelectProps {
   name?: string;
   /** 고른 값이 없을 때 트리거에 보이는 글자. */
   placeholder?: string;
-  /** 비제어로 쓸 때 처음 값. 주소의 정렬 기준을 채울 때 쓴다. */
+  /** 처음 값. 비제어로만 쓰고, 바뀐 값은 `onValueChange`로 받는다. 주소의 정렬 기준을 채울 때 쓴다. */
   defaultValue?: string;
-  /** 제어로 쓸 때 현재 값. `onValueChange`와 함께 넘긴다. */
-  value?: string;
   /** 함수라서 Server Component에서는 넘길 수 없다. 앱의 클라이언트 컴포넌트에서 넘긴다. */
   onValueChange?: (value: string) => void;
   disabled?: boolean;
@@ -38,7 +36,6 @@ export function Select({
   name,
   placeholder,
   defaultValue,
-  value,
   onValueChange,
   disabled = false,
 }: SelectProps) {
@@ -48,7 +45,6 @@ export function Select({
       items={items}
       name={name}
       defaultValue={defaultValue}
-      value={value}
       onValueChange={(nextValue) => {
         // 항목에 null이 없으므로 고른 값은 늘 문자열이다.
         if (nextValue !== null) onValueChange?.(nextValue);

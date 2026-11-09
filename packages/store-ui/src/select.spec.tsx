@@ -11,8 +11,8 @@ const sortItems = [
   { value: 'closing', label: '마감 임박순' },
 ];
 
-function attr(tag: string, { name }: { name: string }) {
-  return new RegExp(`\\s${name}="([^"]*)"`).exec(tag)?.[1];
+function attr(tag: string, { attribute }: { attribute: string }) {
+  return new RegExp(`\\s${attribute}="([^"]*)"`).exec(tag)?.[1];
 }
 
 function trigger(html: string) {
@@ -55,8 +55,8 @@ describe('Select', () => {
     );
 
     const input = /<input\b[^>]*>/.exec(html)?.[0] ?? '';
-    expect(attr(input, { name: 'name' })).toBe('sort');
-    expect(attr(input, { name: 'value' })).toBe('closing');
+    expect(attr(input, { attribute: 'name' })).toBe('sort');
+    expect(attr(input, { attribute: 'value' })).toBe('closing');
   });
 
   it('비활성이면 트리거를 누를 수 없다', () => {

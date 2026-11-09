@@ -18,10 +18,8 @@ export interface TextFieldProps {
   type?: 'text' | 'search';
   /** 라벨을 대신하지 않는 짧은 예시. 입력하면 사라진다. */
   placeholder?: string;
-  /** 비제어로 쓸 때 처음 값. 주소의 검색어를 채울 때 쓴다. */
+  /** 처음 값. 비제어로만 쓰고, 바뀐 값은 `onValueChange`로 받는다. 주소의 검색어를 채울 때 쓴다. */
   defaultValue?: string;
-  /** 제어로 쓸 때 현재 값. `onValueChange`와 함께 넘긴다. */
-  value?: string;
   /** 함수라서 Server Component에서는 넘길 수 없다. 앱의 클라이언트 컴포넌트에서 넘긴다. */
   onValueChange?: (value: string) => void;
   disabled?: boolean;
@@ -33,7 +31,6 @@ export function TextField({
   type = 'text',
   placeholder,
   defaultValue,
-  value,
   onValueChange,
   disabled = false,
 }: TextFieldProps) {
@@ -50,7 +47,6 @@ export function TextField({
         type={type}
         placeholder={placeholder}
         defaultValue={defaultValue}
-        value={value}
         onValueChange={onValueChange}
         className={cn(
           // 방향 A: 테두리 없이 회색 면으로 칸을 보이고, 모서리는 Button과 같은 14px로 맞춘다.
