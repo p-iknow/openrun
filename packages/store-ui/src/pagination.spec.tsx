@@ -13,15 +13,14 @@ function ShowsPagination({
   currentPage: number;
   totalPages: number;
 }) {
-  const { previousPage, pages, nextPage } = getPagination({
-    currentPage,
-    totalPages,
-  });
+  const { pages, previousPage, nextPage, hasPreviousPage, hasNextPage } =
+    getPagination({ currentPage, totalPages });
   const href = (page: number) => `/shows?page=${page}`;
   return (
     <Pagination.Root>
       <Pagination.Previous
-        render={previousPage ? <a href={href(previousPage)} /> : undefined}
+        disabled={!hasPreviousPage}
+        render={<a href={href(previousPage)} />}
       />
       {pages.map((page) => (
         <Pagination.Link
@@ -33,7 +32,8 @@ function ShowsPagination({
         </Pagination.Link>
       ))}
       <Pagination.Next
-        render={nextPage ? <a href={href(nextPage)} /> : undefined}
+        disabled={!hasNextPage}
+        render={<a href={href(nextPage)} />}
       />
     </Pagination.Root>
   );

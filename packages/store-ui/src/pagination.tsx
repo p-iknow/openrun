@@ -16,12 +16,14 @@ const currentClass = 'bg-primary text-on-primary hover:bg-primary-hover';
 const disabledClass = 'cursor-not-allowed text-text-tertiary';
 
 export interface PaginationModel {
-  /** 이전 페이지 번호. 첫 페이지면 없다. */
-  previousPage: number | undefined;
   /** 보여 줄 번호. 현재 페이지 주변 최대 5개. */
   pages: number[];
-  /** 다음 페이지 번호. 마지막 페이지면 없다. */
-  nextPage: number | undefined;
+  /** 이전 페이지 번호. 첫 페이지에서는 갈 곳이 없으므로 `hasPreviousPage`가 `false`다. */
+  previousPage: number;
+  /** 다음 페이지 번호. 마지막 페이지에서는 갈 곳이 없으므로 `hasNextPage`가 `false`다. */
+  nextPage: number;
+  hasPreviousPage: boolean;
+  hasNextPage: boolean;
 }
 
 /**
@@ -44,10 +46,15 @@ export function getPagination({
       totalPages - count + 1,
     ),
   );
+  const hasPreviousPage = currentPage > 1;
+  const hasNextPage = currentPage < totalPages;
   return {
-    previousPage: currentPage > 1 ? currentPage - 1 : undefined,
     pages: Array.from({ length: count }, (_, i) => first + i),
-    nextPage: currentPage < totalPages ? currentPage + 1 : undefined,
+    // 갈 곳이 없어도 숫자로 둬서 쓰는 쪽이 분기 없이 링크를 만들게 한다. 그 링크는 disabled일 때 그려지지 않는다.
+    previousPage: hasPreviousPage ? currentPage - 1 : currentPage,
+    nextPage: hasNextPage ? currentPage + 1 : currentPage,
+    hasPreviousPage,
+    hasNextPage,
   };
 }
 
@@ -96,18 +103,21 @@ const steps = {
 } as const;
 
 export interface PaginationStepProps {
-  /** 이동할 링크 요소. 갈 곳이 없으면(첫 페이지의 이전, 마지막 페이지의 다음) 생략하고, 그러면 비활성으로 그린다. */
-  render?: ReactElement | undefined;
+  /** 이동할 링크 요소. 예: `<Link href="/shows?page=3" />`. */
+  render: ReactElement;
+  /** 갈 곳이 없을 때(첫 페이지의 이전, 마지막 페이지의 다음) 켠다. `render`는 그리지 않고 비활성 링크를 그린다. */
+  disabled?: boolean;
 }
 
 function PaginationStep({
   direction,
   render,
+  disabled = false,
 }: PaginationStepProps & { direction: keyof typeof steps }) {
   const { label, iconPath } = steps[direction];
-  const disabled = render === undefined;
   const element = useRender({
-    // 갈 곳이 없으면 href 없는 <a>로 그려 이동과 포커스를 막고, role과 aria-disabled로 비활성 링크임을 알린다.
+    // 비활성이면 쓰는 쪽 요소 대신 href 없는 <a>를 그린다. Next.js의 Link처럼 href가 꼭 필요한 요소에서 href를 뺄 수 없기 때문이다.
+    // href가 없으니 이동과 포커스가 막히고, role과 aria-disabled로 비활성 링크임을 알린다.
     render: disabled ? <a role="link" aria-disabled="true" /> : render,
     defaultTagName: 'a',
     props: {
