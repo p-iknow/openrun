@@ -61,7 +61,9 @@ export function Select({
             'flex h-[52px] w-full items-center justify-between gap-sm rounded-button bg-surface-muted px-lg text-left text-body text-text transition-colors select-none',
             // 테두리 색은 평소에 정해 둔다. 포커스 때 정하면 transition-colors가 글자색(검정)에서 파랑으로 넘어가며 깜빡인다.
             'outline-primary focus-visible:outline-2 focus-visible:-outline-offset-2',
-            'hover:not-data-disabled:bg-border data-popup-open:bg-border',
+            'hover:not-data-disabled:not-data-popup-open:bg-border',
+            // 열린 동안은 TextField의 포커스처럼 흰 바탕과 안쪽 테두리로 쓰는 중임을 드러낸다.
+            'data-popup-open:bg-surface data-popup-open:outline-2 data-popup-open:-outline-offset-2',
             // 회색 면 위에서 대비 4.5:1을 넘는 글자 토큰은 text-secondary뿐이라 placeholder도 이 색을 쓴다.
             'data-placeholder:text-text-secondary',
             'data-disabled:cursor-not-allowed data-disabled:text-text-tertiary',
