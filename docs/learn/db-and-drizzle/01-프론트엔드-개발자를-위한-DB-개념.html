@@ -20,7 +20,7 @@
           <li><a href="#fk">외래 키: 다른 테이블의 id를 들고 있기</a></li>
           <li><a href="#one-to-many">일대다 관계</a></li>
           <li><a href="#constraint">제약: DB가 하는 검증</a></li>
-          <li><a href="#join">JOIN: id로 두 배열 합치기</a></li>
+          <li><a href="#join">JOIN: 두 테이블을 이어 붙이기</a></li>
           <li><a href="#index">인덱스: 찾아보기 목차</a></li>
           <li><a href="#sql">SQL 문장의 두 종류</a></li>
           <li><a href="#timestamptz">timestamptz</a></li>
@@ -158,24 +158,182 @@ const venue = venues[shows[1].venueId]; // 필요할 때 id로 찾아 붙인다<
         </section>
 
         <section id="join">
-          <h2>JOIN: id로 두 배열 합치기</h2>
+          <h2>JOIN: 두 테이블을 이어 붙이기</h2>
           <p>
             목록 화면에는 공연 제목과 공연장 이름이 함께 필요하다. 두 정보가 서로 다른 테이블에 있으므로, 공연의
-            <code>venue_id</code>로 공연장을 찾아 붙여야 한다. SQL에서 이것을 <strong>JOIN</strong>이라고 한다.
+            <code>venue_id</code>로 공연장을 찾아 붙여야 한다. 이렇게 두 테이블의 행을 조건에 맞춰 이어 붙이는 것을
+            <strong>JOIN</strong>이라고 한다. 결과는 두 테이블의 컬럼을 옆으로 이어 붙인 새 표다.
           </p>
-          <pre><code class="language-ts">// INNER JOIN을 자바스크립트로 쓰면
-const rows = shows
-  .map((show) =&gt; ({ show, venue: venues.find((v) =&gt; v.id === show.venue_id) }))
-  .filter(({ venue }) =&gt; venue !== undefined) // INNER: 짝이 없는 행은 뺀다
-  .map(({ show, venue }) =&gt; ({ title: show.title, venueName: venue.name }));</code></pre>
+          <pre><code class="language-sql">select shows.title, venues.name
+from shows                                   -- 왼쪽 테이블
+inner join venues                            -- 오른쪽 테이블
+  on venues.id = shows.venue_id;             -- 짝을 찾는 조건</code></pre>
           <p>
-            <code>INNER JOIN</code>은 짝이 있는 행만 남긴다. 이 저장소의 공연 목록은 회차와도 INNER JOIN을 하므로, 회차가
-            하나도 없는 공연은 목록에 나오지 않는다.
+            <code>from</code>에 쓴 테이블을 <strong>왼쪽</strong>, <code>join</code> 뒤에 쓴 테이블을 <strong>오른쪽</strong>이라고
+            부른다. <code>on</code> 뒤가 "어느 행끼리 짝인가"를 정하는 조건이다. JOIN 종류는 <strong>짝이 없는 행을 어떻게
+            하는가</strong>로 나뉜다.
+          </p>
+
+          <h3 id="join-example">예시 데이터</h3>
+          <p>아래 두 테이블로 JOIN 종류마다 결과가 어떻게 다른지 본다. 공연 3번 "붉은 숲"은 아직 회차가 없다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>shows.id</th><th>title</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>1</td><td>달빛 정원</td></tr>
+                <tr><td>2</td><td>겨울 기차</td></tr>
+                <tr><td>3</td><td>붉은 숲</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>performances.id</th><th>show_id</th><th>starts_at</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>10</td><td>1</td><td>3월 1일</td></tr>
+                <tr><td>11</td><td>1</td><td>3월 2일</td></tr>
+                <tr><td>12</td><td>2</td><td>3월 5일</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3 id="inner-join">INNER JOIN: 짝이 있는 행만</h3>
+          <pre><code class="language-sql">select shows.title, performances.starts_at
+from shows inner join performances on performances.show_id = shows.id;</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>title</th><th>starts_at</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>달빛 정원</td><td>3월 1일</td></tr>
+                <tr><td>달빛 정원</td><td>3월 2일</td></tr>
+                <tr><td>겨울 기차</td><td>3월 5일</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>
+            양쪽 모두에 짝이 있는 행만 남는다. 회차가 없는 "붉은 숲"은 결과에 없다. 그냥 <code>join</code>이라고만 쓰면
+            <code>inner join</code>이다.
+          </p>
+          <pre><code class="language-ts">// 자바스크립트로 쓰면
+shows.flatMap((show) =&gt;
+  performances
+    .filter((p) =&gt; p.show_id === show.id) // 짝을 모두 찾는다
+    .map((p) =&gt; ({ title: show.title, starts_at: p.starts_at })), // 짝이 없으면 빈 배열이라 사라진다
+);</code></pre>
+
+          <h3 id="left-join">LEFT JOIN: 왼쪽 행은 모두 남기기</h3>
+          <pre><code class="language-sql">select shows.title, performances.starts_at
+from shows left join performances on performances.show_id = shows.id;</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>title</th><th>starts_at</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>달빛 정원</td><td>3월 1일</td></tr>
+                <tr><td>달빛 정원</td><td>3월 2일</td></tr>
+                <tr><td>겨울 기차</td><td>3월 5일</td></tr>
+                <tr><td>붉은 숲</td><td><code>NULL</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>
+            왼쪽(<code>shows</code>) 행은 짝이 없어도 모두 남는다. 짝이 없는 행은 오른쪽 컬럼이 모두 <code>NULL</code>로
+            채워진다. <code>LEFT OUTER JOIN</code>이라고도 쓰며 같은 뜻이다.
+          </p>
+          <pre><code class="language-ts">shows.flatMap((show) =&gt; {
+  const matches = performances.filter((p) =&gt; p.show_id === show.id);
+  return matches.length &gt; 0
+    ? matches.map((p) =&gt; ({ title: show.title, starts_at: p.starts_at }))
+    : [{ title: show.title, starts_at: null }]; // 짝이 없어도 한 줄은 남긴다
+});</code></pre>
+          <p>
+            "회차가 없어도 공연은 보여 줘야 한다"처럼 왼쪽을 빠짐없이 보여 줄 때 쓴다. 결과의 오른쪽 컬럼은 항상
+            <code>NULL</code>일 수 있다고 보고 다뤄야 한다.
+          </p>
+
+          <h3 id="right-full-join">RIGHT JOIN, FULL JOIN</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>종류</th><th>남기는 행</th><th>짝이 없을 때</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>RIGHT JOIN</code></td><td>오른쪽 행 모두</td><td>왼쪽 컬럼이 <code>NULL</code></td></tr>
+                <tr><td><code>FULL JOIN</code></td><td>양쪽 행 모두</td><td>없는 쪽 컬럼이 <code>NULL</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>
+            <code>RIGHT JOIN</code>은 <code>LEFT JOIN</code>에서 양쪽을 바꾼 것이다. <code>a right join b</code>는
+            <code>b left join a</code>와 결과가 같아서, 보통은 읽기 쉬운 <code>LEFT JOIN</code>으로 바꿔 쓴다.
           </p>
           <p>
-            비슷하게 <code>GROUP BY</code>는 배열을 키별로 묶는 것(<code>Object.groupBy</code>)이고,
-            <code>min()</code>, <code>max()</code>는 묶인 값에서 가장 작은 값과 큰 값을 고르는 것이다. 공연 기간(첫
-            회차와 마지막 회차)이 이 방식으로 계산된다(<a href="#aggregate">집계 함수와 GROUP BY</a>).
+            위 예시에 <code>RIGHT JOIN</code>을 해도 결과는 <code>INNER JOIN</code>과 같다. 회차는
+            <a href="#fk">외래 키</a> 때문에 반드시 있는 공연을 가리키므로, 오른쪽(회차)에 짝 없는 행이 생길 수 없기 때문이다.
+            외래 키가 걸린 관계에서는 "짝 없는 행"이 외래 키가 없는 쪽(공연)에만 생긴다.
+          </p>
+
+          <h3 id="cross-join">CROSS JOIN: 모든 조합</h3>
+          <p>
+            조건 없이 왼쪽 행 하나마다 오른쪽 행을 전부 붙인다. 3행과 3행이면 9행이 된다. 이중 <code>for</code>문으로 모든 쌍을
+            만드는 것과 같다. 예를 들어 "모든 회차 × 모든 좌석"으로 회차 좌석을 만들 때 쓸 수 있다.
+          </p>
+
+          <h3 id="join-rows">일대다 JOIN은 행을 늘린다</h3>
+          <p>
+            INNER JOIN 결과에서 "달빛 정원"은 두 번 나왔다. 회차가 두 개라서다. <a href="#one-to-many">일대다</a> 관계를 JOIN하면
+            "일" 쪽 행이 "다" 쪽 짝 수만큼 복사된다. 자바스크립트 비유가 <code>find</code>가 아니라 <code>flatMap</code>인 이유다.
+          </p>
+          <p>
+            그래서 공연 목록에 회차를 그대로 JOIN하면 공연이 회차 수만큼 겹쳐 나오고, 행 수를 세면 공연 수가 아니라 회차 수가
+            나온다. 이 저장소의 공연 목록은 회차를 먼저 공연별로 묶어 공연당 한 행으로 줄인 뒤(<a href="#aggregate">GROUP BY</a>,
+            <a href="#subquery">서브쿼리</a>) JOIN한다. 그러면 공연 하나에 짝이 하나뿐이라 행이 늘지 않는다.
+          </p>
+          <p>
+            반대로 <code>shows</code>와 <code>venues</code>처럼 "다" 쪽(공연)에서 "일" 쪽(공연장)을 붙이면 짝이 많아야 하나라 행이
+            늘지 않는다.
+          </p>
+
+          <h3 id="join-on-where">LEFT JOIN에서 ON과 WHERE의 차이</h3>
+          <p>
+            "취소되지 않은 회차만 붙이되, 그런 회차가 없는 공연도 목록에 남기고 싶다"고 하자. 조건을 어디에 쓰느냐에 따라
+            결과가 다르다.
+          </p>
+          <pre><code class="language-sql">-- ① ON에 쓰기: 짝을 고를 때 조건을 본다. 짝이 없는 공연도 NULL과 함께 남는다
+from shows left join performances
+  on performances.show_id = shows.id and performances.is_cancelled = false
+
+-- ② WHERE에 쓰기: JOIN이 끝난 결과를 거른다
+from shows left join performances on performances.show_id = shows.id
+where performances.is_cancelled = false</code></pre>
+          <p>
+            ②에서는 짝이 없는 공연의 <code>is_cancelled</code>가 <code>NULL</code>이다. <code>NULL = false</code>는 참이 아니므로
+            그 행이 걸러진다. 결국 LEFT JOIN을 쓴 의미가 사라지고 INNER JOIN과 같아진다. LEFT JOIN에서 오른쪽 테이블의 조건은
+            보통 <code>ON</code>에 쓴다. INNER JOIN에서는 어느 쪽에 써도 결과가 같다.
+          </p>
+
+          <h3 id="anti-join">짝이 없는 행만 찾기</h3>
+          <pre><code class="language-sql">select shows.title
+from shows left join performances on performances.show_id = shows.id
+where performances.id is null;               -- → 붉은 숲</code></pre>
+          <p>
+            LEFT JOIN 뒤에 오른쪽의 기본 키가 <code>NULL</code>인 행만 남기면 "짝이 없는 왼쪽 행", 즉 회차가 없는 공연을 찾을 수
+            있다. <code>NULL</code>은 <code>= null</code>로 비교할 수 없고 <code>is null</code>로 검사한다. 같은 일을
+            <code>where not exists (select 1 from performances where performances.show_id = shows.id)</code>로도 쓸 수 있다.
+          </p>
+          <p>
+            Drizzle에서는 <code>innerJoin</code>, <code>leftJoin</code>, <code>rightJoin</code>, <code>fullJoin</code>,
+            <code>crossJoin</code> 메서드로 쓴다(<a href="03-drizzle-쿼리-문법.html#join">db-and-drizzle 03 문서</a>).
           </p>
         </section>
 

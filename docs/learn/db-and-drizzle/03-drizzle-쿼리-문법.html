@@ -156,6 +156,15 @@ const rows = await query; // 이때 SQL을 만들어 보내고 결과를 받는�
             Drizzle은 JOIN 종류에 맞춰 결과 타입도 바꾼다. <code>leftJoin(venues, ...)</code>이면 <code>venueName</code>이
             <code>string | null</code>이 되어, 짝이 없는 경우를 코드에서 처리하라고 알려 준다.
           </p>
+                  <p>
+            같은 모양으로 <code>rightJoin</code>, <code>fullJoin</code>도 있고, 조건 없이 모든 조합을 만드는
+            <code>crossJoin(테이블)</code>도 있다. 각 JOIN이 짝 없는 행을 어떻게 다루는지, 일대다 관계를 JOIN하면 행이 늘어나는
+            이유는 <a href="01-프론트엔드-개발자를-위한-DB-개념.html#join">db-and-drizzle 01 문서</a>에 있다. 공연 목록이 회차를 바로
+            JOIN하지 않고 서브쿼리로 공연당 한 행으로 줄인 뒤 JOIN하는 것도 그 때문이다(<a
+              href="01-프론트엔드-개발자를-위한-DB-개념.html#join-rows"
+              >일대다 JOIN은 행을 늘린다</a
+            >).
+          </p>
         </section>
 
         <section id="eq">
