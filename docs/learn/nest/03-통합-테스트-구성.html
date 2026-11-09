@@ -4,9 +4,9 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>통합 테스트 구성: Testcontainers, Vitest, Turborepo</title>
-    <link rel="stylesheet" href="learn.css" />
-    <script src="vendor/highlightjs/highlight.min.js" defer></script>
-    <script src="learn.js" defer></script>
+    <link rel="stylesheet" href="../learn.css" />
+    <script src="../vendor/highlightjs/highlight.min.js" defer></script>
+    <script src="../learn.js" defer></script>
   </head>
   <body>
     <div class="layout">
@@ -48,7 +48,7 @@
           <code>vitest.integration.config.ts</code>, <code>test/setup/postgres.ts</code>,
           <code>test/shows.int.spec.ts</code>와 루트의 <code>turbo.json</code>이다. 기준 버전은
           Vitest 5.1, Testcontainers 12.2, Turborepo 2.11이다. DB 연결 구조는
-          <a href="004-drizzle-스키마와-DB-연결.html">004 문서</a>에서 다뤘다.
+          <a href="../db-and-drizzle/00-drizzle-스키마와-DB-연결.html">db-and-drizzle 00 문서</a>에서 다뤘다.
         </p>
 
         <section id="overview">
@@ -449,7 +449,7 @@ const app = moduleRef.createNestApplication();</code></pre>
             <summary>선택 읽기: <code>overrideProvider</code>를 쓰지 않은 이유</summary>
             <div class="fold-body">
               <p>
-                Nest 테스트에서 DB를 바꿔 끼울 때 흔히 쓰는 방법은 <code>overrideProvider</code>다. NestJS 공식 테스트 문서가 이 방법을 보여 주고, 공식 <code>@nestjs/drizzle</code> 문서도 테스트에서 DB 토큰 자리에 가짜 객체를 넣는 방법을 보여 준다. 이 저장소의 <a href="001-nestjs-기초.html#test">001 문서</a>도 처음에는 "DB를 붙이면 <code>overrideProvider()</code>로 바꿀 수
+                Nest 테스트에서 DB를 바꿔 끼울 때 흔히 쓰는 방법은 <code>overrideProvider</code>다. NestJS 공식 테스트 문서가 이 방법을 보여 주고, 공식 <code>@nestjs/drizzle</code> 문서도 테스트에서 DB 토큰 자리에 가짜 객체를 넣는 방법을 보여 준다. 이 저장소의 <a href="00-nestjs-기초.html#test">nest 00 문서</a>도 처음에는 "DB를 붙이면 <code>overrideProvider()</code>로 바꿀 수
                 있다"고 안내했다. 그래서 "왜 그 방법을 쓰지 않았나"에 답해 둔다.
               </p>
               <pre><code class="language-ts">await Test.createTestingModule({ imports: [AppModule] })

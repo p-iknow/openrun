@@ -3,7 +3,7 @@
   "paths": {
     "/shows": {
       "get": {
-        "operationId": "ShowsController_findAll",
+        "operationId": "ShowsController_findPage",
         "parameters": [],
         "responses": {
           "200": {
@@ -11,10 +11,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ShowDto"
-                  }
+                  "$ref": "#/components/schemas/ShowPageDto"
                 }
               }
             }
@@ -46,7 +43,37 @@
   "servers": [],
   "components": {
     "schemas": {
-      "ShowDto": {
+      "Genre": {
+        "type": "string",
+        "enum": [
+          "musical",
+          "play",
+          "concert",
+          "classical_dance",
+          "kids_family"
+        ],
+        "description": "장르"
+      },
+      "ShowPeriodDto": {
+        "type": "object",
+        "properties": {
+          "start": {
+            "type": "string",
+            "format": "date-time",
+            "description": "첫 회차의 시작 일시"
+          },
+          "end": {
+            "type": "string",
+            "format": "date-time",
+            "description": "마지막 회차의 시작 일시"
+          }
+        },
+        "required": [
+          "start",
+          "end"
+        ]
+      },
+      "ShowSummaryDto": {
         "type": "object",
         "properties": {
           "id": {
@@ -56,11 +83,68 @@
           "title": {
             "type": "string",
             "description": "공연 제목"
+          },
+          "genre": {
+            "description": "장르",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Genre"
+              }
+            ]
+          },
+          "venueName": {
+            "type": "string",
+            "description": "공연장 이름"
+          },
+          "period": {
+            "description": "공연 기간",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ShowPeriodDto"
+              }
+            ]
           }
         },
         "required": [
           "id",
-          "title"
+          "title",
+          "genre",
+          "venueName",
+          "period"
+        ]
+      },
+      "ShowPageDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ShowSummaryDto"
+            }
+          },
+          "page": {
+            "type": "integer",
+            "description": "현재 페이지(1부터)"
+          },
+          "size": {
+            "type": "integer",
+            "description": "페이지 크기"
+          },
+          "totalCount": {
+            "type": "integer",
+            "description": "조건에 맞는 전체 공연 수"
+          },
+          "totalPages": {
+            "type": "integer",
+            "description": "전체 페이지 수. 공연이 없으면 0이다."
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "size",
+          "totalCount",
+          "totalPages"
         ]
       },
       "FieldErrorDto": {

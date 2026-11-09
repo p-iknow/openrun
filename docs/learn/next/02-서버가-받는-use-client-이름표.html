@@ -4,9 +4,9 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>서버가 받는 'use client' 파일: 이름표 붙은 가짜</title>
-    <link rel="stylesheet" href="learn.css" />
-    <script src="vendor/highlightjs/highlight.min.js" defer></script>
-    <script src="learn.js" defer></script>
+    <link rel="stylesheet" href="../learn.css" />
+    <script src="../vendor/highlightjs/highlight.min.js" defer></script>
+    <script src="../learn.js" defer></script>
   </head>
   <body>
     <div class="layout">
@@ -129,7 +129,7 @@ export const buttonVariants = registerClientReference(
           <p>
             이 바꿔 끼우기는 페이지를 렌더링할 때가 아니라 <code>next build</code>가 서버용 코드를 만들 때 일어난다. 빌드 때
             무엇을 준비하고 그 뒤 단계들이 언제 실행되는지는
-            <a href="015-서버-컴포넌트-단계와-SSR-단계.html#build">015 문서의 "먼저: 빌드 때 코드 준비"</a>에 정리했다.
+            <a href="03-서버-컴포넌트-단계와-SSR-단계.html#build">next 03 문서의 "먼저: 빌드 때 코드 준비"</a>에 정리했다.
           </p>
           <div class="callout">
             <p>
@@ -286,7 +286,7 @@ export const buttonVariants = registerClientReference(
           </div>
           <p>
             <code>buttonVariants</code> 호출이 안 되는 이유는
-            <a href="012-라이브러리-빌드와-use-client-경계.html#enough">012 문서의 "파일마다 지시어만 두면 될까"</a>에서도
+            <a href="../design-system/04-라이브러리-빌드와-use-client-경계.html#enough">design-system 04 문서의 "파일마다 지시어만 두면 될까"</a>에서도
             다뤘다. 그때 "클라이언트 참조라서 호출할 수 없다"고 적은 것이 이 가짜 함수다.
           </p>
         </section>
@@ -601,7 +601,7 @@ export * as Drawer from './drawer.js';</code></pre>
               >
             </li>
             <li>
-              <a href="012-라이브러리-빌드와-use-client-경계.html#directive">012 라이브러리 빌드와 'use client' 경계</a>
+              <a href="../design-system/04-라이브러리-빌드와-use-client-경계.html#directive">design-system 04 라이브러리 빌드와 'use client' 경계</a>
               ('use client'가 표시하는 것)
             </li>
           </ol>

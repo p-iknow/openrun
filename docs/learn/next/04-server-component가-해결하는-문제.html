@@ -4,9 +4,9 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Server Component가 해결하는 문제</title>
-    <link rel="stylesheet" href="learn.css" />
-    <script src="vendor/highlightjs/highlight.min.js" defer></script>
-    <script src="learn.js" defer></script>
+    <link rel="stylesheet" href="../learn.css" />
+    <script src="../vendor/highlightjs/highlight.min.js" defer></script>
+    <script src="../learn.js" defer></script>
   </head>
   <body>
     <div class="layout">
@@ -48,8 +48,8 @@
             </p>
           </div>
           <p>
-            이 문서는 <a href="015-서버-컴포넌트-단계와-SSR-단계.html">015 Server Component 단계와 SSR 단계</a>를 읽었다고 보고
-            쓴다. "1단계(설계도 만들기)", "2단계(HTML 만들기)", "RSC payload" 같은 말은 015에서 설명했다.
+            이 문서는 <a href="03-서버-컴포넌트-단계와-SSR-단계.html">next 03 Server Component 단계와 SSR 단계</a>를 읽었다고 보고
+            쓴다. "1단계(설계도 만들기)", "2단계(HTML 만들기)", "RSC payload" 같은 말은 next 03에서 설명했다.
           </p>
         </section>
 
@@ -410,7 +410,7 @@ export default async function ProbeApp() {
                 <tr>
                   <td>HTML</td>
                   <td>서버가 만든다</td>
-                  <td>서버가 만든다 (015의 2단계)</td>
+                  <td>서버가 만든다 (next 03의 2단계)</td>
                 </tr>
                 <tr>
                   <td>하이드레이션 때 다시 실행하는 것</td>
@@ -449,14 +449,14 @@ export default async function ProbeApp() {
         <section id="not">
           <h2>SSR을 없앤 것은 아니다</h2>
           <p>
-            Server Component는 SSR을 대신하지 않는다. 015에서 본 2단계(HTML 만들기)가 그대로 SSR이다. Server Component는 SSR
+            Server Component는 SSR을 대신하지 않는다. next 03에서 본 2단계(HTML 만들기)가 그대로 SSR이다. Server Component는 SSR
             <strong>앞에</strong> 1단계(설계도 만들기)를 하나 더 둔 것이다.
           </p>
           <ul>
             <li>처음 열 때 HTML을 빨리 보여 주는 일은 여전히 SSR이 한다.</li>
             <li>Server Component는 그 HTML에 이벤트를 붙이는 하이드레이션의 범위를 줄인다.</li>
             <li>
-              링크로 이동할 때는 SSR 없이 RSC payload만 받는다(<a href="015-서버-컴포넌트-단계와-SSR-단계.html#navigate">015</a>).
+              링크로 이동할 때는 SSR 없이 RSC payload만 받는다(<a href="03-서버-컴포넌트-단계와-SSR-단계.html#navigate">015</a>).
             </li>
           </ul>
         </section>
@@ -483,7 +483,7 @@ export default async function ProbeApp() {
                 <tr>
                   <td><code>'use client'</code> 파일은 서버에서 이름표로만 보인다</td>
                   <td>
-                    <code>Drawer.Root</code>가 undefined가 됐다(<a href="014-서버가-받는-use-client-이름표.html">014</a>). 동적
+                    <code>Drawer.Root</code>가 undefined가 됐다(<a href="02-서버가-받는-use-client-이름표.html">014</a>). 동적
                     페이지였다면 빌드를 통과하고 요청 때 터졌다
                   </td>
                 </tr>
@@ -581,8 +581,8 @@ export default async function ProbeApp() {
               >
             </li>
             <li><a href="https://react.dev/reference/react-dom/client/hydrateRoot">React: hydrateRoot</a></li>
-            <li><a href="015-서버-컴포넌트-단계와-SSR-단계.html">015 Server Component 단계와 SSR 단계</a></li>
-            <li><a href="014-서버가-받는-use-client-이름표.html">014 서버가 받는 'use client' 파일: 이름표 붙은 가짜</a></li>
+            <li><a href="03-서버-컴포넌트-단계와-SSR-단계.html">next 03 Server Component 단계와 SSR 단계</a></li>
+            <li><a href="02-서버가-받는-use-client-이름표.html">next 02 서버가 받는 'use client' 파일: 이름표 붙은 가짜</a></li>
           </ol>
         </section>
       </main>

@@ -25,7 +25,7 @@ export const Default: Story = {
 
 /** 포스터가 로드되기 전 같은 크기를 차지하는 3:4 자리 표시자. */
 export const Poster: Story = {
-  args: { className: 'aspect-[3/4] w-[180px]' },
+  args: { className: 'aspect-3/4 w-[180px]' },
 };
 
 /** 포스터 카드 하나의 자리 표시자: 포스터, 제목, 날짜. 글자 줄은 `rounded-badge`로 모서리를 줄인다. */
@@ -34,7 +34,7 @@ export const PosterCard: Story = {
   parameters: { controls: { disable: true } },
   render: () => (
     <div aria-busy="true" className="flex w-[180px] flex-col gap-sm">
-      <Skeleton className="aspect-[3/4] w-full" />
+      <Skeleton className="aspect-3/4 w-full" />
       <Skeleton className="h-[20px] w-full rounded-badge" />
       <Skeleton className="h-[16px] w-2/3 rounded-badge" />
     </div>

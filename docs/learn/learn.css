@@ -126,6 +126,9 @@ main {
   min-width: 0;
 }
 /* 전체 문서 목록: index.html에서 learn.js가 채운다. */
+.doc-group[hidden] {
+  display: none;
+}
 .doc-index {
   margin: 1.5rem 0;
   padding: 0;

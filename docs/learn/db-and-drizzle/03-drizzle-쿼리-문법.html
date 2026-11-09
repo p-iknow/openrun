@@ -1,0 +1,468 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>03 Drizzle 쿼리 문법</title>
+    <link rel="stylesheet" href="../learn.css" />
+    <script src="../vendor/highlightjs/highlight.min.js" defer></script>
+    <script src="../learn.js" defer></script>
+  </head>
+  <body>
+    <div class="layout">
+      <nav aria-label="목차">
+        <strong>목차</strong>
+        <ol>
+          <li><a href="#lazy">쿼리는 await할 때 실행된다</a></li>
+          <li><a href="#select">select</a></li>
+          <li><a href="#from">from</a></li>
+          <li><a href="#join">innerJoin과 leftJoin</a></li>
+          <li><a href="#eq">eq</a></li>
+          <li><a href="#order-by">orderBy, asc, desc</a></li>
+          <li><a href="#limit-offset">limit, offset</a></li>
+          <li><a href="#aggregate">count, min, max와 groupBy</a></li>
+          <li><a href="#subquery">서브쿼리와 .as()</a></li>
+          <li><a href="#parallel">쿼리 두 개를 함께 보내기</a></li>
+          <li><a href="#insert">insert, values, returning</a></li>
+          <li><a href="#execute">execute와 sql 템플릿</a></li>
+          <li><a href="#transaction">transaction</a></li>
+          <li><a href="#to-sql">toSQL로 SQL 확인하기</a></li>
+        </ol>
+      </nav>
+
+      <main>
+        <h1>03 Drizzle 쿼리 문법</h1>
+        <p class="lead">
+          서비스, 시드, 테스트에서 DB를 읽고 쓸 때 쓰는 Drizzle 쿼리 문법을 모은 참고 문서다. 문법마다 이 저장소의 코드,
+          Drizzle이 만드는 SQL, 결과 타입을 적는다. 처음부터 읽지 않고, 다른 문서에서 링크로 넘어와 필요한 절만 읽는다. 쿼리에
+          쓰는 테이블 객체(<code>shows</code>, <code>performances</code>)를 정의하는 문법은
+          <a href="02-drizzle-스키마-문법.html">db-and-drizzle 02 문서</a>, JOIN이나 GROUP BY 같은 SQL 개념은
+          <a href="01-프론트엔드-개발자를-위한-DB-개념.html">db-and-drizzle 01 문서</a>에 있다. 기준 버전은 drizzle-orm 0.45다.
+        </p>
+
+        <section id="lazy">
+          <h2>쿼리는 await할 때 실행된다</h2>
+          <pre><code class="language-ts">const query = this.db.select().from(shows); // 아직 DB에 아무것도 보내지 않았다
+const rows = await query; // 이때 SQL을 만들어 보내고 결과를 받는다</code></pre>
+          <p>
+            <code>this.db.select()...</code>는 쿼리를 바로 실행하지 않고, "어떤 SQL을 보낼지"를 담은 객체(쿼리 빌더)를
+            돌려준다. <code>await</code>하는 순간(정확히는 <code>then</code>이 불릴 때) SQL을 만들어 DB에 보낸다. 메서드를
+            이어 붙이는 동안에는 SQL 문장을 조립하기만 한다.
+          </p>
+          <p>
+            그래서 쿼리 일부를 변수에 담아 다른 쿼리의 재료로 쓸 수 있다. <code>ShowsService</code>의 <code>period</code>가
+            그 예다. <code>period</code>는 혼자 실행되지 않고, 바깥 쿼리의 SQL 안에 끼워 넣어진다(<a href="#subquery"
+              >서브쿼리</a
+            >).
+          </p>
+          <p>
+            <code>this.db</code>는 <code>DatabaseModule</code>이 주입한 Drizzle 객체다(<a
+              href="00-drizzle-스키마와-DB-연결.html#providers"
+              >db-and-drizzle 00 문서</a
+            >).
+          </p>
+        </section>
+
+        <section id="select">
+          <h2>select</h2>
+          <pre><code class="language-ts">await this.db
+  .select({
+    id: shows.id,
+    title: shows.title,
+    venueName: venues.name,
+  })
+  .from(shows)
+  .innerJoin(venues, eq(venues.id, shows.venueId));
+// 결과 타입: { id: number; title: string; venueName: string }[]</code></pre>
+          <p>
+            <code>select</code>에 넘기는 객체가 결과 행의 모양이다. 키는 결과에서 쓸 이름이고, 값은 가져올 컬럼이다. 키 이름은
+            마음대로 지을 수 있어서, <code>venues.name</code>을 <code>venueName</code>으로 받았다. SQL의
+            <code>select "venues"."name"</code>을 고르고 결과를 <code>venueName</code> 키에 담는 일은 Drizzle이 한다.
+          </p>
+          <p>
+            결과 타입은 스키마에서 자동으로 나온다. <code>shows.title</code>이 <code>.notNull()</code>이라 <code>string</code>이고,
+            수식어가 없는 컬럼이면 <code>string | null</code>이다(<a href="02-drizzle-스키마-문법.html#not-null"
+              >db-and-drizzle 02 문서</a
+            >).
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>쓰는 법</th>
+                  <th>가져오는 것</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>select()</code></td>
+                  <td>테이블의 모든 컬럼. 결과 타입은 <code>$inferSelect</code>와 같다</td>
+                </tr>
+                <tr>
+                  <td><code>select({ id: shows.id, ... })</code></td>
+                  <td>고른 컬럼만, 고른 이름으로</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            이 저장소는 필요한 컬럼만 고르는 쪽을 쓴다. <code>description</code>처럼 긴 본문을 목록에서 가져오지 않고, 결과
+            타입이 화면에 필요한 모양과 바로 맞는다.
+          </p>
+        </section>
+
+        <section id="from">
+          <h2>from</h2>
+          <pre><code class="language-ts">.from(shows)</code></pre>
+          <p>
+            어느 테이블에서 읽을지 정한다. SQL의 <code>from "shows"</code>다. 테이블 객체 대신
+            <a href="#subquery">서브쿼리</a>를 넘길 수도 있다.
+          </p>
+        </section>
+
+        <section id="join">
+          <h2>innerJoin과 leftJoin</h2>
+          <pre><code class="language-ts">.from(shows)
+.innerJoin(venues, eq(venues.id, shows.venueId))</code></pre>
+          <pre><code class="language-sql">from "shows" inner join "venues" on "venues"."id" = "shows"."venue_id"</code></pre>
+          <p>
+            첫 인자는 붙일 테이블(또는 서브쿼리), 둘째 인자는 짝을 찾는 조건이다. "공연의 <code>venue_id</code>와 같은
+            <code>id</code>를 가진 공연장을 붙인다"는 뜻이다(<a href="01-프론트엔드-개발자를-위한-DB-개념.html#join">JOIN</a>).
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>메서드</th>
+                  <th>짝이 없는 행</th>
+                  <th>붙인 쪽 컬럼의 결과 타입</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>innerJoin</code></td>
+                  <td>결과에서 빠진다</td>
+                  <td><code>string</code></td>
+                </tr>
+                <tr>
+                  <td><code>leftJoin</code></td>
+                  <td>남고, 붙인 쪽 컬럼이 <code>NULL</code>이다</td>
+                  <td><code>string | null</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            Drizzle은 JOIN 종류에 맞춰 결과 타입도 바꾼다. <code>leftJoin(venues, ...)</code>이면 <code>venueName</code>이
+            <code>string | null</code>이 되어, 짝이 없는 경우를 코드에서 처리하라고 알려 준다.
+          </p>
+                  <p>
+            같은 모양으로 <code>rightJoin</code>, <code>fullJoin</code>도 있고, 조건 없이 모든 조합을 만드는
+            <code>crossJoin(테이블)</code>도 있다. 각 JOIN이 짝 없는 행을 어떻게 다루는지, 일대다 관계를 JOIN하면 행이 늘어나는
+            이유는 <a href="01-프론트엔드-개발자를-위한-DB-개념.html#join">db-and-drizzle 01 문서</a>에 있다. 공연 목록이 회차를 바로
+            JOIN하지 않고 서브쿼리로 공연당 한 행으로 줄인 뒤 JOIN하는 것도 그 때문이다(<a
+              href="01-프론트엔드-개발자를-위한-DB-개념.html#join-rows"
+              >일대다 JOIN은 행을 늘린다</a
+            >). 공연 목록 쿼리 전체를 예시 데이터로 따라가는 설명은
+            <a href="05-공연-목록-쿼리-읽기.html">db-and-drizzle 05 문서</a>에 있다.
+          </p>
+        </section>
+
+        <section id="eq">
+          <h2>eq</h2>
+          <pre><code class="language-ts">import { eq } from 'drizzle-orm';
+
+eq(venues.id, shows.venueId); // "venues"."id" = "shows"."venue_id"
+eq(shows.id, 3); // "shows"."id" = $1, params: [3]</code></pre>
+          <p>
+            "두 값이 같다"는 조건을 만든다. JOIN의 짝 조건이나 <code>.where(...)</code>의 조건으로 쓴다. 컬럼끼리 비교하면
+            SQL에 컬럼 이름이 들어가고, 값과 비교하면 값은 <a href="01-프론트엔드-개발자를-위한-DB-개념.html#parameter"
+              >파라미터</a
+            >(<code>$1</code>)로 따로 보낸다.
+          </p>
+          <p>
+            비교할 값의 타입도 검사한다. <code>shows.id</code>는 <code>number</code>이므로 <code>eq(shows.id, '3')</code>은
+            컴파일 오류다.
+          </p>
+        </section>
+
+        <section id="order-by">
+          <h2>orderBy, asc, desc</h2>
+          <pre><code class="language-ts">import { asc } from 'drizzle-orm';
+
+.orderBy(asc(period.start), asc(shows.id))</code></pre>
+          <pre><code class="language-sql">order by "start" asc, "shows"."id" asc</code></pre>
+          <p>
+            정렬 기준을 앞에서부터 차례로 적는다(<a href="01-프론트엔드-개발자를-위한-DB-개념.html#order-limit">ORDER BY</a>).
+            <code>asc</code>는 오름차순, <code>desc</code>는 내림차순이다. 서브쿼리의 별칭 컬럼(<code>period.start</code>)도
+            기준으로 쓸 수 있다.
+          </p>
+          <p>
+            공연 목록은 첫 회차 일시가 같은 공연끼리 순서가 흔들리지 않도록 <code>shows.id</code>를 마지막 기준으로 붙였다.
+          </p>
+        </section>
+
+        <section id="limit-offset">
+          <h2>limit, offset</h2>
+          <pre><code class="language-ts">.limit(PAGE_SIZE) // 20
+.offset((PAGE - 1) * PAGE_SIZE) // 1페이지면 0</code></pre>
+          <pre><code class="language-sql">limit $1    -- params: [20]</code></pre>
+          <p>
+            최대 몇 개를 가져올지(<code>limit</code>), 앞에서 몇 개를 건너뛸지(<code>offset</code>) 정한다(<a
+              href="01-프론트엔드-개발자를-위한-DB-개념.html#order-limit"
+              >LIMIT, OFFSET</a
+            >). 값은 파라미터로 보낸다.
+          </p>
+          <p>
+            <code>offset(0)</code>은 SQL에 아예 나오지 않는다. 0개를 건너뛰는 것은 건너뛰지 않는 것과 같아서 Drizzle이 뺀다.
+            <code>offset(20)</code>이면 <code>offset $2</code>가 붙는다.
+          </p>
+        </section>
+
+        <section id="aggregate">
+          <h2>count, min, max와 groupBy</h2>
+          <pre><code class="language-ts">import { count, max, min } from 'drizzle-orm';
+
+this.db
+  .select({
+    showId: performances.showId,
+    start: min(performances.startsAt),
+    end: max(performances.startsAt),
+  })
+  .from(performances)
+  .groupBy(performances.showId);
+// 결과 타입: { showId: number; start: Date | null; end: Date | null }[]</code></pre>
+          <pre><code class="language-sql">select "show_id", min("starts_at"), max("starts_at") from "performances" group by "performances"."show_id"</code></pre>
+          <p>
+            <code>drizzle-orm</code>에서 가져오는 집계 함수를 <code>select</code> 객체의 값으로 쓴다(<a
+              href="01-프론트엔드-개발자를-위한-DB-개념.html#aggregate"
+              >집계 함수와 GROUP BY</a
+            >). <code>.groupBy(...)</code>로 묶을 기준을 정한다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>함수</th>
+                  <th>결과 타입</th>
+                  <th>이유</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>count()</code></td>
+                  <td><code>number</code></td>
+                  <td>행이 없어도 0이다. DB는 큰 정수를 문자열로 주는데, Drizzle이 <code>number</code>로 바꿔 준다</td>
+                </tr>
+                <tr>
+                  <td><code>min(col)</code>, <code>max(col)</code></td>
+                  <td>컬럼 타입 <code>| null</code></td>
+                  <td>집계할 행이 없으면 <code>NULL</code>이다. 컬럼이 <code>Date</code>면 결과도 <code>Date</code>로 바꿔 준다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            그래서 서비스는 <code>min</code>, <code>max</code> 결과를 <code>Date | null</code>로 받는다. INNER JOIN으로 회차가 있는
+            공연만 남기므로 실제로는 <code>null</code>이 오지 않지만, 타입은 그것을 모른다. <code>toIso()</code>가
+            <code>null</code>이면 오류를 던져 타입을 <code>Date</code>로 좁힌다.
+          </p>
+          <p>
+            <code>count()</code>는 인자 없이 쓰면 <code>count(*)</code>(행 수)이고, <code>count(col)</code>이면 그 컬럼이
+            <code>NULL</code>이 아닌 행 수다.
+          </p>
+        </section>
+
+        <section id="subquery">
+          <h2>서브쿼리와 .as()</h2>
+          <pre><code class="language-ts">const period = this.db
+  .select({
+    showId: performances.showId,
+    start: min(performances.startsAt).as('start'), // ② 계산한 값에 별칭
+    end: max(performances.startsAt).as('end'),
+  })
+  .from(performances)
+  .groupBy(performances.showId)
+  .as('period'); // ① 쿼리 전체에 이름
+
+await this.db
+  .select({ title: shows.title, start: period.start }) // ③ 테이블처럼 쓴다
+  .from(shows)
+  .innerJoin(period, eq(period.showId, shows.id));</code></pre>
+          <pre><code class="language-sql">select "shows"."title", "start" from "shows"
+inner join (
+  select "show_id", min("starts_at") as "start", max("starts_at") as "end"
+  from "performances" group by "performances"."show_id"
+) "period" on "period"."show_id" = "shows"."id"</code></pre>
+          <ol class="steps blue">
+            <li>
+              <strong>쿼리 끝의 <code>.as('period')</code></strong>
+              쿼리를 실행하지 않고 <a href="01-프론트엔드-개발자를-위한-DB-개념.html#subquery">서브쿼리</a>로 만든다. 괄호로
+              감싸 <code>"period"</code>라는 이름을 붙인 SQL 조각이 된다.
+            </li>
+            <li>
+              <strong>계산한 값의 <code>.as('start')</code></strong>
+              <code>min(...)</code> 같은 계산 결과에는 컬럼 이름이 없으므로 별칭을 붙인다. 붙이지 않고 바깥에서
+              <code>period.start</code>를 쓰면 Drizzle이 오류를 던진다: "You tried to reference "start" field from a subquery,
+              which is a raw SQL field, but it doesn't have an alias declared."
+            </li>
+            <li>
+              <strong>테이블처럼 쓰기</strong>
+              <code>period.showId</code>, <code>period.start</code>처럼 <code>select</code> 객체의 키로 컬럼을 꺼내
+              <code>from</code>, <code>innerJoin</code>, <code>orderBy</code>, <code>select</code>에 쓴다. 타입도 그대로
+              따라온다.
+            </li>
+          </ol>
+          <p>
+            <code>showId: performances.showId</code>처럼 테이블 컬럼을 그대로 고른 값은 이미 컬럼 이름(<code>show_id</code>)이
+            있어서 별칭이 필요 없다.
+          </p>
+        </section>
+
+        <section id="parallel">
+          <h2>쿼리 두 개를 함께 보내기</h2>
+          <pre><code class="language-ts">const [rows, [total]] = await Promise.all([
+  this.db.select({ ... }).from(shows) /* ... */.limit(20),
+  this.db.select({ count: count() }).from(shows).innerJoin(period, eq(period.showId, shows.id)),
+]);</code></pre>
+          <p>
+            쿼리 빌더는 <code>await</code>할 수 있는 객체라 <code>Promise.all</code>에 그대로 넣을 수 있다. 두 쿼리가 서로를
+            기다리지 않고 함께 DB로 간다. Drizzle 객체 안의 pg 연결 풀이 연결 두 개로 나눠 보낸다(<a
+              href="00-drizzle-스키마와-DB-연결.html#layers"
+              >db-and-drizzle 00 문서</a
+            >).
+          </p>
+          <p>
+            <code>select</code>의 결과는 항상 배열이다. 개수 쿼리는 행이 하나뿐이어도 <code>[{ count: 21 }]</code>로 오므로
+            <code>[total]</code>로 꺼낸다. API의 tsconfig에는 <code>noUncheckedIndexedAccess</code>가 없어서 TypeScript는
+            <code>total</code>을 항상 있는 값(<code>{ count: number }</code>)으로 본다. <code>count(*)</code>는 행이 없어도 결과 행
+            하나를 돌려주므로 실제로도 비지 않지만, 서비스는 <code>total?.count ?? 0</code>으로 한 번 더 막아 둔다.
+          </p>
+          <div class="callout warn">
+            <p>
+              두 쿼리는 서로 다른 연결에서 따로 실행되므로, 그 사이에 공연이 추가되면 목록과 전체 개수가 어긋날 수 있다. 공연
+              목록에서는 다음 요청에서 맞춰지므로 감수한다. 반드시 같은 시점의 값이어야 하면
+              <a href="#transaction">트랜잭션</a>과 격리 수준을 함께 정해야 한다.
+            </p>
+          </div>
+        </section>
+
+        <section id="insert">
+          <h2>insert, values, returning</h2>
+          <pre><code class="language-ts">const venueRows = await tx
+  .insert(venues)
+  .values(VENUE_NAMES.map((name) =&gt; ({ name })))
+  .returning({ id: venues.id });
+// 결과 타입: { id: number }[]</code></pre>
+          <pre><code class="language-sql">insert into "venues" ("id", "name") values (default, $1), (default, $2), (default, $3) returning "id"</code></pre>
+          <ul>
+            <li>
+              <strong><code>.insert(테이블)</code></strong>: 어느 테이블에 넣을지 정한다.
+            </li>
+            <li>
+              <strong><code>.values(객체 또는 배열)</code></strong>: 넣을 행이다. 배열을 넘기면 문장 하나로 여러 행을 넣는다.
+              값의 타입은 <code>$inferInsert</code>라서, 필수 컬럼을 빠뜨리거나 <code>id</code>를 넣으면 컴파일 오류다(<a
+                href="02-drizzle-스키마-문법.html#infer"
+                >db-and-drizzle 02 문서</a
+              >). 빈 배열을 넘기면 실행할 때 오류가 나므로, 넣을 행이 없으면 부르지 않는다.
+            </li>
+            <li>
+              <strong><code>.returning({...})</code></strong>: 넣은 행에서 돌려받을 컬럼을 고른다. DB가 매긴 <code>id</code>처럼
+              넣은 뒤에야 알 수 있는 값을 받을 때 쓴다. 시드는 공연을 넣고 받은 <code>id</code>로 그 공연의 회차를 넣는다.
+              <code>returning</code>이 없으면 결과에 행이 없다.
+            </li>
+          </ul>
+          <p>
+            <code>(default, $1)</code>의 <code>default</code>는 <code>id</code>를 DB가 정하게 하는 SQL 표기다. 행을 여러 개 넣을 때
+            각 행이 <code>$1</code>, <code>$2</code>…로 값을 따로 받는다.
+          </p>
+        </section>
+
+        <section id="execute">
+          <h2>execute와 sql 템플릿</h2>
+          <pre><code class="language-ts">import { sql } from 'drizzle-orm';
+
+await tx.execute(sql`TRUNCATE ${performances}, ${shows}, ${venues} RESTART IDENTITY`);
+// → TRUNCATE "performances", "shows", "venues" RESTART IDENTITY</code></pre>
+          <p>
+            쿼리 빌더에 없는 SQL은 <code>sql</code> 태그드 템플릿으로 직접 쓰고 <code>execute</code>로 보낸다.
+            <code>TRUNCATE</code>는 빌더 메서드가 없어서 이렇게 썼다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th><code>${...}</code>에 넣은 것</th>
+                  <th>SQL에 들어가는 모양</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>테이블 객체(<code>${shows}</code>)</td>
+                  <td>테이블 이름 <code>"shows"</code></td>
+                </tr>
+                <tr>
+                  <td>컬럼 객체(<code>${shows.title}</code>)</td>
+                  <td>컬럼 이름 <code>"shows"."title"</code></td>
+                </tr>
+                <tr>
+                  <td>값(<code>${keyword}</code>)</td>
+                  <td><a href="01-프론트엔드-개발자를-위한-DB-개념.html#parameter">파라미터</a> <code>$1</code>. 값은 따로 보낸다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            값이 자동으로 파라미터가 되므로, 템플릿 리터럴처럼 보여도 문자열을 이어 붙이는 것과 달리 SQL 인젝션에 안전하다.
+            테이블 이름을 문자열로 적지 않고 객체로 넣으면, 스키마에서 이름을 바꿨을 때 이 SQL도 함께 바뀐다.
+          </p>
+          <p>
+            통합 테스트는 <code>db.execute('TRUNCATE performances, shows, venues RESTART IDENTITY CASCADE')</code>처럼 문자열을
+            그대로 넘긴다. 값이 섞이지 않는 고정 문장이라 문제는 없지만, 테이블 이름이 바뀌어도 타입 검사가 잡아 주지 않는다.
+          </p>
+          <p>
+            <code>sql</code>은 <code>select</code> 객체의 값으로도 쓸 수 있다. 예: <code>sql&lt;number&gt;`count(*)`</code>.
+            제네릭으로 결과 타입을 알려 주지만, Drizzle은 그 타입이 맞는지 검사하지 않는다.
+          </p>
+        </section>
+
+        <section id="transaction">
+          <h2>transaction</h2>
+          <pre><code class="language-ts">await db.transaction(async (tx) =&gt; {
+  await tx.execute(sql`TRUNCATE ${performances}, ${shows}, ${venues} RESTART IDENTITY`);
+  const venueRows = await tx.insert(venues).values(/* ... */).returning({ id: venues.id });
+  // ... 공연과 회차를 넣는다
+});</code></pre>
+          <p>
+            콜백 안의 쿼리를 <a href="01-프론트엔드-개발자를-위한-DB-개념.html#transaction">트랜잭션</a> 하나로 묶는다.
+          </p>
+          <ul>
+            <li>콜백이 끝까지 실행되면 커밋한다. 이때 모든 변경이 한꺼번에 반영된다.</li>
+            <li>콜백 안에서 오류가 던져지면 롤백하고, 그 오류를 다시 던진다. 앞에서 실행한 TRUNCATE도 되돌아간다.</li>
+            <li>
+              콜백 안에서는 반드시 <code>db</code>가 아니라 인자로 받은 <code>tx</code>로 쿼리한다. <code>db</code>로 보낸 쿼리는
+              다른 연결에서 실행되어 트랜잭션에 묶이지 않는다.
+            </li>
+          </ul>
+          <p>
+            <code>tx</code>는 <code>db</code>와 같은 메서드(<code>select</code>, <code>insert</code>, <code>execute</code>)를 갖는다.
+            안에서 <code>tx.rollback()</code>을 부르면 오류를 던져 직접 롤백할 수도 있다.
+          </p>
+        </section>
+
+        <section id="to-sql">
+          <h2>toSQL로 SQL 확인하기</h2>
+          <pre><code class="language-ts">console.log(this.db.select({ id: shows.id }).from(shows).limit(20).toSQL());
+// { sql: 'select "id" from "shows" limit $1', params: [20] }</code></pre>
+          <p>
+            쿼리 빌더 끝에 <code>.toSQL()</code>을 붙이면 DB에 보내지 않고 만들어질 SQL과 파라미터를 돌려준다. 이 문서의 SQL
+            예시도 이 방법으로 확인했다. DB 연결이 필요 없으므로, 쿼리가 예상한 SQL을 만드는지 빠르게 볼 때 쓴다.
+          </p>
+          <p>
+            실행되는 SQL을 모두 보고 싶으면 <code>drizzle(url, { logger: true })</code>로 만들면 쿼리마다 콘솔에 찍힌다.
+          </p>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

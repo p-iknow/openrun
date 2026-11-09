@@ -1,5 +1,20 @@
 {
   "$schema": "../../node_modules/oxlint/configuration_schema.json",
   "extends": ["../../.oxlintrc.json"],
-  "plugins": ["typescript", "unicorn", "oxc", "import", "react", "nextjs"]
+  "plugins": ["typescript", "unicorn", "oxc", "import", "react", "nextjs"],
+  "jsPlugins": ["eslint-plugin-better-tailwindcss"],
+  "settings": {
+    "better-tailwindcss": {
+      "entryPoint": "./app/globals.css"
+    }
+  },
+  "rules": {
+    "better-tailwindcss/enforce-canonical-classes": [
+      "error",
+      {
+        "collapse": false,
+        "logical": false
+      }
+    ]
+  }
 }

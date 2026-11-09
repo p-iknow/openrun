@@ -25,12 +25,14 @@ cp apps/store/.env.example apps/store/.env
 
 pnpm infra:up               # PostgreSQL, Mailpit 실행
 pnpm db:migrate             # 마이그레이션 적용
-pnpm db:seed                # 공연 데이터 넣기
+pnpm db:seed                # 개발용 공연 데이터 넣기
 
 pnpm dev                    # 스토어, API, store-ui 감시 빌드 함께 실행
 ```
 
-<http://localhost:3001>을 열면 DB에 저장된 공연 제목이 보인다. API는 <http://localhost:3000/shows>에서 응답한다.
+<http://localhost:3001>을 열면 공연 카드 목록이 보인다. API는 <http://localhost:3000/shows>에서 응답한다.
+
+`pnpm db:seed`는 공연장 3곳, 공연 20개, 공연마다 3~15회차를 넣는다. 다시 실행하면 비우고 다시 넣는다. Faker 시드 값이 고정이라 공연 구성(제목, 장르, 공연장, 회차 수)은 늘 같고, 날짜만 실행 시각 기준으로 다시 만든다.
 
 `pnpm dev`는 `packages/store-ui`를 감시 빌드하므로 토큰이나 컴포넌트를 고치면 스토어에 바로 반영된다.
 
@@ -53,6 +55,8 @@ pnpm build                  # API와 DB 없이 통과한다.
 
 - 토큰은 `@openrun/store-ui/tokens.css`에 있다. 스토어는 `apps/store/app/globals.css`에서 Tailwind 뒤에 불러오고, `@source`로 `dist`를 읽어 컴포넌트가 쓰는 클래스를 만든다.
 - Tailwind에는 의미 토큰만 노출한다. 색은 `bg-primary`, `text-text-secondary`처럼, 간격·글자 크기·모서리·최대 폭은 `p-lg`, `text-body`, `rounded-card`, `max-w-content`처럼 쓴다. `bg-blue-500`, `p-4`, `text-sm`, `max-w-7xl` 같은 기본 클래스는 만들어지지 않는다. 예외로 `0`은 `--spacing-0` 토큰이 있어 `p-0`, `m-0`, `gap-0`, `inset-0`처럼 숫자로 쓸 수 있다.
+- 클래스는 Tailwind v4의 짧은 문법으로 쓴다. `aspect-[3/4]`가 아니라 `aspect-3/4`, `max-h-[var(--x)]`가 아니라 `max-h-(--x)`다. `apps/store`와 `packages/store-ui`의 oxlint가 `eslint-plugin-better-tailwindcss`의 `enforce-canonical-classes`로 검사하고, `pnpm lint`와 pre-commit에서 실패한다. `oxlint --fix`로 고칠 수 있다. `rootFontSize`를 주지 않아 `h-[16px]`를 `h-lg` 같은 토큰으로 바꾸라고 하지는 않는다. 이 검사는 `className`, `cn`, `cva` 같은 곳의 클래스만 읽으므로, 스토리의 `args` 같은 일반 문자열은 리뷰에서 확인한다.
+- 이 플러그인은 패키지 폴더에서 실행해야 `tailwindcss`와 CSS 진입 파일을 찾는다. 그래서 두 패키지에 각자 `.lintstagedrc`를 두어 lint-staged가 그 폴더에서 oxlint를 돌리게 했다. lint-staged는 설정을 합치지 않으므로 루트 `.lintstagedrc`를 바꾸면 두 파일도 같이 바꾼다.
 - 컴포넌트는 `@openrun/store-ui`에서 import한다. 서버용 컴포넌트는 Server Component에서 바로 쓸 수 있다.
 - 클라이언트용 컴포넌트는 파일 첫 줄(import보다 앞)에 `'use client'`를 둔다. tsc가 파일별로 출력하므로 지시어가 `dist`에도 남는다. Server Component에서도 import할 수 있지만 직렬화할 수 있는 props(문자열, 숫자, 불리언, 요소)만 넘긴다. `onClick` 같은 함수는 앱의 클라이언트 컴포넌트에서 넘긴다.
 - 지시어가 빠졌을 때 `next build`가 실패하는 것은 그 파일이 훅(`useState` 등)을 직접 import할 때뿐이다. Button처럼 Base UI 컴포넌트(이미 `'use client'`가 있다)를 감싸기만 하는 파일은 지시어가 빠져도 빌드가 통과하므로 리뷰에서 확인한다.

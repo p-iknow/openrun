@@ -95,7 +95,7 @@ describe('오류 응답', () => {
   it('예상하지 못한 오류는 내부 메시지를 숨긴 500 Problem Details로 응답한다', async () => {
     await startApp((builder) =>
       builder.overrideProvider(ShowsService).useValue({
-        findAll: () => {
+        findPage: () => {
           throw new Error('connection to db-internal:5432 refused');
         },
       }),

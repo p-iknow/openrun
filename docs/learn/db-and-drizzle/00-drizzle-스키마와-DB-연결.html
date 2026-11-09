@@ -4,9 +4,9 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Drizzle 스키마와 DB 연결: shows.ts와 DatabaseModule</title>
-    <link rel="stylesheet" href="learn.css" />
-    <script src="vendor/highlightjs/highlight.min.js" defer></script>
-    <script src="learn.js" defer></script>
+    <link rel="stylesheet" href="../learn.css" />
+    <script src="../vendor/highlightjs/highlight.min.js" defer></script>
+    <script src="../learn.js" defer></script>
   </head>
   <body>
     <div class="layout">
@@ -44,7 +44,7 @@
           <code>apps/api/src/db/schema/shows.ts</code>와, 그 테이블을 쿼리할 연결을 앱에 등록하는
           <code>apps/api/src/db/database.module.ts</code>다. 기준 버전은 drizzle-orm 0.45.4,
           drizzle-kit 0.31.11, pg 8.23, NestJS 12.4다. 프로바이더, <code>useFactory</code>, 토큰은
-          <a href="003-의존성-주입.html#nest">003 문서</a>에서 다뤘다.
+          <a href="../nest/02-의존성-주입.html#nest">nest 02 문서</a>에서 다뤘다.
         </p>
 
         <section id="overview">
@@ -155,6 +155,9 @@ export const shows = pgTable('shows', {
 
           <h3><code>title: text().notNull()</code></h3>
           <p>길이 제한 없는 문자열이고, 비울 수 없다(<code>NOT NULL</code>).</p>
+          <p>
+            이 문서 뒤에 나온 Drizzle 스키마 문법(외래 키, 인덱스, enum, <code>timestamptz</code> 등)은 <a href="02-drizzle-스키마-문법.html">db-and-drizzle 02 문서</a>에, 1.3에서 공연장·공연·회차 테이블을 그렇게 만든 이유는 <a href="04-공연장-공연-회차-스키마.html">db-and-drizzle 04 문서</a>에 있다.
+          </p>
         </section>
 
         <section id="schema-sql">
@@ -333,7 +336,7 @@ export class DatabaseModule implements OnApplicationShutdown {
           <p>
             DB 연결을 맺는 일은 비싸다(네트워크 왕복과 인증). 요청마다 맺고 끊으면 느리므로, 연결 몇
             개를 열어 두고 돌려 쓰는 묶음을 둔다. 이것이 Pool이다. 서비스마다 Pool을 만들면 안 되는
-            이유는 <a href="003-의존성-주입.html#without">003의 문제 3</a>에 있다.
+            이유는 <a href="../nest/02-의존성-주입.html#without">nest 02의 문제 3</a>에 있다.
           </p>
 
           <h3><code>drizzle(url)</code>: Pool까지 한 번에 만든다</h3>
@@ -430,7 +433,7 @@ function construct(client, config = {}) {
           <p>
             그래서 "이렇게 만들어라"는 함수를 <code>useFactory</code>로 직접 준다. Nest는 이 함수를
             한 번 실행해서 나온 값을 <code>DATABASE</code>라는 이름표로 등록한다.
-            <a href="003-의존성-주입.html#nest">003의 2단계</a>에서 <code>new Database(url)</code>을
+            <a href="../nest/02-의존성-주입.html#nest">nest 02의 2단계</a>에서 <code>new Database(url)</code>을
             등록한 것과 같은 상황이다.
           </p>
 
@@ -664,7 +667,7 @@ export interface Database extends NodePgDatabase {
 
           <h3><code>onModuleDestroy</code>가 아니라 <code>onApplicationShutdown</code>인 이유</h3>
           <p>
-            <a href="003-의존성-주입.html#nest">003의 5단계</a>는 <code>onModuleDestroy</code>로
+            <a href="../nest/02-의존성-주입.html#nest">nest 02의 5단계</a>는 <code>onModuleDestroy</code>로
             풀을 닫았다. 둘 다 <code>app.close()</code>에서 불리지만 시점이 다르다. NestJS 12.4 소스의
             순서는 이렇다.
           </p>

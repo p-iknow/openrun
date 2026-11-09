@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>04 공연장·공연·회차 스키마</title>
+    <link rel="stylesheet" href="../learn.css" />
+    <script src="../vendor/highlightjs/highlight.min.js" defer></script>
+    <script src="../learn.js" defer></script>
+  </head>
+  <body>
+    <div class="layout">
+      <nav aria-label="목차">
+        <strong>목차</strong>
+        <ol>
+          <li><a href="#overview">한눈에 보기</a></li>
+          <li><a href="#column-names">컬럼 이름을 직접 적은 이유</a></li>
+          <li><a href="#timestamptz">일시는 timestamptz</a></li>
+          <li><a href="#defaults">기본값을 둔 컬럼</a></li>
+          <li><a href="#references">외래 키는 기본 동작으로</a></li>
+          <li><a href="#index">외래 키 컬럼에 인덱스</a></li>
+          <li><a href="#enum">장르는 enum</a></li>
+          <li><a href="#types">행 타입과 응답 타입</a></li>
+          <li><a href="#migration">마이그레이션 손보기</a></li>
+          <li><a href="#relations">relations() 대신 JOIN</a></li>
+          <li><a href="#check">스스로 확인하기</a></li>
+        </ol>
+      </nav>
+
+      <main>
+        <h1>04 공연장·공연·회차 스키마</h1>
+        <p class="lead">
+          1.3(#39)에서 만든 공연장, 공연, 회차 테이블(<code>apps/api/src/db/schema/</code>)을 읽고, 문법마다 왜 그 선택을
+          했는지 설명한다. 문법이 하는 일은 <a href="02-drizzle-스키마-문법.html">db-and-drizzle 02 문서</a>, 테이블·외래 키·인덱스 같은 DB
+          개념은 <a href="01-프론트엔드-개발자를-위한-DB-개념.html">db-and-drizzle 01 문서</a>에 있으니, 낯선 말이 나오면 링크를 따라가서
+          읽는다.
+        </p>
+
+        <section id="overview">
+          <h2>한눈에 보기</h2>
+          <p>
+            세 테이블은 <a href="01-프론트엔드-개발자를-위한-DB-개념.html#fk">외래 키</a>로 이어진다. 공연은 공연장 하나에서
+            열리고, 회차는 공연 하나에 속한다(<code>GLOSSARY.md</code>). 화살표(→)는 "이 컬럼이 저 테이블의 id를 가리킨다"는
+            뜻이다.
+          </p>
+          <ul class="tree" style="--tree-col: 18rem">
+            <li>
+              <div class="tree-row">
+                <span class="tree-node">venues (venues.ts)</span>
+                <span class="tree-note"><span class="badge blue">공연장</span> id, name</span>
+              </div>
+              <ul>
+                <li>
+                  <div class="tree-row">
+                    <span class="tree-node">shows (shows.ts)</span>
+                    <span class="tree-note"
+                      ><span class="badge blue">공연</span> <code>venue_id</code> → venues.id, 장르(enum)</span
+                    >
+                  </div>
+                  <ul>
+                    <li>
+                      <div class="tree-row">
+                        <span class="tree-node">performances (shows.ts)</span>
+                        <span class="tree-note"
+                          ><span class="badge blue">회차</span> <code>show_id</code> → shows.id, 회차 취소 여부</span
+                        >
+                      </div>
+                    </li>
+                  </ul>
+                </li>
+              </ul>
+            </li>
+          </ul>
+          <p>
+            공연장 하나에 공연이 여러 개, 공연 하나에 회차가 여러 개 달린다(<a
+              href="01-프론트엔드-개발자를-위한-DB-개념.html#one-to-many"
+              >일대다</a
+            >). 파일은 모듈 단위로 나눴다(ADR 0003). 공연장은 <code>venues</code> 모듈, 공연과 회차는 <code>shows</code> 모듈이
+            소유하므로 <code>performances</code>도 <code>shows.ts</code>에 있다.
+          </p>
+          <pre><code class="language-ts">// apps/api/src/db/schema/shows.ts
+import { boolean, index, integer, pgEnum, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
+import { venues } from './venues.js';
+
+export const GENRES = ['musical', 'play', 'concert', 'classical_dance', 'kids_family'] as const;
+export type Genre = (typeof GENRES)[number];
+
+export const genre = pgEnum('genre', GENRES);
+
+export const shows = pgTable(
+  'shows',
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    venueId: integer('venue_id')
+      .notNull()
+      .references(() =&gt; venues.id),
+    title: text().notNull(),
+    genre: genre().notNull(),
+    // 관람할 수 있는 최소 나이(만 나이)다. 0이면 전체 관람가다.
+    minAge: integer('min_age').notNull(),
+    runningMinutes: integer('running_minutes').notNull(),
+    description: text().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) =&gt; [index().on(table.venueId)],
+);
+
+export const performances = pgTable(
+  'performances',
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    showId: integer('show_id')
+      .notNull()
+      .references(() =&gt; shows.id),
+    startsAt: timestamp('starts_at', { withTimezone: true }).notNull(),
+    salesOpenAt: timestamp('sales_open_at', { withTimezone: true }).notNull(),
+    // 판매 상태는 저장하지 않고 조회할 때 계산한다. 저장하는 것은 회차 취소 여부뿐이다.
+    isCancelled: boolean('is_cancelled').notNull().default(false),
+  },
+  (table) =&gt; [index().on(table.showId)],
+);</code></pre>
+          <p>
+            관람 연령은 최소 만 나이 정수(<code>0</code>이면 전체 관람가), 러닝타임은 분 단위 정수로 저장한다. 판매 상태(판매
+            예정, 판매 중 등)는 컬럼이 없다. 시간이 지나면 저절로 바뀌는 값이라 저장하지 않고, 조회할 때
+            <code>starts_at</code>, <code>sales_open_at</code>, <code>is_cancelled</code>로 계산한다(#40).
+          </p>
+        </section>
+
+        <section id="column-names">
+          <h2>컬럼 이름을 직접 적은 이유</h2>
+          <p>
+            두 단어 이상인 컬럼은 <code>integer('venue_id')</code>처럼 이름을 직접 적었다. 적지 않으면 컬럼이
+            <code>"venueId"</code>가 되어 SQL에서 매번 따옴표를 쳐야 한다(<a href="02-drizzle-스키마-문법.html#column-name"
+              >db-and-drizzle 02 문서</a
+            >).
+          </p>
+          <p>
+            Drizzle의 <code>casing: 'snake_case'</code> 옵션을 쓰면 이름을 적지 않아도 되지만, 이 저장소에서는
+            <code>drizzle()</code>을 부르는 곳이 네 군데다.
+          </p>
+          <ul>
+            <li><code>src/db/database.module.ts</code>: 앱</li>
+            <li><code>src/db/seed.ts</code>: 시드</li>
+            <li><code>test/setup/postgres.ts</code>: 테스트 DB 마이그레이션</li>
+            <li><code>test/shows.int.spec.ts</code>: 테스트 데이터 준비</li>
+          </ul>
+          <p>
+            여기에 drizzle-kit 설정까지 다섯 곳에 같은 옵션을 넣어야 하고, 하나라도 빠뜨리면 그곳만
+            <code>"venueId"</code>를 찾다가 실행 중에 실패한다. 컬럼마다 이름을 적는 쪽이 길지만 이름이 스키마 한곳에서만
+            정해진다.
+          </p>
+        </section>
+
+        <section id="timestamptz">
+          <h2>일시는 timestamptz</h2>
+          <p>
+            시작 일시, 판매 오픈 일시, 등록 일시는 모두 <code>{ withTimezone: true }</code>로
+            <a href="01-프론트엔드-개발자를-위한-DB-개념.html#timestamptz">timestamptz</a>(절대 시점)로 저장한다.
+          </p>
+          <p>
+            판매 상태는 "회차 시작 일시가 지금보다 지났는가", "판매 오픈 일시 전인가"로 계산한다. 시간대 없는
+            <code>timestamp</code>로 저장하면 <code>19:30</code>이 서울 시각인지 UTC인지 DB가 모르므로, 서버나 DB 접속의
+            시간대에 따라 이 비교가 9시간 어긋날 수 있다. 절대 시점으로 저장하면 어디서 비교해도 결과가 같다. 화면에
+            보여 줄 때만 스토어가 <code>Asia/Seoul</code>로 바꾼다(<code>apps/store/src/shows/select-show-cards.ts</code>).
+          </p>
+          <p>
+            <code>mode</code>는 기본값 <code>'date'</code>로 두었다(<a href="02-drizzle-스키마-문법.html#timestamp">db-and-drizzle 02 문서</a
+            >). 서비스는 받은 <code>Date</code>를 <code>toISOString()</code>으로 바꿔 응답에 담는다.
+          </p>
+        </section>
+
+        <section id="defaults">
+          <h2>기본값을 둔 컬럼</h2>
+          <p>
+            기본값(<a href="02-drizzle-스키마-문법.html#default">.default()</a>)은 두 컬럼에만 두었다.
+          </p>
+          <ul>
+            <li>
+              <strong><code>is_cancelled DEFAULT false</code>:</strong> 회차는 처음에 취소되지 않은 상태로 만들어진다. 회차를
+              넣는 코드가 매번 <code>false</code>를 적지 않아도 된다.
+            </li>
+            <li>
+              <strong><code>created_at DEFAULT now()</code>:</strong> 등록 일시는 "행을 넣은 순간"이므로 DB가 채우게 했다.
+            </li>
+          </ul>
+          <p>
+            기본값이 있으면 INSERT 타입에서 선택 항목이 된다. 그래서 통합 테스트는 <code>createdAt</code> 없이 공연을 넣고,
+            시드는 과거에 등록된 것처럼 보이게 <code>createdAt</code>을 직접 넣는다. 둘 다 타입 검사를 통과한다.
+          </p>
+          <div class="callout warn">
+            <p>
+              #40에서 정한 "DB의 <code>now()</code>를 쓰지 않는다"는 판매 상태를 계산하는 쿼리 이야기다. 판매 상태는 테스트에서
+              "지금"을 원하는 시각으로 고정해야 하는데, DB 시계는 테스트가 바꿀 수 없다. 그래서 서비스가 현재 시각을 SQL
+              파라미터로 넘긴다. 등록 일시는 시각을 고정해 테스트할 일이 없으므로 DB 시각을 써도 된다.
+            </p>
+          </div>
+        </section>
+
+        <section id="references">
+          <h2>외래 키는 기본 동작으로</h2>
+          <p>
+            <code>shows.venue_id</code>와 <code>performances.show_id</code>에
+            <a href="02-drizzle-스키마-문법.html#references">.references()</a>와 <code>.notNull()</code>을 함께 붙였다. 그래서
+            "공연은 반드시 실제로 있는 공연장 하나에 속한다", "회차는 반드시 실제로 있는 공연 하나에 속한다"는 규칙을 DB가
+            지킨다. API 코드에 버그가 있어도 없는 공연장을 가리키는 공연이 저장되지 않는다.
+          </p>
+          <p>
+            <code>onDelete</code>는 주지 않아 기본값 <code>no action</code>이다. 공연장이나 공연을 지우는 기능이 아직 없고,
+            나중에 회차에 주문이 붙으면 회차가 줄줄이 지워지는 <code>cascade</code>보다 삭제를 막는 기본값이 안전하다.
+            지우는 기능이 생길 때 다시 정한다.
+          </p>
+          <div class="callout warn">
+            <p>
+              외래 키 때문에 시드는 <code>TRUNCATE performances, shows, venues RESTART IDENTITY</code>처럼 세 테이블을 한
+              문장에서 비운다. <code>shows</code>만 비우면 그 행을 가리키는 <code>performances</code>가 남아 있어서 PostgreSQL이
+              거부한다. <code>RESTART IDENTITY</code>로 <a href="02-drizzle-스키마-문법.html#identity">번호</a>를 1로 되돌려,
+              통합 테스트가 <code>id: 1</code>을 기대할 수 있다.
+            </p>
+          </div>
+        </section>
+
+        <section id="index">
+          <h2>외래 키 컬럼에 인덱스</h2>
+          <p>
+            <code>shows.venue_id</code>와 <code>performances.show_id</code>에
+            <a href="02-drizzle-스키마-문법.html#index">index()</a>를 두었다. PostgreSQL은 외래 키 컬럼에 인덱스를 자동으로
+            만들지 않기 때문이다. <code>show_id</code> 인덱스가 쓰일 곳은 다음과 같다.
+          </p>
+          <ul>
+            <li>목록에서 회차를 공연별로 묶어 공연 기간(첫 회차, 마지막 회차)을 구할 때</li>
+            <li>공연 상세에서 "이 공연의 회차"를 찾을 때(#48)</li>
+            <li>공연을 지울 때 PostgreSQL이 "이 공연을 가리키는 회차가 남았는가"를 확인할 때</li>
+          </ul>
+          <p>
+            지금은 회차가 200개쯤이라 PostgreSQL이 인덱스 대신 테이블 전체를 읽는
+            <a href="01-프론트엔드-개발자를-위한-DB-개념.html#index">실행 계획</a>을 고를 때가 많다. 인덱스가 실제로 효과가
+            있는지는 데이터를 늘려 측정하는 9단계에서 확인한다.
+          </p>
+        </section>
+
+        <section id="enum">
+          <h2>장르는 enum</h2>
+          <p>
+            장르는 <a href="02-drizzle-스키마-문법.html#pg-enum">pgEnum</a>으로 만들었다. GLOSSARY에서 장르를 "고정된
+            분류"(뮤지컬, 연극, 콘서트, 클래식·무용, 아동·가족)로 정했기 때문이다. 운영자가 자주 추가하거나 이름을 바꿀
+            분류였다면 <code>genres</code> 테이블을 따로 만들고 공연이 외래 키로 가리키게 했을 것이다. 그러면 장르 추가가
+            마이그레이션이 아니라 행 하나를 넣는 일이 된다.
+          </p>
+          <h3>한 배열이 스토어까지 간다</h3>
+          <div class="flow">
+            <div class="lane blue">
+              <div class="lane-title"><code>GENRES</code>가 쓰이는 곳</div>
+              <ol class="chain">
+                <li><span>스키마의 pgEnum</span></li>
+                <li><span>DTO의 <code>@ApiProperty({ enum: GENRES })</code></span></li>
+                <li><span><code>openapi.json</code>의 <code>Genre</code></span></li>
+                <li><span>스토어의 생성 클라이언트 타입</span></li>
+              </ol>
+            </div>
+          </div>
+          <p>
+            시드도 같은 배열을 돌며 장르를 붙인다. 장르를 하나 더하면 이 배열만 고치고 마이그레이션을 만들면 된다. 코딩
+            표준상 스키마 파일은 다른 스키마 파일과 Drizzle만 import할 수 있으므로, 배열은 스키마 파일에 두고 DTO와 시드가
+            가져다 쓴다. 반대 방향(DTO에 두고 스키마가 import)은 규칙에 어긋난다.
+          </p>
+        </section>
+
+        <section id="types">
+          <h2>행 타입과 응답 타입</h2>
+          <p>
+            스키마에서 행 타입(<a href="02-drizzle-스키마-문법.html#infer">$inferSelect</a>)을 꺼낼 수 있지만, API 응답 타입은
+            DTO(<code>ShowSummaryDto</code>)로 따로 정했다. 그래서 DB 컬럼을 하나 더해도 API 응답이 저절로 바뀌지 않고,
+            스토어가 받는 모양은 DTO를 고칠 때만 바뀐다. 예를 들어 <code>description</code>은 테이블에 있지만 목록 응답에는
+            없다.
+          </p>
+        </section>
+
+        <section id="migration">
+          <h2>마이그레이션 손보기</h2>
+          <p>
+            스키마를 고치고 <code>pnpm db:generate --name create_venues_and_performances</code>를 실행하면 drizzle-kit이
+            <code>drizzle/0001_create_venues_and_performances.sql</code>을 만든다. 이번에는 생성된 SQL을 그대로 쓰지 못했다.
+            문제가 된 줄은 이것이다.
+          </p>
+          <pre><code class="language-sql">ALTER TABLE "shows" ADD COLUMN "venue_id" integer NOT NULL;</code></pre>
+          <p>
+            "<code>shows</code> 테이블에 비울 수 없는 정수 컬럼 <code>venue_id</code>를 더한다"는 뜻이다. 테이블이 비어 있으면
+            문제가 없다. 그런데 개발 DB의 <code>shows</code>에는 1.1에서 넣은 임시 공연 2행이 있었다. 컬럼을 더하는 순간 그 두
+            행에도 <code>venue_id</code> 칸이 생기는데, 채울 값(기본값)이 없으니 비어 있게 된다. <code>NOT NULL</code>이라 비울
+            수 없으므로 PostgreSQL이 이 문장을 거부한다.
+          </p>
+          <pre><code class="language-ts">// 자바스크립트로 비유하면
+type Show = { id: number; title: string; venueId: number }; // venueId를 필수로 바꿨는데
+const saved: Show[] = [{ id: 1, title: '레미제라블' }]; // 이미 저장된 객체에는 venueId가 없다 → 오류</code></pre>
+          <p>그래서 생성된 파일 맨 앞에 한 줄을 직접 넣어, 컬럼을 더하기 전에 테이블을 비우게 했다.</p>
+          <pre><code class="language-sql">-- 기존 shows 행은 임시 시드 2개뿐이다. NOT NULL 컬럼을 더하려고 비우며, 시드를 다시 넣으면 채워진다.
+TRUNCATE "shows" RESTART IDENTITY;--&gt; statement-breakpoint</code></pre>
+          <ul>
+            <li>
+              <strong><code>--&gt; statement-breakpoint</code></strong>는 drizzle의 구분자다. 마이그레이션을 실행할 때 이
+              표시로 파일을 문장 단위로 나눈다. 직접 넣는 줄에도 붙여야 한다.
+            </li>
+            <li>
+              <strong>손으로 고쳐도 다음 <code>generate</code>에는 영향이 없다.</strong> drizzle-kit은 다음에 바뀐 점을 찾을
+              때 SQL 파일이 아니라 <code>drizzle/meta/0001_snapshot.json</code>과 비교한다. 이 스냅숏은 "마지막으로 본 스키마
+              모양"을 JSON으로 저장한 것이다. TRUNCATE는 데이터만 지우고 모양은 바꾸지 않으므로 스냅숏과 어긋나지 않는다.
+            </li>
+            <li>
+              <strong>이미 적용된 마이그레이션은 고치지 않는다.</strong> drizzle은 어느 마이그레이션까지 적용했는지 DB 안의
+              기록 테이블에 남긴다. 적용한 뒤에 파일을 바꾸면, 이미 적용한 DB는 "적용 완료"로 보고 다시 실행하지 않는다.
+              이번 수정은 PR에서 처음 만든 파일이라 괜찮다.
+            </li>
+          </ul>
+          <div class="callout warn">
+            <p>
+              이 TRUNCATE는 지워질 행이 임시 데이터뿐이라 쓸 수 있었다. 실제 사용자 데이터가 있는 운영 DB에 그대로 적용하면
+              공연이 모두 지워진다. 그런 경우에는 "기본값을 두고 컬럼 추가 → 기존 행에 올바른 값 채우기 → NOT NULL로
+              바꾸기"처럼 여러 단계로 나눠야 한다.
+            </p>
+          </div>
+        </section>
+
+        <section id="relations">
+          <h2>relations() 대신 JOIN</h2>
+          <p>
+            Drizzle의 <a href="02-drizzle-스키마-문법.html#relations">relations()</a>를 쓰면 "공연과 그 회차들"을 중첩 객체로
+            한 번에 받을 수 있지만, 이 저장소는 쓰지 않고 서비스에서
+            <a href="01-프론트엔드-개발자를-위한-DB-개념.html#join">JOIN</a>을 직접 적는다. 아래 코드의 문법은
+            <a href="03-drizzle-쿼리-문법.html">db-and-drizzle 03 문서</a>에 있고, 이 쿼리 전체를 따라가는 설명은
+            <a href="05-공연-목록-쿼리-읽기.html">db-and-drizzle 05 문서</a>에 있다.
+          </p>
+          <pre><code class="language-ts">this.db
+  .select({ id: shows.id, venueName: venues.name, start: period.start, end: period.end })
+  .from(shows)                                          // 공연에
+  .innerJoin(venues, eq(venues.id, shows.venueId))      // venueId가 같은 공연장을 붙이고
+  .innerJoin(period, eq(period.showId, shows.id));      // 공연별 첫·마지막 회차를 붙인다</code></pre>
+          <ul>
+            <li>
+              <strong>집계가 많다.</strong> 판매 상태처럼 SQL 안에서 회차를 공연별로 묶고, 세고, 거르는 쿼리가 많다(#40).
+              중첩 객체로 받아 자바스크립트에서 계산하면 필터, 전체 개수, 페이지가 서로 맞지 않는다. JOIN과 집계를 코드에
+              그대로 보이게 쓰는 쪽이 맞다.
+            </li>
+            <li>
+              <strong>중앙 집계 파일이 생긴다.</strong> <code>relations()</code>를 쓰려면 모든 테이블을 모은 객체를
+              <code>drizzle()</code>에 넘겨야 한다. 근거는 <code>docs/research/drizzle-schema-organization.md</code>의 Q3에
+              있다.
+            </li>
+          </ul>
+        </section>
+
+        <section id="check">
+          <h2>스스로 확인하기</h2>
+          <p>질문에 먼저 답해 본 뒤, 눌러서 답을 확인한다.</p>
+          <details>
+            <summary>1. 공연 행에 공연장 이름을 직접 넣지 않고 <code>venue_id</code>만 두는 이유는?</summary>
+            <p>
+              공연장 이름이 바뀌면 공연장 행 하나만 고치면 된다. 공연마다 이름을 복사해 두면 공연 수만큼 고쳐야 하고,
+              하나라도 빠뜨리면 같은 공연장이 다른 이름으로 보인다. 화면에 이름이 필요할 때는 JOIN으로 붙인다.
+            </p>
+          </details>
+          <details>
+            <summary>2. 회차가 남아 있는 공연을 <code>DELETE FROM shows WHERE id = 1</code>로 지우면 어떻게 되는가?</summary>
+            <p>
+              <code>performances.show_id</code>의 외래 키가 <code>ON DELETE no action</code>이라 PostgreSQL이 삭제를 거부한다.
+              회차를 먼저 지우거나, 외래 키에 <code>onDelete: 'cascade'</code>를 줘야 한다.
+            </p>
+          </details>
+          <details>
+            <summary>3. 외래 키를 걸었는데 왜 <code>index().on(table.showId)</code>를 따로 썼는가?</summary>
+            <p>
+              PostgreSQL은 외래 키를 걸어도 가리키는 쪽 컬럼에 인덱스를 만들지 않는다. 회차를 공연별로 묶거나 찾는 쿼리,
+              공연을 지울 때의 참조 확인이 이 컬럼으로 찾으므로 직접 만든다.
+            </p>
+          </details>
+          <details>
+            <summary>4. 회차 시작 일시를 시간대 없는 <code>timestamp</code>로 저장하면 판매 상태에 무슨 문제가 생기는가?</summary>
+            <p>
+              <code>19:30</code>이라는 숫자만 남아, 서울 시각인지 UTC인지 DB가 모른다. 서버나 DB 접속의 시간대가 바뀌면 "이미
+              시작했는가" 비교가 9시간 어긋나, 판매 중인 회차가 판매 종료로 보이거나 그 반대가 될 수 있다.
+            </p>
+          </details>
+          <details>
+            <summary>5. 장르 '오페라'를 더하려면 무엇을 바꿔야 하는가?</summary>
+            <p>
+              <code>GENRES</code>에 값을 더하고 <code>db:generate</code>를 돌리면 <code>ALTER TYPE ... ADD VALUE</code>
+              마이그레이션이 생긴다. DTO, OpenAPI, 스토어의 생성 타입은 같은 배열에서 이어지므로 함께 바뀐다.
+            </p>
+          </details>
+          <details>
+            <summary>6. 시드에서 <code>createdAt</code>은 넣고 <code>isCancelled</code>는 빼도 타입 오류가 나지 않는 이유는?</summary>
+            <p>
+              둘 다 <code>NOT NULL</code>이지만 기본값(<code>DEFAULT now()</code>, <code>DEFAULT false</code>)이 있어서 INSERT
+              타입에서 선택 항목이다. 빼면 DB가 기본값으로 채운다.
+            </p>
+          </details>
+          <details>
+            <summary>7. 이 PR의 <code>0001</code> 마이그레이션을 운영 데이터가 있는 DB에 적용하면 어떻게 되는가?</summary>
+            <p>
+              맨 앞의 <code>TRUNCATE "shows"</code>가 공연을 모두 지운다. 회차 테이블은 이 마이그레이션에서 처음 만들어지므로
+              그때는 비어 있다. 운영 DB였다면 컬럼을 기본값과 함께 더하고, 값을 채운 뒤 NOT NULL로 바꾸는 여러 단계로
+              나눠야 한다.
+            </p>
+          </details>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,597 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>01 프론트엔드 개발자를 위한 DB 개념</title>
+    <link rel="stylesheet" href="../learn.css" />
+    <script src="../vendor/highlightjs/highlight.min.js" defer></script>
+    <script src="../learn.js" defer></script>
+  </head>
+  <body>
+    <div class="layout">
+      <nav aria-label="목차">
+        <strong>목차</strong>
+        <ol>
+          <li><a href="#db">DB는 따로 도는 프로그램이다</a></li>
+          <li><a href="#table">테이블, 행, 컬럼</a></li>
+          <li><a href="#null">NULL과 NOT NULL</a></li>
+          <li><a href="#pk">기본 키</a></li>
+          <li><a href="#fk">외래 키: 다른 테이블의 id를 들고 있기</a></li>
+          <li><a href="#one-to-many">일대다 관계</a></li>
+          <li><a href="#constraint">제약: DB가 하는 검증</a></li>
+          <li><a href="#join">JOIN: 두 테이블을 이어 붙이기</a></li>
+          <li><a href="#index">인덱스: 찾아보기 목차</a></li>
+          <li><a href="#sql">SQL 문장의 두 종류</a></li>
+          <li><a href="#timestamptz">timestamptz</a></li>
+          <li><a href="#order-limit">ORDER BY, LIMIT, OFFSET</a></li>
+          <li><a href="#aggregate">집계 함수와 GROUP BY</a></li>
+          <li><a href="#subquery">서브쿼리</a></li>
+          <li><a href="#parameter">파라미터</a></li>
+          <li><a href="#transaction">트랜잭션</a></li>
+        </ol>
+      </nav>
+
+      <main>
+        <h1>01 프론트엔드 개발자를 위한 DB 개념</h1>
+        <p class="lead">
+          다른 학습 문서가 안다고 보고 쓰는 DB와 SQL 개념을 자바스크립트에 빗대어 모았다. 처음부터 읽지 않고, 다른
+          문서에서 링크로 넘어와 필요한 절만 읽는 참고 문서다. 비유는 이해를 돕기 위한 것이라 실제 DB 동작과 완전히
+          같지는 않다. 새 개념이 필요해지면 이 문서에 절을 더한다.
+        </p>
+
+        <section id="db">
+          <h2>DB는 따로 도는 프로그램이다</h2>
+          <p>
+            PostgreSQL은 API 서버(Node)와 별개로 실행되는 프로그램이다. 이 저장소에서는 Docker 컨테이너
+            (<code>pnpm infra:up</code>)로 띄운다. API 서버는 네트워크로 PostgreSQL에 접속해 <strong>SQL</strong>이라는
+            문장을 보내고 결과를 받는다. 브라우저가 API 서버에 <code>fetch</code>를 보내는 관계와 비슷하다.
+          </p>
+          <div class="flow">
+            <div class="lane blue">
+              <div class="lane-title">요청이 오가는 길</div>
+              <ol class="chain">
+                <li><span>브라우저(스토어)</span></li>
+                <li><span>HTTP로 API 서버(NestJS)</span></li>
+                <li><span>SQL로 PostgreSQL</span></li>
+              </ol>
+            </div>
+          </div>
+          <p>
+            Drizzle은 TypeScript 코드를 SQL 문장으로 바꿔 보내 주는 도구다. 그래서 "DB 서버의 시각"과 "Node 서버의
+            시각"이 따로 있다. 두 프로그램이 서로 다른 컴퓨터에서 돌 수도 있기 때문이다. <code>psql</code>은 SQL을
+            직접 쳐서 PostgreSQL에 보내는 터미널 도구다.
+          </p>
+        </section>
+
+        <section id="table">
+          <h2>테이블, 행, 컬럼</h2>
+          <p>
+            <strong>테이블</strong>은 모양이 같은 객체를 모은 배열이라고 생각하면 된다. <strong>행</strong>(row)은 배열의
+            객체 하나, <strong>컬럼</strong>(column)은 객체의 속성 하나다. 컬럼마다 타입이 정해져 있어서, 모든 행이 같은
+            속성과 타입을 갖는다.
+          </p>
+          <pre><code class="language-ts">// shows 테이블을 자바스크립트로 그리면
+const shows: { id: number; venue_id: number; title: string }[] = [
+  { id: 1, venue_id: 1, title: '잃어버린 여름밤' }, // 행 하나
+  { id: 2, venue_id: 1, title: '잃어버린 골목' },
+];
+// id, venue_id, title이 컬럼이다.</code></pre>
+          <p>
+            스키마 파일의 <code>pgTable</code>은 이 배열의 "타입 정의"에 해당한다. 다만 TypeScript 타입과 달리 DB가
+            실제로 지킨다. 타입이 맞지 않는 값을 넣으면 DB가 거부한다.
+          </p>
+        </section>
+
+        <section id="null">
+          <h2>NULL과 NOT NULL</h2>
+          <p>
+            DB에서 "값이 없음"은 <code>NULL</code>이다. 자바스크립트의 <code>null</code>과 같다. 컬럼에
+            <code>NOT NULL</code>을 붙이면 그 컬럼은 비울 수 없다. TypeScript로 치면 <code>title?: string</code>이 아니라
+            <code>title: string</code>인 필수 속성이다.
+          </p>
+        </section>
+
+        <section id="pk">
+          <h2>기본 키</h2>
+          <p>
+            <strong>기본 키</strong>(primary key)는 행 하나를 가리키는 고유한 값이다. 이 저장소에서는 모든 테이블의
+            <code>id</code>가 기본 키다. 겹치거나 비어 있을 수 없다. 리스트를 렌더링할 때 React의 <code>key</code>로 쓰는
+            id와 같은 역할이다. 그 id가 정말 겹치지 않게 DB가 보장한다는 점이 다르다.
+          </p>
+          <p>
+            <code>id</code> 값은 DB가 1, 2, 3… 순서대로 매긴다. 번호를 기억하는 내부 장치를 <strong>시퀀스</strong>라고
+            하고, 은행의 번호표 기계와 비슷하다. 행을 지워도 번호표는 되돌아가지 않는다.
+            <code>RESTART IDENTITY</code>는 번호표 기계를 1로 되돌리는 옵션이다.
+          </p>
+        </section>
+
+        <section id="fk">
+          <h2>외래 키: 다른 테이블의 id를 들고 있기</h2>
+          <p>
+            프론트엔드에서 서버 데이터를 정규화해 상태에 담을 때(예: Redux의 <code>entities</code>), 객체를 중첩하지 않고
+            id만 들고 있게 한다.
+          </p>
+          <pre><code class="language-ts">// 중첩 대신 id로 가리킨다
+const venues = { 1: { id: 1, name: '낙산 소극장' } };
+const shows = { 1: { id: 1, title: '잃어버린 여름밤', venueId: 1 } };
+
+const venue = venues[shows[1].venueId]; // 필요할 때 id로 찾아 붙인다</code></pre>
+          <p>
+            DB도 같은 방식이다. 공연 행에 공연장 정보를 통째로 넣지 않고 <code>venue_id</code>만 둔다. 공연장 이름이
+            바뀌어도 공연장 행 하나만 고치면 된다. 이렇게 다른 테이블의 기본 키를 가리키는 컬럼을
+            <strong>외래 키</strong>(foreign key)라고 한다.
+          </p>
+          <p>
+            자바스크립트에서는 <code>venueId: 999</code>처럼 없는 id를 넣어도 아무도 막지 않는다. 외래 키를 선언하면 DB가
+            "그 id를 가진 공연장이 실제로 있는가"를 검사해 막아 준다.
+          </p>
+        </section>
+
+        <section id="one-to-many">
+          <h2>일대다 관계</h2>
+          <p>
+            공연장 하나에 공연이 여러 개 달리고, 공연 하나에 회차가 여러 개 달린다. 이런 관계를 <strong>일대다</strong>라고
+            한다. 외래 키는 항상 "다" 쪽(공연, 회차)에 둔다.
+          </p>
+          <pre><code class="language-ts">// 이렇게 하지 않는다: 공연장 행에 공연 id 목록을 넣기
+{ id: 1, name: '낙산 소극장', show_ids: [1, 2, 5] }
+
+// 이렇게 한다: 공연 행마다 자기 공연장 id를 들기
+{ id: 1, title: '잃어버린 여름밤', venue_id: 1 }
+{ id: 2, title: '잃어버린 골목', venue_id: 1 }</code></pre>
+          <p>
+            한 칸에 값을 여러 개 넣으면 "공연 5번은 어느 공연장인가"를 찾으려고 모든 공연장의 목록을 뒤져야 하고, 공연을
+            지울 때마다 목록도 고쳐야 한다. 공연마다 <code>venue_id</code> 하나만 두면 찾기도 고치기도 행 하나로 끝나고,
+            <a href="#fk">외래 키</a>로 DB가 검사할 수도 있다. "공연장 1번의 공연 목록"은 <code>venue_id = 1</code>인 공연을
+            찾으면 된다.
+          </p>
+        </section>
+
+        <section id="constraint">
+          <h2>제약: DB가 하는 검증</h2>
+          <p>
+            <code>NOT NULL</code>, 기본 키, 외래 키처럼 DB가 값을 검사하는 규칙을 <strong>제약</strong>(constraint)이라고
+            한다. 폼 값을 zod 같은 라이브러리로 검증하는 것과 비슷한데, 검증이 DB 안에서 일어난다. 제약을 어기는 SQL은
+            실패하고 데이터는 바뀌지 않는다. API 코드에 버그가 있어도 깨진 데이터가 저장되지 않는 마지막 방어선이다.
+          </p>
+        </section>
+
+        <section id="join">
+          <h2>JOIN: 두 테이블을 이어 붙이기</h2>
+          <p>
+            목록 화면에는 공연 제목과 공연장 이름이 함께 필요하다. 두 정보가 서로 다른 테이블에 있으므로, 공연의
+            <code>venue_id</code>로 공연장을 찾아 붙여야 한다. 이렇게 두 테이블의 행을 조건에 맞춰 이어 붙이는 것을
+            <strong>JOIN</strong>이라고 한다. 결과는 두 테이블의 컬럼을 옆으로 이어 붙인 새 표다.
+          </p>
+          <pre><code class="language-sql">select shows.title, venues.name
+from shows                                   -- 왼쪽 테이블
+inner join venues                            -- 오른쪽 테이블
+  on venues.id = shows.venue_id;             -- 짝을 찾는 조건</code></pre>
+          <p>
+            <code>from</code>에 쓴 테이블을 <strong>왼쪽</strong>, <code>join</code> 뒤에 쓴 테이블을 <strong>오른쪽</strong>이라고
+            부른다. <code>on</code> 뒤가 "어느 행끼리 짝인가"를 정하는 조건이다. JOIN 종류는 <strong>짝이 없는 행을 어떻게
+            하는가</strong>로 나뉜다.
+          </p>
+
+          <h3 id="join-example">예시 데이터</h3>
+          <p>아래 두 테이블로 JOIN 종류마다 결과가 어떻게 다른지 본다. 공연 3번 "붉은 숲"은 아직 회차가 없다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>shows.id</th><th>title</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>1</td><td>달빛 정원</td></tr>
+                <tr><td>2</td><td>겨울 기차</td></tr>
+                <tr><td>3</td><td>붉은 숲</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>performances.id</th><th>show_id</th><th>starts_at</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>10</td><td>1</td><td>3월 1일</td></tr>
+                <tr><td>11</td><td>1</td><td>3월 2일</td></tr>
+                <tr><td>12</td><td>2</td><td>3월 5일</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3 id="inner-join">INNER JOIN: 짝이 있는 행만</h3>
+          <pre><code class="language-sql">select shows.title, performances.starts_at
+from shows inner join performances on performances.show_id = shows.id;</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>title</th><th>starts_at</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>달빛 정원</td><td>3월 1일</td></tr>
+                <tr><td>달빛 정원</td><td>3월 2일</td></tr>
+                <tr><td>겨울 기차</td><td>3월 5일</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>
+            양쪽 모두에 짝이 있는 행만 남는다. 회차가 없는 "붉은 숲"은 결과에 없다. 그냥 <code>join</code>이라고만 쓰면
+            <code>inner join</code>이다.
+          </p>
+          <pre><code class="language-ts">// 자바스크립트로 쓰면
+shows.flatMap((show) =&gt;
+  performances
+    .filter((p) =&gt; p.show_id === show.id) // 짝을 모두 찾는다
+    .map((p) =&gt; ({ title: show.title, starts_at: p.starts_at })), // 짝이 없으면 빈 배열이라 사라진다
+);</code></pre>
+
+          <h3 id="left-join">LEFT JOIN: 왼쪽 행은 모두 남기기</h3>
+          <pre><code class="language-sql">select shows.title, performances.starts_at
+from shows left join performances on performances.show_id = shows.id;</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>title</th><th>starts_at</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>달빛 정원</td><td>3월 1일</td></tr>
+                <tr><td>달빛 정원</td><td>3월 2일</td></tr>
+                <tr><td>겨울 기차</td><td>3월 5일</td></tr>
+                <tr><td>붉은 숲</td><td><code>NULL</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>
+            왼쪽(<code>shows</code>) 행은 짝이 없어도 모두 남는다. 짝이 없는 행은 오른쪽 컬럼이 모두 <code>NULL</code>로
+            채워진다. <code>LEFT OUTER JOIN</code>이라고도 쓰며 같은 뜻이다.
+          </p>
+          <pre><code class="language-ts">shows.flatMap((show) =&gt; {
+  const matches = performances.filter((p) =&gt; p.show_id === show.id);
+  return matches.length &gt; 0
+    ? matches.map((p) =&gt; ({ title: show.title, starts_at: p.starts_at }))
+    : [{ title: show.title, starts_at: null }]; // 짝이 없어도 한 줄은 남긴다
+});</code></pre>
+          <p>
+            "회차가 없어도 공연은 보여 줘야 한다"처럼 왼쪽을 빠짐없이 보여 줄 때 쓴다. 결과의 오른쪽 컬럼은 항상
+            <code>NULL</code>일 수 있다고 보고 다뤄야 한다.
+          </p>
+
+          <h3 id="right-full-join">RIGHT JOIN, FULL JOIN</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>종류</th><th>남기는 행</th><th>짝이 없을 때</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>RIGHT JOIN</code></td><td>오른쪽 행 모두</td><td>왼쪽 컬럼이 <code>NULL</code></td></tr>
+                <tr><td><code>FULL JOIN</code></td><td>양쪽 행 모두</td><td>없는 쪽 컬럼이 <code>NULL</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>
+            <code>RIGHT JOIN</code>은 <code>LEFT JOIN</code>에서 양쪽을 바꾼 것이다. <code>a right join b</code>는
+            <code>b left join a</code>와 결과가 같아서, 보통은 읽기 쉬운 <code>LEFT JOIN</code>으로 바꿔 쓴다.
+          </p>
+          <p>
+            위 예시에 <code>RIGHT JOIN</code>을 해도 결과는 <code>INNER JOIN</code>과 같다. 회차는
+            <a href="#fk">외래 키</a> 때문에 반드시 있는 공연을 가리키므로, 오른쪽(회차)에 짝 없는 행이 생길 수 없기 때문이다.
+            외래 키가 걸린 관계에서는 "짝 없는 행"이 외래 키가 없는 쪽(공연)에만 생긴다.
+          </p>
+
+          <h3 id="cross-join">CROSS JOIN: 모든 조합</h3>
+          <p>
+            조건 없이 왼쪽 행 하나마다 오른쪽 행을 전부 붙인다. 3행과 3행이면 9행이 된다. 이중 <code>for</code>문으로 모든 쌍을
+            만드는 것과 같다. 예를 들어 "모든 회차 × 모든 좌석"으로 회차 좌석을 만들 때 쓸 수 있다.
+          </p>
+
+          <h3 id="join-rows">일대다 JOIN은 행을 늘린다</h3>
+          <p>
+            INNER JOIN 결과에서 "달빛 정원"은 두 번 나왔다. 회차가 두 개라서다. <a href="#one-to-many">일대다</a> 관계를 JOIN하면
+            "일" 쪽 행이 "다" 쪽 짝 수만큼 복사된다. 자바스크립트 비유가 <code>find</code>가 아니라 <code>flatMap</code>인 이유다.
+          </p>
+          <p>
+            그래서 공연 목록에 회차를 그대로 JOIN하면 공연이 회차 수만큼 겹쳐 나오고, 행 수를 세면 공연 수가 아니라 회차 수가
+            나온다. 이 저장소의 공연 목록은 회차를 먼저 공연별로 묶어 공연당 한 행으로 줄인 뒤(<a href="#aggregate">GROUP BY</a>,
+            <a href="#subquery">서브쿼리</a>) JOIN한다. 그러면 공연 하나에 짝이 하나뿐이라 행이 늘지 않는다.
+          </p>
+          <p>
+            반대로 <code>shows</code>와 <code>venues</code>처럼 "다" 쪽(공연)에서 "일" 쪽(공연장)을 붙이면 짝이 많아야 하나라 행이
+            늘지 않는다.
+          </p>
+
+          <h3 id="join-on-where">LEFT JOIN에서 ON과 WHERE의 차이</h3>
+          <p>
+            "취소되지 않은 회차만 붙이되, 그런 회차가 없는 공연도 목록에 남기고 싶다"고 하자. 조건을 어디에 쓰느냐에 따라
+            결과가 다르다.
+          </p>
+          <pre><code class="language-sql">-- ① ON에 쓰기: 짝을 고를 때 조건을 본다. 짝이 없는 공연도 NULL과 함께 남는다
+from shows left join performances
+  on performances.show_id = shows.id and performances.is_cancelled = false
+
+-- ② WHERE에 쓰기: JOIN이 끝난 결과를 거른다
+from shows left join performances on performances.show_id = shows.id
+where performances.is_cancelled = false</code></pre>
+          <p>
+            ②에서는 짝이 없는 공연의 <code>is_cancelled</code>가 <code>NULL</code>이다. <code>NULL = false</code>는 참이 아니므로
+            그 행이 걸러진다. 결국 LEFT JOIN을 쓴 의미가 사라지고 INNER JOIN과 같아진다. LEFT JOIN에서 오른쪽 테이블의 조건은
+            보통 <code>ON</code>에 쓴다. INNER JOIN에서는 어느 쪽에 써도 결과가 같다.
+          </p>
+
+          <h3 id="anti-join">짝이 없는 행만 찾기</h3>
+          <pre><code class="language-sql">select shows.title
+from shows left join performances on performances.show_id = shows.id
+where performances.id is null;               -- → 붉은 숲</code></pre>
+          <p>
+            LEFT JOIN 뒤에 오른쪽의 기본 키가 <code>NULL</code>인 행만 남기면 "짝이 없는 왼쪽 행", 즉 회차가 없는 공연을 찾을 수
+            있다. <code>NULL</code>은 <code>= null</code>로 비교할 수 없고 <code>is null</code>로 검사한다. 같은 일을
+            <code>where not exists (select 1 from performances where performances.show_id = shows.id)</code>로도 쓸 수 있다.
+          </p>
+          <p>
+            Drizzle에서는 <code>innerJoin</code>, <code>leftJoin</code>, <code>rightJoin</code>, <code>fullJoin</code>,
+            <code>crossJoin</code> 메서드로 쓴다(<a href="03-drizzle-쿼리-문법.html#join">db-and-drizzle 03 문서</a>).
+          </p>
+        </section>
+
+        <section id="index">
+          <h2>인덱스: 찾아보기 목차</h2>
+          <p>
+            JOIN의 <code>find</code>처럼 조건에 맞는 행을 찾을 때, 아무 준비가 없으면 DB는 테이블을 처음부터 끝까지 읽는다.
+            배열에서 <code>find</code>를 하는 것과 같아서, 행이 많아지면 느려진다.
+          </p>
+          <p>
+            <strong>인덱스</strong>는 특정 컬럼 값으로 행을 빨리 찾게 미리 만들어 두는 자료 구조다. 책 뒤의 "찾아보기"나,
+            배열 대신 미리 만들어 둔 <code>Map</code>과 비슷하다.
+          </p>
+          <pre><code class="language-ts">// 인덱스 없음: 매번 전부 훑는다
+performances.filter((p) =&gt; p.show_id === 3);
+
+// 인덱스 있음: 미리 만든 찾아보기로 바로 간다
+const byShowId = Map.groupBy(performances, (p) =&gt; p.show_id); // 인덱스를 만드는 일
+byShowId.get(3);</code></pre>
+          <p>
+            대가도 있다. 행을 넣거나 고칠 때마다 DB가 인덱스도 함께 고쳐야 하므로 쓰기가 조금 느려지고 저장 공간도 더
+            든다. 그래서 자주 찾는 컬럼에만 만든다. PostgreSQL의 기본 인덱스는 <strong>B-tree</strong>다. 값을 정렬해
+            나무 모양으로 저장해서, 정렬된 배열에서 이진 탐색을 하듯 빨리 찾는다.
+          </p>
+          <p>
+            DB는 쿼리를 받으면 인덱스를 쓸지, 테이블 전체를 읽을지를 스스로 정한다. 이 결정을
+            <strong>실행 계획</strong>이라고 하며, SQL 앞에 <code>EXPLAIN</code>을 붙이면 볼 수 있다.
+          </p>
+        </section>
+
+        <section id="sql">
+          <h2>SQL 문장의 두 종류</h2>
+          <p>이 문서에 나오는 SQL은 두 종류다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>종류</th>
+                  <th>문장</th>
+                  <th>프론트엔드 비유</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><span class="badge blue">모양 바꾸기</span></td>
+                  <td>
+                    <code>CREATE TABLE</code>(테이블 만들기), <code>ALTER TABLE</code>(컬럼이나 제약 더하기),
+                    <code>CREATE INDEX</code>, <code>CREATE TYPE</code>
+                  </td>
+                  <td>TypeScript 타입 정의를 고치는 것</td>
+                </tr>
+                <tr>
+                  <td><span class="badge green">데이터 다루기</span></td>
+                  <td>
+                    <code>SELECT</code>(읽기), <code>INSERT</code>(넣기), <code>UPDATE</code>(고치기),
+                    <code>DELETE</code>(지우기), <code>TRUNCATE</code>(테이블 전체를 한 번에 비우기)
+                  </td>
+                  <td>배열에 <code>filter</code>, <code>push</code>, 수정, 삭제를 하는 것</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            모양을 바꾸는 SQL을 파일로 쌓아 둔 것이 <strong>마이그레이션</strong>이다. DB 모양의 변경 이력이라, git 커밋을
+            순서대로 적용하듯 <code>0000</code>, <code>0001</code> 순으로 DB에 적용한다. 자세한 흐름은
+            <a href="00-drizzle-스키마와-DB-연결.html#schema-uses">db-and-drizzle 00 문서</a>에 있다.
+          </p>
+          <details class="fold">
+            <summary>선택 읽기: SQL을 읽을 때 알아 둘 표기</summary>
+            <div class="fold-body">
+              <ul>
+                <li>
+                  <strong>큰따옴표 <code>"shows"</code></strong>는 테이블이나 컬럼의 <em>이름</em>이다.
+                  <strong>작은따옴표 <code>'musical'</code></strong>는 문자열 <em>값</em>이다. 자바스크립트와 달리 둘을
+                  바꿔 쓸 수 없다.
+                </li>
+                <li>
+                  <strong><code>"public"."venues"</code></strong>: <code>public</code>은 PostgreSQL의 기본 이름공간
+                  (스키마)이다. 폴더 안의 파일처럼 <code>public</code> 안에 <code>venues</code> 테이블이 있다는 뜻이다.
+                  따로 정하지 않으면 모든 테이블이 <code>public</code>에 들어간다.
+                </li>
+                <li><strong><code>--</code></strong>로 시작하는 줄은 주석이다. 자바스크립트의 <code>//</code>와 같다.</li>
+                <li>문장은 <code>;</code>로 끝난다.</li>
+              </ul>
+            </div>
+          </details>
+        </section>
+        <section id="timestamptz">
+          <h2>timestamptz: 절대 시점으로 저장하는 일시</h2>
+          <p>
+            PostgreSQL에는 일시 타입이 두 가지 있다. 자바스크립트의 <code>Date</code>와 문자열에 빗대면 차이가 쉽다.
+          </p>
+          <p>
+            자바스크립트의 <code>Date</code>는 안에 "1970년 1월 1일 UTC부터 몇 밀리초 지났는가"라는 숫자 하나만 들고 있다.
+            시간대는 저장하지 않고, <code>toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })</code>처럼 <em>보여 줄 때</em>
+            정한다. 같은 <code>Date</code>를 서울에서 보면 19:30, 런던에서 보면 10:30이지만 가리키는 순간은 하나다. 이런 값을
+            <strong>절대 시점</strong>이라고 한다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>타입</th>
+                  <th>자바스크립트 비유</th>
+                  <th><code>'2026-03-01 19:30+09'</code>(서울 19:30)를 넣으면</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>timestamptz</code>(<code>timestamp with time zone</code>)</td>
+                  <td><code>Date</code> 객체(절대 시점)</td>
+                  <td><code>2026-03-01 10:30 UTC</code>라는 한 순간으로 저장한다</td>
+                </tr>
+                <tr>
+                  <td><code>timestamp</code>(<code>timestamp without time zone</code>)</td>
+                  <td><code>'2026-03-01T19:30'</code>처럼 오프셋 없는 문자열</td>
+                  <td><code>+09</code>를 버리고 <code>2026-03-01 19:30</code>이라는 숫자만 저장한다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            이름에 "time zone"이 들어가지만 <code>timestamptz</code>도 시간대를 저장하지 않는다. 넣을 때 받은 시간대로 UTC
+            순간을 계산해 저장하고, 꺼낼 때는 DB 접속(세션)에 설정된 시간대로 바꿔 보여 준다.
+          </p>
+          <p>
+            오프셋 없는 값은 읽는 쪽의 시간대에 따라 뜻이 달라진다. 자바스크립트에서도
+            <code>new Date('2026-03-01T19:30')</code>은 브라우저가 서울에 있으면 서울 19:30, 런던에 있으면 런던 19:30으로
+            읽힌다. 시간대 없는 <code>timestamp</code>도 그 숫자가 서울 시각인지 UTC인지 모른다. 그래서 "지금보다 지났는가"
+            같은 비교를 해야 하는 일시는 <code>timestamptz</code>로 저장한다.
+          </p>
+        </section>
+
+        <section id="order-limit">
+          <h2>ORDER BY, LIMIT, OFFSET: 정렬하고 잘라 오기</h2>
+          <p>
+            SQL의 결과 순서는 <code>ORDER BY</code>를 쓰지 않으면 정해져 있지 않다. 같은 쿼리를 두 번 보내도 순서가 다를 수
+            있다. 화면에 순서대로 보여 주려면 항상 정렬 기준을 적는다.
+          </p>
+          <pre><code class="language-ts">// SELECT ... ORDER BY first_starts_at ASC, id ASC LIMIT 20 OFFSET 40
+rows
+  .toSorted((a, b) =&gt; a.firstStartsAt - b.firstStartsAt || a.id - b.id) // ORDER BY
+  .slice(40, 40 + 20); // OFFSET 40, LIMIT 20</code></pre>
+          <ul>
+            <li><strong><code>ORDER BY a ASC, b ASC</code></strong>: <code>a</code>로 오름차순 정렬하고, 같으면 <code>b</code>로 정렬한다. <code>DESC</code>는 내림차순이다.</li>
+            <li><strong><code>LIMIT 20</code></strong>: 최대 20개만 가져온다.</li>
+            <li><strong><code>OFFSET 40</code></strong>: 앞의 40개를 건너뛴다. 3페이지(20개씩)는 <code>OFFSET 40 LIMIT 20</code>이다.</li>
+          </ul>
+          <div class="callout warn">
+            <p>
+              페이지로 나눌 때는 정렬 기준이 겹치지 않아야 한다. 첫 회차 일시가 같은 공연이 여러 개면 DB가 그 사이의 순서를
+              매번 다르게 줄 수 있어서, 1페이지 끝의 공연이 2페이지에 또 나오거나 아예 빠질 수 있다. 그래서 마지막 기준으로
+              겹치지 않는 <code>id</code>를 붙인다.
+            </p>
+          </div>
+        </section>
+
+        <section id="aggregate">
+          <h2>집계 함수와 GROUP BY</h2>
+          <p>
+            <strong>집계 함수</strong>는 여러 행을 값 하나로 줄인다. 배열의 <code>reduce</code>와 같다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>SQL</th>
+                  <th>자바스크립트 비유</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>count(*)</code></td>
+                  <td><code>rows.length</code></td>
+                </tr>
+                <tr>
+                  <td><code>min(starts_at)</code>, <code>max(starts_at)</code></td>
+                  <td><code>Math.min(...rows.map((r) =&gt; r.startsAt))</code></td>
+                </tr>
+                <tr>
+                  <td><code>sum(price)</code></td>
+                  <td><code>rows.reduce((s, r) =&gt; s + r.price, 0)</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            <code>GROUP BY</code>를 붙이면 행을 키별로 묶은 뒤 묶음마다 집계한다. <code>Object.groupBy</code> 뒤에 묶음마다
+            <code>reduce</code>를 하는 것과 같다.
+          </p>
+          <pre><code class="language-ts">// SELECT show_id, min(starts_at), max(starts_at) FROM performances GROUP BY show_id
+Object.entries(Object.groupBy(performances, (p) =&gt; p.show_id)).map(([showId, list]) =&gt; ({
+  showId,
+  start: Math.min(...list.map((p) =&gt; p.startsAt)),
+  end: Math.max(...list.map((p) =&gt; p.startsAt)),
+}));</code></pre>
+          <p>
+            <code>GROUP BY</code>가 있으면 <code>SELECT</code>에는 묶는 키(<code>show_id</code>)와 집계 함수만 쓸 수 있다. 묶음
+            안에 행이 여러 개라, 그냥 <code>starts_at</code>을 고르면 어느 행의 값인지 정할 수 없기 때문이다.
+          </p>
+          <p>
+            <code>min</code>, <code>max</code>는 집계할 행이 하나도 없으면 <code>NULL</code>을 돌려준다. 빈 배열에서 최솟값이
+            없는 것과 같다. <code>count(*)</code>는 행이 없으면 <code>0</code>이다.
+          </p>
+        </section>
+
+        <section id="subquery">
+          <h2>서브쿼리: 쿼리 결과를 테이블처럼 쓰기</h2>
+          <p>
+            <code>SELECT</code>의 결과도 행과 컬럼이 있는 표다. 그래서 쿼리 결과를 괄호로 감싸 이름을 붙이면 다른 쿼리에서
+            테이블처럼 JOIN할 수 있다. 이것을 <strong>서브쿼리</strong>라고 한다. 계산한 중간 결과를 변수에 담아 두고 다음
+            계산에 쓰는 것과 같다.
+          </p>
+          <pre><code class="language-sql">select shows.title, period.start
+from shows
+inner join (
+  select show_id, min(starts_at) as start      -- 공연별 첫 회차를 구한 표
+  from performances
+  group by show_id
+) period on period.show_id = shows.id;          -- 그 표에 period라는 이름을 붙여 JOIN한다</code></pre>
+          <p>
+            <code>as start</code>는 계산한 값에 붙이는 이름(<strong>별칭</strong>)이다. <code>min(starts_at)</code> 같은 계산
+            결과에는 컬럼 이름이 없으므로, 바깥 쿼리에서 <code>period.start</code>로 부르려면 이름을 붙여야 한다.
+          </p>
+        </section>
+
+        <section id="parameter">
+          <h2>파라미터: 값은 SQL과 따로 보낸다</h2>
+          <p>
+            Drizzle이 만든 SQL을 보면 값 자리에 <code>$1</code>, <code>$2</code>가 있고, 실제 값은 따로 보낸다.
+          </p>
+          <pre><code class="language-ts">{ sql: 'insert into "venues" ("id", "name") values (default, $1)', params: ['낙산 소극장'] }</code></pre>
+          <p>
+            값을 SQL 문자열에 이어 붙이면, 값에 <code>'</code> 같은 글자가 들어 있을 때 SQL 문장 자체가 바뀌어 버린다. 사용자가
+            검색어에 SQL 조각을 넣어 DB를 마음대로 조작하는 공격을 <strong>SQL 인젝션</strong>이라고 한다. React가 문자열을
+            <code>innerHTML</code>로 넣지 않고 글자로만 넣어 XSS를 막는 것과 같은 생각이다. 파라미터로 보내면 DB는 그 값을 항상
+            "값"으로만 다룬다.
+          </p>
+        </section>
+
+        <section id="transaction">
+          <h2>트랜잭션: 모두 되거나 모두 안 되거나</h2>
+          <p>
+            여러 SQL을 하나로 묶어, 전부 성공하면 한꺼번에 반영하고 중간에 하나라도 실패하면 전부 없던 일로 되돌리는 것을
+            <strong>트랜잭션</strong>이라고 한다. 반영하는 것을 커밋(commit), 되돌리는 것을 롤백(rollback)이라고 한다.
+          </p>
+          <p>
+            시드가 "세 테이블을 비우고 공연장, 공연, 회차를 넣는" 일을 트랜잭션 하나로 묶은 것이 예다. 공연 10개를 넣다가
+            오류가 나면 비운 것까지 되돌아가므로, DB는 시드를 돌리기 전 상태 그대로 남는다. 묶지 않았다면 반쯤 지워지고 반쯤
+            채워진 상태가 남는다. 상태 관리에서 여러 값을 한 번에 바꿔 중간 상태가 화면에 보이지 않게 하는 것과 비슷하다.
+          </p>
+          <p>
+            트랜잭션이 끝나기 전에는 다른 접속에서 바뀐 내용이 보이지 않는다. 동시에 여러 요청이 같은 데이터를 바꿀 때의
+            문제(예: 같은 좌석을 두 사람이 사는 일)는 6단계에서 다룬다.
+          </p>
+        </section>
+
+      </main>
+    </div>
+  </body>
+</html>
