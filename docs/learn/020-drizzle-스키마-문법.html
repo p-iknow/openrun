@@ -1,0 +1,666 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>020 Drizzle 스키마 문법</title>
+    <link rel="stylesheet" href="learn.css" />
+    <script src="vendor/highlightjs/highlight.min.js" defer></script>
+    <script src="learn.js" defer></script>
+  </head>
+  <body>
+    <div class="layout">
+      <nav aria-label="목차">
+        <strong>목차</strong>
+        <ol>
+          <li><a href="#pg-table">pgTable</a></li>
+          <li><a href="#builders">컬럼 빌더</a></li>
+          <li><a href="#column-name">컬럼 이름</a></li>
+          <li><a href="#not-null">.notNull()</a></li>
+          <li><a href="#primary-key">.primaryKey()</a></li>
+          <li><a href="#identity">.generatedAlwaysAsIdentity()</a></li>
+          <li><a href="#default">.default()와 .defaultNow()</a></li>
+          <li><a href="#timestamp">timestamp 옵션</a></li>
+          <li><a href="#references">.references()</a></li>
+          <li><a href="#index">index()</a></li>
+          <li><a href="#pg-enum">pgEnum</a></li>
+          <li><a href="#infer">$inferSelect와 $inferInsert</a></li>
+          <li><a href="#relations">relations()</a></li>
+        </ol>
+      </nav>
+
+      <main>
+        <h1>020 Drizzle 스키마 문법</h1>
+        <p class="lead">
+          Drizzle 스키마 파일(<code>apps/api/src/db/schema/</code>)에 쓰는 문법을 모은 참고 문서다. 문법마다 코드,
+          drizzle-kit이 만드는 SQL, TS 타입에 주는 영향을 적는다. 처음부터 읽지 않고, 다른 문서에서 링크로 넘어와 필요한
+          절만 읽는다. 이 저장소가 왜 그 문법을 골랐는지는 각 문서에 있고, 여기에는 문법이 하는 일만 적는다. 기준 버전은
+          drizzle-orm 0.45다. SQL과 DB 개념은 <a href="019-프론트엔드-개발자를-위한-DB-개념.html">019 문서</a>에 있다.
+        </p>
+
+        <section id="pg-table">
+          <h2>pgTable</h2>
+          <pre><code class="language-ts">import { index, integer, pgTable, text } from 'drizzle-orm/pg-core';
+
+export const shows = pgTable(
+  'shows', // ① SQL 테이블 이름
+  {
+    // ② 컬럼: 키는 코드에서 쓰는 이름
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    title: text().notNull(),
+  },
+  (table) =&gt; [index().on(table.title)], // ③ 테이블 단위 설정(선택)
+);</code></pre>
+          <ul>
+            <li><strong>①</strong> DB에 만들어지는 실제 <a href="019-프론트엔드-개발자를-위한-DB-개념.html#table">테이블</a> 이름이다.</li>
+            <li>
+              <strong>②</strong> 객체의 키 하나가 컬럼 하나다. 키는 코드에서 쓰는 이름이라, 쿼리에서는
+              <code>shows.title</code>, 결과 행에서는 <code>row.title</code>로 쓴다.
+            </li>
+            <li>
+              <strong>③</strong> 컬럼 하나에 붙일 수 없는 것(<a href="#index">인덱스</a>, 여러 컬럼에 걸친 제약)을 둔다.
+              ②의 컬럼을 <code>table</code>로 받아 배열로 돌려준다. 없으면 생략한다.
+            </li>
+          </ul>
+          <p>
+            <code>pg-core</code>는 PostgreSQL용 빌더 모음이다. MySQL은 <code>mysql-core</code>, SQLite는
+            <code>sqlite-core</code>를 쓴다. DB마다 지원하는 타입이 달라서 나뉘어 있다.
+          </p>
+          <p>
+            반환값 <code>shows</code>는 두 곳에 쓰인다. drizzle-kit은 이 값을 읽어 마이그레이션 SQL을 만들고, 앱은
+            <code>db.select().from(shows)</code>처럼 쿼리 재료로 쓴다(<a href="004-drizzle-스키마와-DB-연결.html#schema-uses"
+              >004 문서</a
+            >).
+          </p>
+        </section>
+
+        <section id="builders">
+          <h2>컬럼 빌더</h2>
+          <p>빌더 함수 하나가 PostgreSQL 컬럼 타입 하나에 대응한다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>빌더</th>
+                  <th>PostgreSQL 타입</th>
+                  <th>TS 타입</th>
+                  <th>담는 것</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>integer()</code></td>
+                  <td><code>integer</code></td>
+                  <td><code>number</code></td>
+                  <td>정수. 약 ±21억까지</td>
+                </tr>
+                <tr>
+                  <td><code>text()</code></td>
+                  <td><code>text</code></td>
+                  <td><code>string</code></td>
+                  <td>길이 제한 없는 문자열</td>
+                </tr>
+                <tr>
+                  <td><code>boolean()</code></td>
+                  <td><code>boolean</code></td>
+                  <td><code>boolean</code></td>
+                  <td>참, 거짓</td>
+                </tr>
+                <tr>
+                  <td><code>timestamp()</code></td>
+                  <td><code>timestamp</code> 또는 <code>timestamptz</code></td>
+                  <td><code>Date</code></td>
+                  <td>일시(<a href="#timestamp">옵션</a>)</td>
+                </tr>
+                <tr>
+                  <td><code>pgEnum</code>이 돌려준 함수</td>
+                  <td>직접 만든 enum 타입</td>
+                  <td>문자열 리터럴 유니언</td>
+                  <td>정해진 값 중 하나(<a href="#pg-enum">pgEnum</a>)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            빌더 뒤에 <code>.notNull()</code>처럼 점으로 이어 붙이는 메서드를 이 문서에서는 수식어라고 부른다. 수식어는 SQL의
+            제약이나 기본값이 되고, 동시에 TS 타입도 바꾼다.
+          </p>
+          <details class="fold">
+            <summary>선택 읽기: <code>varchar(n)</code> 대신 <code>text</code>를 쓰는 이유</summary>
+            <div class="fold-body">
+              <p>
+                PostgreSQL에서는 <code>varchar(n)</code>과 <code>text</code>의 저장 방식과 성능이 같다.
+                <code>varchar(50)</code>은 길이 검사만 더한 <code>text</code>다. 길이 제한은 사용자에게 알맞은 오류
+                메시지를 줄 수 있는 API 검증에서 거는 편이 낫다.
+              </p>
+            </div>
+          </details>
+        </section>
+
+        <section id="column-name">
+          <h2>컬럼 이름</h2>
+          <pre><code class="language-ts">title: text(),                  // 컬럼 이름: title
+venueId: integer(),             // 컬럼 이름: "venueId"
+venueId: integer('venue_id'),   // 컬럼 이름: venue_id</code></pre>
+          <p>
+            빌더의 첫 인자는 SQL 컬럼 이름이고, 생략할 수 있다. 생략하면 객체 키가 그대로 컬럼 이름이 된다. 키가
+            <code>venueId</code>처럼 대문자를 포함하면 컬럼도 <code>"venueId"</code>가 되는데, PostgreSQL은 따옴표 없는 이름을
+            소문자로 바꿔 읽으므로 SQL에서 매번 <code>"venueId"</code>처럼 따옴표를 쳐야 한다. 그래서 두 단어 이상이면 첫
+            인자로 <code>'venue_id'</code> 같은 snake_case 이름을 적는다.
+          </p>
+          <p>
+            코드에서는 여전히 키 이름(<code>shows.venueId</code>, <code>row.venueId</code>)을 쓴다. 키와 컬럼 이름을 잇는
+            일은 Drizzle이 한다.
+          </p>
+          <details class="fold">
+            <summary>선택 읽기: <code>casing</code> 옵션</summary>
+            <div class="fold-body">
+              <p>
+                <code>drizzle(url, { casing: 'snake_case' })</code>를 주면 키에서 snake_case 컬럼 이름을 자동으로 만든다.
+                같은 옵션을 drizzle-kit 설정(<code>drizzle.config.ts</code>의 <code>casing</code>)과
+                <code>drizzle()</code>을 부르는 모든 곳에 넣어야 한다. 한 곳이라도 빠지면 그곳만 다른 이름을 찾는다.
+              </p>
+            </div>
+          </details>
+        </section>
+
+        <section id="not-null">
+          <h2>.notNull()</h2>
+          <pre><code class="language-ts">title: text().notNull(),</code></pre>
+          <pre><code class="language-sql">"title" text NOT NULL</code></pre>
+          <p>
+            컬럼을 비울 수 없게 한다(<a href="019-프론트엔드-개발자를-위한-DB-개념.html#null">NOT NULL</a>). 수식어가 없으면
+            <code>NULL</code>을 허용한다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>읽을 때(SELECT) 타입</th>
+                  <th>넣을 때(INSERT)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>text()</code></td>
+                  <td><code>string | null</code></td>
+                  <td>선택. 빼면 <code>NULL</code></td>
+                </tr>
+                <tr>
+                  <td><code>text().notNull()</code></td>
+                  <td><code>string</code></td>
+                  <td><span class="badge blue">필수</span> 빼면 컴파일 오류</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>기본값이 있으면 INSERT에서 다시 선택이 된다(<a href="#default">.default()</a>).</p>
+        </section>
+
+        <section id="primary-key">
+          <h2>.primaryKey()</h2>
+          <pre><code class="language-ts">id: integer().primaryKey(),</code></pre>
+          <pre><code class="language-sql">"id" integer PRIMARY KEY</code></pre>
+          <p>
+            컬럼을 <a href="019-프론트엔드-개발자를-위한-DB-개념.html#pk">기본 키</a>로 만든다. 값이 겹칠 수 없고 비어 있을 수
+            없다(NOT NULL이 함께 따라온다). PostgreSQL은 기본 키에 인덱스를 자동으로 만든다.
+          </p>
+          <p>
+            컬럼 두 개를 묶어 기본 키로 삼으려면 <a href="#pg-table">pgTable</a>의 세 번째 인자에
+            <code>primaryKey({ columns: [table.a, table.b] })</code>를 둔다.
+          </p>
+        </section>
+
+        <section id="identity">
+          <h2>.generatedAlwaysAsIdentity()</h2>
+          <pre><code class="language-ts">id: integer().primaryKey().generatedAlwaysAsIdentity(),</code></pre>
+          <pre><code class="language-sql">"id" integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY (sequence name "shows_id_seq" INCREMENT BY 1 MINVALUE 1 ...)</code></pre>
+          <p>
+            행을 넣을 때 DB가 번호를 1, 2, 3… 자동으로 매긴다. 번호는 테이블마다 따로 있는
+            <a href="019-프론트엔드-개발자를-위한-DB-개념.html#pk">시퀀스</a>가 기억한다. 예전에 쓰던 <code>serial</code>을
+            대신하는 표준 SQL 방식이다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>수식어</th>
+                  <th>번호를 직접 넣으면</th>
+                  <th>INSERT 타입</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>.generatedAlwaysAsIdentity()</code></td>
+                  <td>DB가 거부한다</td>
+                  <td>키가 빠진다</td>
+                </tr>
+                <tr>
+                  <td><code>.generatedByDefaultAsIdentity()</code></td>
+                  <td>넣은 값을 쓴다. 시퀀스는 모르므로 나중에 같은 번호가 나와 충돌할 수 있다</td>
+                  <td>선택</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            <code>TRUNCATE 테이블 RESTART IDENTITY</code>는 행을 모두 지우면서 시퀀스를 1로 되돌린다. 행만 지우면 다음 번호는
+            지우기 전 번호에서 이어진다.
+          </p>
+        </section>
+
+        <section id="default">
+          <h2>.default()와 .defaultNow()</h2>
+          <pre><code class="language-ts">isCancelled: boolean('is_cancelled').notNull().default(false),
+createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),</code></pre>
+          <pre><code class="language-sql">"is_cancelled" boolean DEFAULT false NOT NULL
+"created_at" timestamp with time zone DEFAULT now() NOT NULL</code></pre>
+          <p>
+            SQL의 <code>DEFAULT</code>를 붙인다. INSERT에서 값을 주지 않으면 <strong>DB가</strong> 이 값으로 채운다. 함수의
+            기본 매개변수(<code>function f(x = false)</code>)와 비슷하다.
+          </p>
+          <ul>
+            <li><code>.default(값)</code>: 고정된 값을 기본값으로 둔다.</li>
+            <li>
+              <code>.defaultNow()</code>: <code>DEFAULT now()</code>다. <code>now()</code>는 PostgreSQL의 "지금 시각" 함수라,
+              Node 서버가 아니라 DB 서버의 시계를 읽는다.
+            </li>
+          </ul>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>읽을 때(SELECT) 타입</th>
+                  <th>넣을 때(INSERT)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>.notNull()</code></td>
+                  <td><code>boolean</code></td>
+                  <td><span class="badge blue">필수</span></td>
+                </tr>
+                <tr>
+                  <td><code>.notNull().default(false)</code></td>
+                  <td><code>boolean</code></td>
+                  <td><span class="badge green">선택</span> 빼면 DB가 <code>false</code>로 채운다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <details class="fold">
+            <summary>선택 읽기: <code>$defaultFn()</code>은 다르다</summary>
+            <div class="fold-body">
+              <p>
+                <code>.$defaultFn(() =&gt; crypto.randomUUID())</code>처럼 쓰면 기본값을 DB가 아니라 Drizzle이 INSERT 직전에
+                Node에서 만든다. SQL에 <code>DEFAULT</code>가 생기지 않으므로, Drizzle을 거치지 않고 SQL로 직접 넣으면
+                기본값이 적용되지 않는다.
+              </p>
+            </div>
+          </details>
+        </section>
+
+        <section id="timestamp">
+          <h2>timestamp 옵션</h2>
+          <pre><code class="language-ts">startsAt: timestamp('starts_at', { withTimezone: true }),
+startsAt: timestamp('starts_at', { withTimezone: true, mode: 'string' }),</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>옵션</th>
+                  <th>값</th>
+                  <th>뜻</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>withTimezone</code></td>
+                  <td><code>true</code></td>
+                  <td>
+                    컬럼 타입이 <code>timestamp with time zone</code>(<code>timestamptz</code>)이 된다. 절대 시점으로
+                    저장한다(<a href="019-프론트엔드-개발자를-위한-DB-개념.html#timestamptz">019 문서</a>)
+                  </td>
+                </tr>
+                <tr>
+                  <td></td>
+                  <td><code>false</code>(기본값)</td>
+                  <td>시간대 없는 <code>timestamp</code>가 된다. 받은 시각의 숫자만 저장한다</td>
+                </tr>
+                <tr>
+                  <td><code>mode</code></td>
+                  <td><code>'date'</code>(기본값)</td>
+                  <td>TS에서 <code>Date</code> 객체로 읽고 쓴다</td>
+                </tr>
+                <tr>
+                  <td></td>
+                  <td><code>'string'</code></td>
+                  <td>TS에서 문자열로 읽고 쓴다. Drizzle이 <code>Date</code>로 바꾸지 않는다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            <code>mode: 'date'</code>인 값을 JSON 응답에 담으려면 <code>toISOString()</code>으로 문자열로 바꾼다. JSON에는
+            <code>Date</code> 타입이 없다.
+          </p>
+        </section>
+
+        <section id="references">
+          <h2>.references()</h2>
+          <pre><code class="language-ts">venueId: integer('venue_id')
+  .notNull()
+  .references(() =&gt; venues.id),</code></pre>
+          <pre><code class="language-sql">ALTER TABLE "shows" ADD CONSTRAINT "shows_venue_id_venues_id_fk"
+  FOREIGN KEY ("venue_id") REFERENCES "public"."venues"("id")
+  ON DELETE no action ON UPDATE no action;</code></pre>
+          <p>
+            컬럼에 <a href="019-프론트엔드-개발자를-위한-DB-개념.html#fk">외래 키</a> 제약을 건다. SQL은 부분별로 이렇게
+            읽는다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>부분</th>
+                  <th>뜻</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>ALTER TABLE "shows"</code></td>
+                  <td><code>shows</code> 테이블의 모양을 바꾼다</td>
+                </tr>
+                <tr>
+                  <td><code>ADD CONSTRAINT "shows_venue_id_venues_id_fk"</code></td>
+                  <td>제약을 더한다. 따옴표 안은 drizzle-kit이 지은 제약 이름이고, 오류 메시지에 나온다</td>
+                </tr>
+                <tr>
+                  <td><code>FOREIGN KEY ("venue_id")</code></td>
+                  <td>이 테이블의 <code>venue_id</code>가 외래 키다</td>
+                </tr>
+                <tr>
+                  <td><code>REFERENCES "public"."venues"("id")</code></td>
+                  <td><code>venues</code> 테이블의 <code>id</code>를 가리킨다</td>
+                </tr>
+                <tr>
+                  <td><code>ON DELETE no action</code></td>
+                  <td>가리켜지는 행을 지울 때의 동작(아래)</td>
+                </tr>
+                <tr>
+                  <td><code>ON UPDATE no action</code></td>
+                  <td>가리켜지는 행의 <code>id</code>를 바꿀 때의 동작</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>인자가 화살표 함수인 이유</h3>
+          <p>
+            <code>.references(venues.id)</code>가 아니라 <code>.references(() =&gt; venues.id)</code>다. Drizzle은 함수를
+            저장만 해 두고, 참조 정보가 필요할 때(마이그레이션 생성, 쿼리 실행) 부른다. 두 스키마 파일이 서로를
+            import하면(순환 import), 한쪽 파일을 읽는 순간에는 다른 쪽 값이 아직 정의되지 않았을 수 있다. 함수로 미뤄
+            두면 모든 파일을 읽은 뒤에 부르므로 안전하다. React의 <code>lazy(() =&gt; import(...))</code>가 함수를 받는 것과
+            같은 이유다.
+          </p>
+
+          <h3 id="on-delete">onDelete, onUpdate</h3>
+          <pre><code class="language-ts">.references(() =&gt; shows.id, { onDelete: 'cascade' })</code></pre>
+          <p>
+            두 번째 인자로 가리켜지는 행(부모)을 지우거나 id를 바꿀 때, 가리키는 행(자식)을 어떻게 할지 정한다. 주지
+            않으면 <code>no action</code>이다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>값</th>
+                  <th>부모를 지우면</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>'no action'</code>(기본값)</td>
+                  <td>자식이 하나라도 남아 있으면 삭제가 실패한다</td>
+                </tr>
+                <tr>
+                  <td><code>'restrict'</code></td>
+                  <td><code>no action</code>과 거의 같다. 검사 시점만 다르다</td>
+                </tr>
+                <tr>
+                  <td><code>'cascade'</code></td>
+                  <td>자식도 함께 지운다</td>
+                </tr>
+                <tr>
+                  <td><code>'set null'</code></td>
+                  <td>자식의 외래 키 컬럼을 비운다. 컬럼이 <code>NOT NULL</code>이면 쓸 수 없다</td>
+                </tr>
+                <tr>
+                  <td><code>'set default'</code></td>
+                  <td>자식의 외래 키 컬럼을 기본값으로 바꾼다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout warn">
+            <p>
+              PostgreSQL은 외래 키 컬럼에 인덱스를 자동으로 만들지 않는다. 그 컬럼으로 찾는 일이 있으면
+              <a href="#index">index()</a>를 따로 둔다.
+            </p>
+          </div>
+        </section>
+
+        <section id="index">
+          <h2>index()</h2>
+          <pre><code class="language-ts">export const performances = pgTable(
+  'performances',
+  { /* ... */ showId: integer('show_id').notNull() },
+  (table) =&gt; [index().on(table.showId)],
+);</code></pre>
+          <pre><code class="language-sql">CREATE INDEX "performances_show_id_index" ON "performances" USING btree ("show_id");</code></pre>
+          <p>
+            <a href="#pg-table">pgTable</a>의 세 번째 인자에서 <a href="019-프론트엔드-개발자를-위한-DB-개념.html#index"
+              >인덱스</a
+            >를 만든다. SQL은 "<code>performances</code>의 <code>show_id</code>에 B-tree 방식으로
+            <code>performances_show_id_index</code>라는 인덱스를 만든다"이다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>쓰는 법</th>
+                  <th>뜻</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>index().on(table.a)</code></td>
+                  <td>이름은 drizzle-kit이 <code>테이블_컬럼_index</code>로 짓는다</td>
+                </tr>
+                <tr>
+                  <td><code>index('my_idx').on(table.a)</code></td>
+                  <td>이름을 직접 정한다</td>
+                </tr>
+                <tr>
+                  <td><code>index().on(table.a, table.b)</code></td>
+                  <td>여러 컬럼을 묶은 인덱스. 순서가 중요하다(<code>a</code>로 찾거나 <code>a</code>와 <code>b</code>로 함께 찾을 때 쓰인다)</td>
+                </tr>
+                <tr>
+                  <td><code>uniqueIndex().on(table.a)</code></td>
+                  <td>인덱스이면서 값이 겹치지 못하게 막는다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>방식을 정하지 않으면 PostgreSQL 기본값인 B-tree다.</p>
+        </section>
+
+        <section id="pg-enum">
+          <h2>pgEnum</h2>
+          <pre><code class="language-ts">export const GENRES = ['musical', 'play', 'concert', 'classical_dance', 'kids_family'] as const;
+export type Genre = (typeof GENRES)[number];
+export const genre = pgEnum('genre', GENRES);
+
+// 테이블 안에서
+genre: genre().notNull(),</code></pre>
+          <pre><code class="language-sql">CREATE TYPE "public"."genre" AS ENUM('musical', 'play', 'concert', 'classical_dance', 'kids_family');
+ALTER TABLE "shows" ADD COLUMN "genre" "genre" NOT NULL;</code></pre>
+          <ol class="steps blue">
+            <li>
+              <strong><code>as const</code></strong>
+              배열 타입이 <code>string[]</code>이 아니라 읽기 전용 튜플 <code>readonly ['musical', 'play', ...]</code>가
+              된다. 값 하나하나가 리터럴 타입으로 남는다.
+            </li>
+            <li>
+              <strong><code>(typeof GENRES)[number]</code></strong>
+              "튜플의 아무 칸"의 타입, 즉 <code>'musical' | 'play' | 'concert' | 'classical_dance' | 'kids_family'</code>다.
+              값 목록과 타입을 배열 하나에서 얻으므로 둘이 어긋나지 않는다.
+            </li>
+            <li>
+              <strong><code>pgEnum('genre', GENRES)</code></strong>
+              PostgreSQL에 <code>genre</code>라는 새 타입을 만든다(<code>CREATE TYPE</code>). 테이블에 딸린 것이 아니라 DB에
+              따로 있는 타입이라 여러 테이블에서 쓸 수 있다. 반환값은 이 타입의 컬럼을 만드는 빌더 함수다. 두 번째 인자는
+              비어 있지 않은 문자열 튜플이어야 한다.
+            </li>
+            <li>
+              <strong><code>genre().notNull()</code></strong>
+              enum 타입의 컬럼이다. 인자를 생략하면 다른 빌더처럼 키가 컬럼 이름이 된다. TS 타입이 위의 유니언이라 목록에
+              없는 값은 컴파일 오류가 나고, SQL로 직접 넣어도 DB가 거부한다.
+            </li>
+          </ol>
+          <p>
+            SQL 둘째 줄의 첫 <code>"genre"</code>는 컬럼 이름, 두 번째 <code>"genre"</code>는 타입 이름이다.
+          </p>
+          <h3>값을 바꾸는 마이그레이션</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>바꾸는 것</th>
+                  <th>SQL</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>값 더하기</td>
+                  <td><span class="badge green">쉬움</span> <code>ALTER TYPE "genre" ADD VALUE 'opera'</code></td>
+                </tr>
+                <tr>
+                  <td>값 이름 바꾸기</td>
+                  <td><code>ALTER TYPE "genre" RENAME VALUE 'play' TO 'drama'</code>. 저장된 행도 새 이름으로 보인다</td>
+                </tr>
+                <tr>
+                  <td>값 빼기</td>
+                  <td>
+                    <span class="badge blue">어려움</span> 지우는 명령이 없다. 그 값을 쓰는 행을 먼저 바꾸고, 새 타입을 만들어
+                    컬럼을 옮긴 뒤 옛 타입을 지운다
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="infer">
+          <h2>$inferSelect와 $inferInsert</h2>
+          <p>테이블 정의에서 행 타입을 꺼낸다. 수식어 규칙이 그대로 반영된다.</p>
+          <pre><code class="language-ts">type ShowRow = typeof shows.$inferSelect; // 읽어 온 행
+// { id: number; venueId: number; title: string; genre: Genre; createdAt: Date; ... }
+
+type NewShow = typeof shows.$inferInsert; // 넣을 값
+// { venueId: number; title: string; genre: Genre; createdAt?: Date; ... }</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>컬럼 정의</th>
+                  <th><code>$inferSelect</code></th>
+                  <th><code>$inferInsert</code></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>수식어 없음</td>
+                  <td><code>T | null</code></td>
+                  <td>선택(<code>T | null</code>)</td>
+                </tr>
+                <tr>
+                  <td><code>.notNull()</code></td>
+                  <td><code>T</code></td>
+                  <td>필수</td>
+                </tr>
+                <tr>
+                  <td><code>.notNull().default(...)</code>, <code>.defaultNow()</code></td>
+                  <td><code>T</code></td>
+                  <td>선택</td>
+                </tr>
+                <tr>
+                  <td><code>.generatedAlwaysAsIdentity()</code></td>
+                  <td><code>number</code></td>
+                  <td>없음</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            <code>db.insert(shows).values(...)</code>가 받는 값이 <code>$inferInsert</code> 모양이고,
+            <code>db.select().from(shows)</code>의 결과 행이 <code>$inferSelect</code> 모양이다. 따로 이름을 붙이지 않아도
+            쿼리에서 추론된다.
+          </p>
+        </section>
+
+        <section id="relations">
+          <h2>relations()</h2>
+          <pre><code class="language-ts">import { relations } from 'drizzle-orm';
+
+export const showsRelations = relations(shows, ({ many }) =&gt; ({
+  performances: many(performances),
+}));
+
+// drizzle(url, { schema: { shows, performances, showsRelations, ... } })로 넘기면
+db.query.shows.findMany({ with: { performances: true } });
+// → [{ id: 1, title: '...', performances: [{ id: 1, ... }, ...] }, ...]</code></pre>
+          <p>
+            관계를 선언해 두면 <code>db.query</code>로 중첩 객체를 한 번에 조회할 수 있다(Relational Queries). GraphQL처럼
+            "공연과 그 회차들"을 중첩해서 받는다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th><code>.references()</code></th>
+                  <th><code>relations()</code></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>무엇인가</td>
+                  <td>DB의 외래 키 제약</td>
+                  <td>Drizzle 쿼리 편의 기능</td>
+                </tr>
+                <tr>
+                  <td>누가 아는가</td>
+                  <td>PostgreSQL</td>
+                  <td>Drizzle(TypeScript 코드)만</td>
+                </tr>
+                <tr>
+                  <td>마이그레이션에 나오는가</td>
+                  <td>나온다</td>
+                  <td>나오지 않는다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            0.45의 <code>relations()</code>는 모든 테이블과 관계를 한 객체로 모아 <code>drizzle()</code>에 넘겨야 한다. v1의
+            <code>defineRelations</code>도 같다. 이 저장소는 쓰지 않는다(이유는
+            <a href="021-공연장-공연-회차-스키마.html#relations">021 문서</a>).
+          </p>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

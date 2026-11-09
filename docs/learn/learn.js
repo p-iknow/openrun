@@ -41,7 +41,13 @@ const learnDocuments = [
   { file: '016-server-component가-해결하는-문제.html', title: '016 Server Component가 해결하는 문제', tags: ['nextjs'] },
   { file: '017-hydration-자세히.html', title: '017 hydration 자세히', tags: ['nextjs'] },
   { file: '018-예외-필터와-APP_FILTER.html', title: '018 예외 필터와 APP_FILTER', tags: ['nestjs'] },
-  { file: '019-drizzle-테이블-관계와-enum.html', title: '019 Drizzle 테이블 관계와 enum', tags: ['drizzle'] },
+  {
+    file: '019-프론트엔드-개발자를-위한-DB-개념.html',
+    title: '019 프론트엔드 개발자를 위한 DB 개념',
+    tags: ['database'],
+  },
+  { file: '020-drizzle-스키마-문법.html', title: '020 Drizzle 스키마 문법', tags: ['drizzle'] },
+  { file: '021-공연장-공연-회차-스키마.html', title: '021 공연장·공연·회차 스키마', tags: ['drizzle', 'database'] },
 ];
 
 const currentFile = decodeURIComponent(location.pathname).split('/').pop();

@@ -156,8 +156,7 @@ export const shows = pgTable('shows', {
           <h3><code>title: text().notNull()</code></h3>
           <p>길이 제한 없는 문자열이고, 비울 수 없다(<code>NOT NULL</code>).</p>
           <p>
-            1.3에서 공연장, 회차 테이블이 생기며 쓴 외래 키, 인덱스, enum, <code>timestamptz</code>는
-            <a href="019-drizzle-테이블-관계와-enum.html">019 문서</a>에 있다.
+            이 문서 뒤에 나온 Drizzle 스키마 문법(외래 키, 인덱스, enum, <code>timestamptz</code> 등)은 <a href="020-drizzle-스키마-문법.html">020 문서</a>에, 1.3에서 공연장·공연·회차 테이블을 그렇게 만든 이유는 <a href="021-공연장-공연-회차-스키마.html">021 문서</a>에 있다.
           </p>
         </section>
 
