@@ -105,14 +105,17 @@ const steps = {
 export interface PaginationStepProps {
   /** 이동할 링크 요소. 예: `<Link href="/shows?page=3" />`. */
   render: ReactElement;
-  /** 갈 곳이 없을 때(첫 페이지의 이전, 마지막 페이지의 다음) 켠다. `render`는 그리지 않고 비활성 링크를 그린다. */
-  disabled?: boolean;
+  /**
+   * 갈 곳이 없을 때(첫 페이지의 이전, 마지막 페이지의 다음) `true`. `render`는 그리지 않고 비활성 링크를 그린다.
+   * 빠뜨리면 없는 페이지로 가는 링크가 살아 있게 되므로 필수다. 보통 `getPagination`의 `hasPreviousPage`/`hasNextPage`를 뒤집어 넘긴다.
+   */
+  disabled: boolean;
 }
 
 function PaginationStep({
   direction,
   render,
-  disabled = false,
+  disabled,
 }: PaginationStepProps & { direction: keyof typeof steps }) {
   const { label, iconPath } = steps[direction];
   const element = useRender({
