@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>03 공연장·공연·회차 스키마</title>
+    <title>04 공연장·공연·회차 스키마</title>
     <link rel="stylesheet" href="../learn.css" />
     <script src="../vendor/highlightjs/highlight.min.js" defer></script>
     <script src="../learn.js" defer></script>
@@ -28,7 +28,7 @@
       </nav>
 
       <main>
-        <h1>03 공연장·공연·회차 스키마</h1>
+        <h1>04 공연장·공연·회차 스키마</h1>
         <p class="lead">
           1.3(#39)에서 만든 공연장, 공연, 회차 테이블(<code>apps/api/src/db/schema/</code>)을 읽고, 문법마다 왜 그 선택을
           했는지 설명한다. 문법이 하는 일은 <a href="02-drizzle-스키마-문법.html">db-and-drizzle 02 문서</a>, 테이블·외래 키·인덱스 같은 DB
@@ -327,7 +327,8 @@ TRUNCATE "shows" RESTART IDENTITY;--&gt; statement-breakpoint</code></pre>
           <p>
             Drizzle의 <a href="02-drizzle-스키마-문법.html#relations">relations()</a>를 쓰면 "공연과 그 회차들"을 중첩 객체로
             한 번에 받을 수 있지만, 이 저장소는 쓰지 않고 서비스에서
-            <a href="01-프론트엔드-개발자를-위한-DB-개념.html#join">JOIN</a>을 직접 적는다.
+            <a href="01-프론트엔드-개발자를-위한-DB-개념.html#join">JOIN</a>을 직접 적는다. 아래 코드의 문법은
+            <a href="03-drizzle-쿼리-문법.html">db-and-drizzle 03 문서</a>에 있다.
           </p>
           <pre><code class="language-ts">this.db
   .select({ id: shows.id, venueName: venues.name, start: period.start, end: period.end })

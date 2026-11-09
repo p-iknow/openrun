@@ -33,7 +33,8 @@ const learnFolders = [
       { file: '00-drizzle-스키마와-DB-연결.html', title: '00 Drizzle 스키마와 DB 연결', tags: ['drizzle', 'nestjs'] },
       { file: '01-프론트엔드-개발자를-위한-DB-개념.html', title: '01 프론트엔드 개발자를 위한 DB 개념', tags: ['database'] },
       { file: '02-drizzle-스키마-문법.html', title: '02 Drizzle 스키마 문법', tags: ['drizzle'] },
-      { file: '03-공연장-공연-회차-스키마.html', title: '03 공연장·공연·회차 스키마', tags: ['drizzle', 'database'] },
+      { file: '03-drizzle-쿼리-문법.html', title: '03 Drizzle 쿼리 문법', tags: ['drizzle'] },
+      { file: '04-공연장-공연-회차-스키마.html', title: '04 공연장·공연·회차 스키마', tags: ['drizzle', 'database'] },
     ],
   },
   {

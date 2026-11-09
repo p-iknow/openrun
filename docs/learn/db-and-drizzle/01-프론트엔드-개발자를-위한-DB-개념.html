@@ -24,6 +24,11 @@
           <li><a href="#index">인덱스: 찾아보기 목차</a></li>
           <li><a href="#sql">SQL 문장의 두 종류</a></li>
           <li><a href="#timestamptz">timestamptz</a></li>
+          <li><a href="#order-limit">ORDER BY, LIMIT, OFFSET</a></li>
+          <li><a href="#aggregate">집계 함수와 GROUP BY</a></li>
+          <li><a href="#subquery">서브쿼리</a></li>
+          <li><a href="#parameter">파라미터</a></li>
+          <li><a href="#transaction">트랜잭션</a></li>
         </ol>
       </nav>
 
@@ -170,7 +175,7 @@ const rows = shows
           <p>
             비슷하게 <code>GROUP BY</code>는 배열을 키별로 묶는 것(<code>Object.groupBy</code>)이고,
             <code>min()</code>, <code>max()</code>는 묶인 값에서 가장 작은 값과 큰 값을 고르는 것이다. 공연 기간(첫
-            회차와 마지막 회차)이 이 방식으로 계산된다.
+            회차와 마지막 회차)이 이 방식으로 계산된다(<a href="#aggregate">집계 함수와 GROUP BY</a>).
           </p>
         </section>
 
@@ -301,6 +306,130 @@ byShowId.get(3);</code></pre>
             <code>new Date('2026-03-01T19:30')</code>은 브라우저가 서울에 있으면 서울 19:30, 런던에 있으면 런던 19:30으로
             읽힌다. 시간대 없는 <code>timestamp</code>도 그 숫자가 서울 시각인지 UTC인지 모른다. 그래서 "지금보다 지났는가"
             같은 비교를 해야 하는 일시는 <code>timestamptz</code>로 저장한다.
+          </p>
+        </section>
+
+        <section id="order-limit">
+          <h2>ORDER BY, LIMIT, OFFSET: 정렬하고 잘라 오기</h2>
+          <p>
+            SQL의 결과 순서는 <code>ORDER BY</code>를 쓰지 않으면 정해져 있지 않다. 같은 쿼리를 두 번 보내도 순서가 다를 수
+            있다. 화면에 순서대로 보여 주려면 항상 정렬 기준을 적는다.
+          </p>
+          <pre><code class="language-ts">// SELECT ... ORDER BY first_starts_at ASC, id ASC LIMIT 20 OFFSET 40
+rows
+  .toSorted((a, b) =&gt; a.firstStartsAt - b.firstStartsAt || a.id - b.id) // ORDER BY
+  .slice(40, 40 + 20); // OFFSET 40, LIMIT 20</code></pre>
+          <ul>
+            <li><strong><code>ORDER BY a ASC, b ASC</code></strong>: <code>a</code>로 오름차순 정렬하고, 같으면 <code>b</code>로 정렬한다. <code>DESC</code>는 내림차순이다.</li>
+            <li><strong><code>LIMIT 20</code></strong>: 최대 20개만 가져온다.</li>
+            <li><strong><code>OFFSET 40</code></strong>: 앞의 40개를 건너뛴다. 3페이지(20개씩)는 <code>OFFSET 40 LIMIT 20</code>이다.</li>
+          </ul>
+          <div class="callout warn">
+            <p>
+              페이지로 나눌 때는 정렬 기준이 겹치지 않아야 한다. 첫 회차 일시가 같은 공연이 여러 개면 DB가 그 사이의 순서를
+              매번 다르게 줄 수 있어서, 1페이지 끝의 공연이 2페이지에 또 나오거나 아예 빠질 수 있다. 그래서 마지막 기준으로
+              겹치지 않는 <code>id</code>를 붙인다.
+            </p>
+          </div>
+        </section>
+
+        <section id="aggregate">
+          <h2>집계 함수와 GROUP BY</h2>
+          <p>
+            <strong>집계 함수</strong>는 여러 행을 값 하나로 줄인다. 배열의 <code>reduce</code>와 같다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>SQL</th>
+                  <th>자바스크립트 비유</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>count(*)</code></td>
+                  <td><code>rows.length</code></td>
+                </tr>
+                <tr>
+                  <td><code>min(starts_at)</code>, <code>max(starts_at)</code></td>
+                  <td><code>Math.min(...rows.map((r) =&gt; r.startsAt))</code></td>
+                </tr>
+                <tr>
+                  <td><code>sum(price)</code></td>
+                  <td><code>rows.reduce((s, r) =&gt; s + r.price, 0)</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            <code>GROUP BY</code>를 붙이면 행을 키별로 묶은 뒤 묶음마다 집계한다. <code>Object.groupBy</code> 뒤에 묶음마다
+            <code>reduce</code>를 하는 것과 같다.
+          </p>
+          <pre><code class="language-ts">// SELECT show_id, min(starts_at), max(starts_at) FROM performances GROUP BY show_id
+Object.entries(Object.groupBy(performances, (p) =&gt; p.show_id)).map(([showId, list]) =&gt; ({
+  showId,
+  start: Math.min(...list.map((p) =&gt; p.startsAt)),
+  end: Math.max(...list.map((p) =&gt; p.startsAt)),
+}));</code></pre>
+          <p>
+            <code>GROUP BY</code>가 있으면 <code>SELECT</code>에는 묶는 키(<code>show_id</code>)와 집계 함수만 쓸 수 있다. 묶음
+            안에 행이 여러 개라, 그냥 <code>starts_at</code>을 고르면 어느 행의 값인지 정할 수 없기 때문이다.
+          </p>
+          <p>
+            <code>min</code>, <code>max</code>는 집계할 행이 하나도 없으면 <code>NULL</code>을 돌려준다. 빈 배열에서 최솟값이
+            없는 것과 같다. <code>count(*)</code>는 행이 없으면 <code>0</code>이다.
+          </p>
+        </section>
+
+        <section id="subquery">
+          <h2>서브쿼리: 쿼리 결과를 테이블처럼 쓰기</h2>
+          <p>
+            <code>SELECT</code>의 결과도 행과 컬럼이 있는 표다. 그래서 쿼리 결과를 괄호로 감싸 이름을 붙이면 다른 쿼리에서
+            테이블처럼 JOIN할 수 있다. 이것을 <strong>서브쿼리</strong>라고 한다. 계산한 중간 결과를 변수에 담아 두고 다음
+            계산에 쓰는 것과 같다.
+          </p>
+          <pre><code class="language-sql">select shows.title, period.start
+from shows
+inner join (
+  select show_id, min(starts_at) as start      -- 공연별 첫 회차를 구한 표
+  from performances
+  group by show_id
+) period on period.show_id = shows.id;          -- 그 표에 period라는 이름을 붙여 JOIN한다</code></pre>
+          <p>
+            <code>as start</code>는 계산한 값에 붙이는 이름(<strong>별칭</strong>)이다. <code>min(starts_at)</code> 같은 계산
+            결과에는 컬럼 이름이 없으므로, 바깥 쿼리에서 <code>period.start</code>로 부르려면 이름을 붙여야 한다.
+          </p>
+        </section>
+
+        <section id="parameter">
+          <h2>파라미터: 값은 SQL과 따로 보낸다</h2>
+          <p>
+            Drizzle이 만든 SQL을 보면 값 자리에 <code>$1</code>, <code>$2</code>가 있고, 실제 값은 따로 보낸다.
+          </p>
+          <pre><code class="language-ts">{ sql: 'insert into "venues" ("id", "name") values (default, $1)', params: ['낙산 소극장'] }</code></pre>
+          <p>
+            값을 SQL 문자열에 이어 붙이면, 값에 <code>'</code> 같은 글자가 들어 있을 때 SQL 문장 자체가 바뀌어 버린다. 사용자가
+            검색어에 SQL 조각을 넣어 DB를 마음대로 조작하는 공격을 <strong>SQL 인젝션</strong>이라고 한다. React가 문자열을
+            <code>innerHTML</code>로 넣지 않고 글자로만 넣어 XSS를 막는 것과 같은 생각이다. 파라미터로 보내면 DB는 그 값을 항상
+            "값"으로만 다룬다.
+          </p>
+        </section>
+
+        <section id="transaction">
+          <h2>트랜잭션: 모두 되거나 모두 안 되거나</h2>
+          <p>
+            여러 SQL을 하나로 묶어, 전부 성공하면 한꺼번에 반영하고 중간에 하나라도 실패하면 전부 없던 일로 되돌리는 것을
+            <strong>트랜잭션</strong>이라고 한다. 반영하는 것을 커밋(commit), 되돌리는 것을 롤백(rollback)이라고 한다.
+          </p>
+          <p>
+            시드가 "세 테이블을 비우고 공연장, 공연, 회차를 넣는" 일을 트랜잭션 하나로 묶은 것이 예다. 공연 10개를 넣다가
+            오류가 나면 비운 것까지 되돌아가므로, DB는 시드를 돌리기 전 상태 그대로 남는다. 묶지 않았다면 반쯤 지워지고 반쯤
+            채워진 상태가 남는다. 상태 관리에서 여러 값을 한 번에 바꿔 중간 상태가 화면에 보이지 않게 하는 것과 비슷하다.
+          </p>
+          <p>
+            트랜잭션이 끝나기 전에는 다른 접속에서 바뀐 내용이 보이지 않는다. 동시에 여러 요청이 같은 데이터를 바꿀 때의
+            문제(예: 같은 좌석을 두 사람이 사는 일)는 6단계에서 다룬다.
           </p>
         </section>
 
