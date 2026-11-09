@@ -37,6 +37,7 @@ const learnDocuments = [
     title: "014 서버가 받는 'use client' 파일: 이름표 붙은 가짜",
     tags: ['nextjs'],
   },
+  { file: '015-서버-컴포넌트-단계와-SSR-단계.html', title: '015 Server Component 단계와 SSR 단계', tags: ['nextjs'] },
 ];
 
 const currentFile = decodeURIComponent(location.pathname).split('/').pop();
