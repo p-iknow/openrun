@@ -421,7 +421,7 @@ td {
 .steps.green {
   --step-color: var(--green);
 }
-.steps strong {
+.steps > li > strong:first-child {
   display: block;
 }
 

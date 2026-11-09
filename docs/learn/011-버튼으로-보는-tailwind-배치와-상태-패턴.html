@@ -33,7 +33,7 @@
         <h1>Button으로 보는 Tailwind 배치와 상태 패턴</h1>
         <p class="lead">
           <code>packages/store-ui/src/button.tsx</code>에 쓰인 Tailwind 패턴을 정리한다. 다루는 것은
-          <code>inline-flex</code>, <code>relative</code>와 <code>absolute inset-[0]</code>, <code>group</code>,
+          <code>inline-flex</code>, <code>relative</code>와 <code>absolute inset-0</code>, <code>group</code>,
           <code>data-*</code>와 <code>not-*</code> 변형, <code>motion-safe</code>, 애니메이션 토큰이다. CSS 예시는
           스토어 빌드(Tailwind 4.3)가 실제로 만든 결과를 옮겨 적었다.
         </p>
@@ -63,7 +63,7 @@
                   <div class="tree-row">
                     <span class="tree-node">span (오버레이)</span>
                     <span class="tree-note"
-                      ><code>absolute inset-[0] flex items-center justify-center</code>. 버튼 전체를 덮는다</span
+                      ><code>absolute inset-0 flex items-center justify-center</code>. 버튼 전체를 덮는다</span
                     >
                   </div>
                   <ul>
@@ -94,7 +94,7 @@
                   <td>버튼이 내용 폭만 차지하고, 고정 높이 안에서 라벨을 가운데에 둔다</td>
                 </tr>
                 <tr>
-                  <td><code>relative</code> + <code>absolute inset-[0]</code></td>
+                  <td><code>relative</code> + <code>absolute inset-0</code></td>
                   <td>폭을 바꾸지 않고 버튼 위에 같은 크기의 상자를 겹친다</td>
                 </tr>
                 <tr>
@@ -161,7 +161,7 @@
           <h2>relative와 absolute inset: 겹치기</h2>
           <pre><code class="language-css">.relative   { position: relative; }   /* 버튼: 기준이 된다 */
 .absolute   { position: absolute; }   /* 오버레이: 흐름에서 빠진다 */
-.inset-\[0\] { inset: 0; }            /* top·right·bottom·left를 모두 0으로 */</code></pre>
+.inset-0    { inset: var(--spacing-0); } /* top·right·bottom·left를 모두 0으로 */</code></pre>
           <ol class="steps blue">
             <li>
               <strong>흐름에서 빼기</strong>
@@ -196,13 +196,18 @@
           </ul>
           <div class="callout warn">
             <p>
-              우리 토큰에서는 <code>inset-0</code>이 생성되지 않는다. Tailwind v4의 숫자 간격 클래스는
-              <code>calc(var(--spacing) * 0)</code>처럼 <code>--spacing</code>으로 계산한다. 그런데
-              <code>tokens.css</code>가 <code>--spacing: initial</code>로 이 값을 지웠기 때문에 값이 <code>0</code>이어도
-              만들어지지 않는다. 처음 Button에 <code>inset-0</code>을 썼을 때 오버레이는 버튼을 덮지 않았다. 그래도 점이
-              가운데에 보인 것은, flex 컨테이너 안의 absolute 요소가 위치 값이 없으면 <code>justify-center</code>와
-              <code>items-center</code>를 따른 자리에 놓이기 때문이었다. 화면만 봐서는 알 수 없었고, 생성된 CSS를 확인하고서야
-              드러났다. 그래서 임의값 <code>inset-[0]</code>으로 바꿨다.
+              처음 Button에 <code>inset-0</code>을 썼을 때는 이 클래스가 생성되지 않았다. Tailwind v4의 숫자 간격 클래스는
+              <code>calc(var(--spacing) * 0)</code>처럼 <code>--spacing</code>으로 계산하는데, <code>tokens.css</code>가
+              <code>--spacing: initial</code>로 이 값을 지웠기 때문이다. 그래도 점이 가운데에 보인 것은, flex 컨테이너 안의
+              absolute 요소가 위치 값이 없으면 <code>justify-center</code>와 <code>items-center</code>를 따른 자리에 놓이기
+              때문이었다. 화면만 봐서는 알 수 없었고, 생성된 CSS를 확인하고서야 드러났다.
+            </p>
+            <p>
+              임의값 <code>inset-[0]</code>으로 피할 수도 있었지만, 0만 다르게 써야 하는 규칙은 예상하기 어렵다. 그래서
+              <code>@theme</code>에 <code>--spacing-0: 0px</code>을 두었다. Tailwind는 <code>p-0</code>을 만들 때
+              <code>--spacing-0</code> 이름을 먼저 찾으므로 <code>p-0</code>, <code>m-0</code>, <code>inset-0</code>,
+              <code>gap-0</code>은 <code>var(--spacing-0)</code>으로 생성된다. <code>p-4</code> 같은 나머지 숫자 간격은 계속
+              생성되지 않는다.
             </p>
           </div>
         </section>
@@ -373,8 +378,9 @@
             </li>
             <li>
               <code>rounded-full</code>은 <code>tokens.css</code>에서 모서리 토큰을 지웠어도 생성된다. 테마 변수가 아니라
-              고정값(아주 큰 px)으로 만들기 때문이다. 반면 <code>inset-0</code>은 <code>--spacing</code>에 기대므로 생성되지
-              않는다. 어떤 클래스가 토큰에 기대는지 헷갈리면 생성된 CSS를 확인한다.
+              고정값(아주 큰 px)으로 만들기 때문이다. 반면 숫자 간격은 <code>--spacing</code>에 기대므로, 이름이 있는
+              <code>--spacing-0</code> 덕분에 <code>0</code>만 생성된다. 어떤 클래스가 토큰에 기대는지 헷갈리면 생성된 CSS를
+              확인한다.
             </li>
           </ul>
         </section>
@@ -392,8 +398,9 @@
               점 세 개로 바꿨다.
             </li>
             <li>
-              <code>tokens.css</code>가 Tailwind 기본 간격을 지웠기 때문에, 숫자 간격 클래스는 <code>0</code>이라도 쓸 수
-              없다. README의 store-ui 절에 적어 두었다.
+              <code>tokens.css</code>가 Tailwind 기본 간격을 지웠으므로 숫자 간격 클래스는 쓸 수 없다. 예외는
+              <code>--spacing-0</code>으로 살린 <code>0</code> 하나다(<code>p-0</code>, <code>inset-0</code> 등). README의
+              store-ui 절에 적어 두었다.
             </li>
           </ul>
         </section>

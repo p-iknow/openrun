@@ -8,7 +8,7 @@ const twMerge = extendTailwindMerge({
   extend: {
     theme: {
       text: ['caption', 'body-sm', 'body', 'title', 'heading', 'display'],
-      spacing: ['xs', 'sm', 'md', 'lg', 'xl', '2xl', '3xl'],
+      spacing: ['0', 'xs', 'sm', 'md', 'lg', 'xl', '2xl', '3xl'],
       radius: ['badge', 'card', 'button', 'panel'],
       shadow: ['floating'],
       container: ['content'],

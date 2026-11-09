@@ -22,6 +22,11 @@ const learnDocuments = [
     title: '011 Button으로 보는 Tailwind 배치와 상태 패턴',
     tags: ['design-system'],
   },
+  {
+    file: '012-라이브러리-빌드와-use-client-경계.html',
+    title: "012 라이브러리 빌드와 'use client' 경계",
+    tags: ['design-system', 'nextjs'],
+  },
 ];
 
 const currentFile = decodeURIComponent(location.pathname).split('/').pop();

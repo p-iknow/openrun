@@ -38,7 +38,7 @@
 | 전체 목록 | `layout single`, `doc-index` | `index.html`의 한 열 배치와 태그로 거를 수 있는 전체 문서 목록. 목록은 `learn.js`가 채운다 |
 | 태그 | `tags`, `tag-filter` | 문서 주제 표시와 `index.html`의 태그 필터. `learn.js`가 그린다 |
 | 흐름도 | `flow`, `lane`, `lane-title`, `chain` | 전체 흐름을 한눈에 보여 주기 |
-| 단계 | `steps` | 번호를 매긴 순서 설명 |
+| 단계 | `steps` | 번호를 매긴 순서 설명. 항목의 첫 `strong`이 단계 제목이 되고, 본문 안의 `strong`은 문장 속 강조로 남는다 |
 | 트리 | `tree`, `tree-row`, `tree-node`, `tree-note` | 연결선이 있는 계층 구조와 오른쪽 설명. 설명 열은 깊이와 상관없이 맞춰진다. 이름이 길면 `style="--tree-col: 17rem"`처럼 이름 열을 넓힌다 |
 | 표 | `table-wrap` | 좁은 화면에서 가로로 스크롤되는 표 |
 | 배지 | `badge` | 표나 문장 안의 짧은 분류 |

@@ -76,7 +76,7 @@ export function Button({
       {isLoading && (
         <span
           aria-hidden="true"
-          className="absolute inset-[0] flex items-center justify-center gap-[6px]"
+          className="absolute inset-0 flex items-center justify-center gap-[6px]"
         >
           {/* 움직임 줄이기 설정에서는 애니메이션 없이 점 세 개만 보인다. */}
           <span className="size-[7px] rounded-full bg-current motion-safe:animate-loading-dot" />
