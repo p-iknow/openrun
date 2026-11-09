@@ -9,6 +9,7 @@ export { getPagination, Pagination } from './pagination.js';
 export type {
   PaginationLinkProps,
   PaginationModel,
+  PaginationPage,
   PaginationRootProps,
   PaginationStepProps,
 } from './pagination.js';

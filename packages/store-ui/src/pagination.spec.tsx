@@ -22,10 +22,10 @@ function ShowsPagination({
         disabled={!hasPreviousPage}
         render={<a href={href(previousPage)} />}
       />
-      {pages.map((page) => (
+      {pages.map(({ page, isActive }) => (
         <Pagination.Link
           key={page}
-          current={page === currentPage}
+          active={isActive}
           render={<a href={href(page)} />}
         >
           {page}
@@ -95,7 +95,7 @@ describe('Pagination', () => {
       return <a data-router="" {...props} />;
     }
     const html = renderToStaticMarkup(
-      <Pagination.Link current render={<RouterLink href="/shows?page=4" />}>
+      <Pagination.Link active render={<RouterLink href="/shows?page=4" />}>
         4
       </Pagination.Link>,
     );

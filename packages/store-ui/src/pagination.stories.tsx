@@ -18,10 +18,10 @@ function PaginationExample({
         disabled={!hasPreviousPage}
         render={<a href={href(previousPage)} />}
       />
-      {pages.map((page) => (
+      {pages.map(({ page, isActive }) => (
         <Pagination.Link
           key={page}
-          current={page === currentPage}
+          active={isActive}
           render={<a href={href(page)} />}
         >
           {page}
@@ -41,8 +41,8 @@ const { pages, previousPage, nextPage, hasPreviousPage, hasNextPage } =
 
 <Pagination.Root>
   <Pagination.Previous disabled={!hasPreviousPage} render={<Link href={href(previousPage)} />} />
-  {pages.map((page) => (
-    <Pagination.Link key={page} current={page === currentPage} render={<Link href={href(page)} />}>
+  {pages.map(({ page, isActive }) => (
+    <Pagination.Link key={page} active={isActive} render={<Link href={href(page)} />}>
       {page}
     </Pagination.Link>
   ))}

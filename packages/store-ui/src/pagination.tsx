@@ -12,12 +12,18 @@ const MAX_PAGE_LINKS = 5;
 const itemClass =
   'inline-flex size-[40px] items-center justify-center rounded-full text-body-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary';
 const linkClass = 'text-text-secondary hover:bg-surface-muted';
-const currentClass = 'bg-primary text-on-primary hover:bg-primary-hover';
+const activeClass = 'bg-primary text-on-primary hover:bg-primary-hover';
 const disabledClass = 'cursor-not-allowed text-text-tertiary';
+
+export interface PaginationPage {
+  page: number;
+  /** 현재 페이지인지. `Pagination.Link`의 `active`에 그대로 넘긴다. */
+  isActive: boolean;
+}
 
 export interface PaginationModel {
   /** 보여 줄 번호. 현재 페이지 주변 최대 5개. */
-  pages: number[];
+  pages: PaginationPage[];
   /** 이전 페이지 번호. 첫 페이지에서는 갈 곳이 없으므로 `hasPreviousPage`가 `false`다. */
   previousPage: number;
   /** 다음 페이지 번호. 마지막 페이지에서는 갈 곳이 없으므로 `hasNextPage`가 `false`다. */
@@ -49,7 +55,10 @@ export function getPagination({
   const hasPreviousPage = currentPage > 1;
   const hasNextPage = currentPage < totalPages;
   return {
-    pages: Array.from({ length: count }, (_, i) => first + i),
+    pages: Array.from({ length: count }, (_, i) => {
+      const page = first + i;
+      return { page, isActive: page === currentPage };
+    }),
     // 갈 곳이 없어도 숫자로 둬서 쓰는 쪽이 분기 없이 링크를 만들게 한다. 그 링크는 disabled일 때 그려지지 않는다.
     previousPage: hasPreviousPage ? currentPage - 1 : currentPage,
     nextPage: hasNextPage ? currentPage + 1 : currentPage,
@@ -74,22 +83,22 @@ function PaginationRoot({ children }: PaginationRootProps) {
 export interface PaginationLinkProps {
   /** 이동할 링크 요소. 예: `<a href="/shows?page=2" />`, `<Link href="/shows?page=2" />`. 요소의 속성은 그대로 남고, 모양과 `aria-current`가 더해진다. */
   render: ReactElement;
-  /** 현재 페이지이면 `primary`로 채우고 `aria-current="page"`를 붙인다. */
-  current?: boolean;
+  /** 현재 페이지이면 `primary`로 채우고 `aria-current="page"`를 붙인다. 보통 `getPagination`이 돌려준 `isActive`를 넘긴다. */
+  active?: boolean;
   children: ReactNode;
 }
 
 function PaginationLink({
   render,
-  current = false,
+  active = false,
   children,
 }: PaginationLinkProps) {
   const element = useRender({
     render,
     defaultTagName: 'a',
     props: {
-      'aria-current': current ? 'page' : undefined,
-      className: cn(itemClass, current ? currentClass : linkClass),
+      'aria-current': active ? 'page' : undefined,
+      className: cn(itemClass, active ? activeClass : linkClass),
       children,
     },
   });
