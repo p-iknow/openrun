@@ -27,7 +27,19 @@ const learnDocuments = [
     title: "012 라이브러리 빌드와 'use client' 경계",
     tags: ['design-system', 'nextjs'],
   },
-  { file: '013-useRender로-요소-바꿔-끼우기.html', title: '013 useRender로 요소 바꿔 끼우기', tags: ['design-system'] },
+  {
+    file: '013-useRender로-요소-바꿔-끼우기.html',
+    title: '013 useRender로 요소 바꿔 끼우기',
+    tags: ['base-ui', 'design-system'],
+  },
+  {
+    file: '014-서버가-받는-use-client-이름표.html',
+    title: "014 서버가 받는 'use client' 파일: 이름표 붙은 가짜",
+    tags: ['nextjs'],
+  },
+  { file: '015-서버-컴포넌트-단계와-SSR-단계.html', title: '015 Server Component 단계와 SSR 단계', tags: ['nextjs'] },
+  { file: '016-server-component가-해결하는-문제.html', title: '016 Server Component가 해결하는 문제', tags: ['nextjs'] },
+  { file: '017-hydration-자세히.html', title: '017 hydration 자세히', tags: ['nextjs'] },
 ];
 
 const currentFile = decodeURIComponent(location.pathname).split('/').pop();

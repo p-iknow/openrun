@@ -7,7 +7,8 @@ import type { MouseEventHandler, ReactNode } from 'react';
 // 클라이언트용 컴포넌트다. 지시어는 import보다 앞, 파일 첫 줄에 둔다.
 // Server Component에서 쓸 때는 직렬화할 수 있는 props(문자열, 불리언, 요소)만 넘긴다. onClick은 클라이언트 컴포넌트에서만 넘긴다.
 // Tailwind가 dist에서 클래스를 찾을 수 있도록 클래스 이름을 문자열 그대로 둔다.
-const buttonVariants = cva(
+// Drawer의 트리거처럼 Base UI가 버튼을 직접 그리는 곳에서 같은 모양을 쓰도록 내보낸다. 패키지 진입점에서는 내보내지 않는다.
+export const buttonVariants = cva(
   [
     'group relative inline-flex h-[52px] items-center justify-center rounded-button px-xl text-body font-semibold transition-colors select-none',
     // 테두리 색은 평소에 정해 둔다. 포커스 때 정하면 transition-colors가 글자색(검정)에서 파랑으로 넘어가며 깜빡인다.

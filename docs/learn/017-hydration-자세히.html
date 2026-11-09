@@ -1,0 +1,911 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>hydration 자세히</title>
+    <link rel="stylesheet" href="learn.css" />
+    <script src="vendor/highlightjs/highlight.min.js" defer></script>
+    <script src="learn.js" defer></script>
+  </head>
+  <body>
+    <div class="layout">
+      <nav aria-label="목차">
+        <strong>목차</strong>
+        <ol>
+          <li><a href="#what">hydration이 하는 일</a></li>
+          <li><a href="#before-after">HTML만 있을 때와 hydration 뒤</a></li>
+          <li><a href="#when">언제 끝나나</a></li>
+          <li><a href="#match">어떻게 맞춰 보나</a></li>
+          <li><a href="#mismatch">맞지 않으면 React는 무엇을 하나</a></li>
+          <li><a href="#cases">실무에서 마주치는 불일치</a></li>
+          <li><a href="#how">불일치를 고치는 순서</a></li>
+        </ol>
+        <strong>마무리</strong>
+        <ol>
+          <li><a href="#ours">우리 프로젝트에서는</a></li>
+          <li><a href="#check">스스로 확인하기</a></li>
+          <li><a href="#more">더 읽을거리</a></li>
+        </ol>
+      </nav>
+
+      <main>
+        <h1>hydration 자세히</h1>
+        <p class="lead">
+          hydration은 서버가 만든 HTML에 브라우저에서 함수와 상태를 붙이는 일이다. 스토어 앱에 임시 페이지를 만들어 HTML만 있을
+          때와 hydration 뒤의 차이, hydration이 끝나는 시점, 서버 결과와 브라우저 결과가 다를 때(hydration 불일치) React가 하는
+          일을 개발 모드와 배포 빌드에서 직접 확인했다. 그리고 실무에서 마주칠 불일치 다섯 가지를 재현하고 고친 방법을 정리한다.
+        </p>
+
+        <section id="what">
+          <h2>hydration이 하는 일</h2>
+          <p>
+            <a href="016-server-component가-해결하는-문제.html#hydrate">016 문서</a>에서 본 대로, 서버가 만든 HTML에는 모양만
+            있다. <code>onClick</code> 같은 함수, <code>useState</code> 상태, "이 태그가 어느 컴포넌트의 결과인지"가 없다.
+          </p>
+          <div class="flow">
+            <div class="lane blue">
+              <div class="lane-title">서버</div>
+              <ol class="chain">
+                <li><span>컴포넌트를 실행해 HTML 만들기</span></li>
+              </ol>
+            </div>
+            <div class="lane green">
+              <div class="lane-title">브라우저</div>
+              <ol class="chain">
+                <li><span>HTML 그리기 (보이지만 안 눌림)</span></li>
+                <li><span>JS 받기</span></li>
+                <li><span>컴포넌트를 다시 실행해 HTML과 맞춰 보기</span></li>
+                <li><span>함수와 상태 붙이기 (이제 눌림)</span></li>
+              </ol>
+            </div>
+          </div>
+          <div class="callout">
+            <p>
+              hydration은 <strong>화면을 다시 그리는 일이 아니다</strong>. 이미 그려진 HTML을 그대로 쓰고, 거기에 함수와 상태만
+              붙인다. 그러려면 브라우저 결과가 서버 HTML과 같아야 한다. 이 "같아야 한다"가 이 문서의 대부분을 차지한다.
+            </p>
+          </div>
+          <p>
+            Server Component를 쓰는 앱에서는 Client Component만 hydration한다. Server Component의 결과는 RSC payload에 이미 적혀
+            있어 다시 실행하지 않는다(<a href="016-server-component가-해결하는-문제.html#changed">016</a>).
+          </p>
+        </section>
+
+        <section id="before-after">
+          <h2>HTML만 있을 때와 hydration 뒤</h2>
+          <p>
+            확인에 쓴 임시 Client Component다(실험 뒤 지웠다). 누르면 숫자가 올라가는 버튼과, hydration이 끝나면 글자가 바뀌는
+            문단이 있다.
+          </p>
+          <pre><code class="language-tsx">'use client';
+
+export function Basic() {
+  const [count, setCount] = useState(0);
+  const [done, setDone] = useState(false);
+  useEffect(() =&gt; {
+    // useEffect는 hydration이 끝난 뒤에만 실행된다
+    window.__hydratedAt = performance.now();
+    setDone(true);
+  }, []);
+  return (
+    &lt;&gt;
+      &lt;button id="counter" onClick={() =&gt; setCount(count + 1)}&gt;
+        눌린 횟수 {count}
+      &lt;/button&gt;
+      &lt;p id="hydrated"&gt;{done ? 'hydration 끝' : '아직 hydration 전'}&lt;/p&gt;
+    &lt;/&gt;
+  );
+}</code></pre>
+          <p>서버가 보낸 HTML은 이렇다.</p>
+          <pre><code class="language-html">&lt;button id="counter" type="button"&gt;눌린 횟수 &lt;!-- --&gt;0&lt;/button&gt;
+&lt;p id="hydrated"&gt;아직 hydration 전&lt;/p&gt;</code></pre>
+          <ul>
+            <li><code>onClick</code>에 해당하는 것이 HTML 어디에도 없다. <code>onclick</code> 속성도 없다.</li>
+            <li>
+              <code>&lt;!-- --&gt;</code>는 React가 넣은 표시다. "눌린 횟수 "와 <code>{count}</code>가 따로 된 글자 조각이라는 것을
+              hydration 때 구분하려고 둔다.
+            </li>
+          </ul>
+          <p>
+            이 HTML을 JS 실행을 막은 iframe(<code>sandbox</code>)에 넣으면 "JS가 아직 오지 않은 상태"를 만들 수 있다. 같은 버튼을
+            두 상태에서 눌러 비교했다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>HTML만 (JS 실행 막음)</th>
+                  <th>hydration 뒤</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>버튼을 누르면</td>
+                  <td><span class="badge blue">0 → 0</span> 두 번 눌러도 그대로</td>
+                  <td><span class="badge green">0 → 1</span></td>
+                </tr>
+                <tr>
+                  <td>문단 글자</td>
+                  <td>아직 hydration 전</td>
+                  <td>hydration 끝</td>
+                </tr>
+                <tr>
+                  <td>버튼 요소의 React 연결 표시 (<code>__reactFiber$…</code> 속성)</td>
+                  <td>없음</td>
+                  <td>있음</td>
+                </tr>
+                <tr>
+                  <td>버튼의 <code>onclick</code> 속성</td>
+                  <td>없음</td>
+                  <td><strong>여전히 없음</strong></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            hydration 뒤에도 <code>onclick</code> 속성이 없는 것이 흥미롭다. React는 버튼마다 이벤트를 붙이지 않고, 앱의 맨 바깥
+            요소 한 곳에서 모든 클릭을 받아 해당 컴포넌트의 <code>onClick</code>을 불러 준다(React 공식 설명의 이벤트 위임). 버튼
+            요소에 붙는 것은 "이 요소는 이 컴포넌트의 것"이라는 연결 표시(<code>__reactFiber$…</code>)다.
+          </p>
+        </section>
+
+        <section id="when">
+          <h2>언제 끝나나</h2>
+          <p>
+            첫 화면이 그려진 시각(First Contentful Paint)과, hydration이 끝나야 실행되는 <code>useEffect</code>가 기록한 시각을
+            비교했다. 내 컴퓨터, 로컬 서버 기준이다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>첫 화면</th>
+                  <th>hydration 끝</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>개발 모드 (<code>next dev</code>)</td>
+                  <td>40ms</td>
+                  <td>67ms</td>
+                </tr>
+                <tr>
+                  <td>배포 빌드 (<code>next start</code>)</td>
+                  <td>40ms</td>
+                  <td>37ms</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <ul>
+            <li>
+              개발 모드에서는 첫 화면이 보이고 약 27ms 동안 "보이지만 안 눌리는" 구간이 있었다. 배포 빌드는 JS가 작고 빨라서 이
+              컴퓨터에서는 첫 화면과 거의 같은 때 끝났다.
+            </li>
+            <li>
+              이 구간은 JS를 받고 실행하는 시간만큼 생긴다. 느린 휴대폰이나 느린 네트워크, Client Component가 많은 페이지에서는
+              길어진다. 이번에는 그런 환경을 측정하지 않았다.
+            </li>
+            <li>
+              Client Component를 줄이면 받고 실행할 JS가 줄어 이 구간도 짧아진다. Server Component가 hydration 범위를 줄인 이유가
+              이것이다.
+            </li>
+          </ul>
+        </section>
+
+        <section id="match">
+          <h2>어떻게 맞춰 보나</h2>
+          <ol class="steps blue">
+            <li>
+              <strong>컴포넌트를 실행한다</strong>
+              브라우저에서 Client Component를 실행해 "이런 태그, 이런 글자, 이런 속성이어야 한다"는 결과를 얻는다.
+            </li>
+            <li>
+              <strong>이미 있는 DOM과 하나씩 비교한다</strong>
+              위에서부터 차례로 태그 이름, 글자, 속성이 서버 HTML로 만들어진 DOM과 같은지 본다.
+            </li>
+            <li>
+              <strong>같으면 그 DOM을 그대로 쓴다</strong>
+              새로 만들지 않고 연결 표시와 이벤트만 붙인다. 화면이 깜빡이지 않는 이유다.
+            </li>
+          </ol>
+          <p>
+            그래서 서버와 브라우저에서 <strong>같은 입력이면 같은 결과</strong>가 나와야 한다. 서버에는 없고 브라우저에만 있는
+            값(<code>localStorage</code>, <code>window</code> 크기 등)으로 결과를 바꾸면 비교가 실패한다.
+          </p>
+          <p>
+            <code>useId</code>는 이 비교를 통과하도록 만든 id다. 같은 실험 페이지에서 서버 HTML의 id와 hydration 뒤 브라우저의
+            id가 둘 다 <code>_R_2atpesnelb_</code>로 같았다. 무작위 값이 아니라 트리 안 위치로 만들기 때문이다.
+          </p>
+        </section>
+
+        <section id="mismatch">
+          <h2>맞지 않으면 React는 무엇을 하나</h2>
+          <p>
+            불일치는 두 종류로 나뉘고, React가 하는 일이 다르다. 아래 "실무에서 마주치는 불일치"의 실험에서 확인한 결과다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>종류</th>
+                  <th>개발 모드 콘솔</th>
+                  <th>배포 빌드 콘솔</th>
+                  <th>화면은</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>글자, 태그가 다름</strong></td>
+                  <td>"Hydration failed … this tree will be <strong>regenerated</strong> on the client" + 차이 표시</td>
+                  <td>"Minified React error <strong>#418</strong>"</td>
+                  <td>
+                    <span class="badge green">복구됨</span> 서버 HTML을 버리고 브라우저에서 새로 그린다. 브라우저 값이 보인다
+                  </td>
+                </tr>
+                <tr>
+                  <td><strong>속성이 다름</strong></td>
+                  <td>"some <strong>attributes</strong> … didn't match … This <strong>won't be patched up</strong>"</td>
+                  <td><span class="badge blue">아무것도 안 나옴</span></td>
+                  <td>
+                    <span class="badge blue">안 고쳐짐</span> DOM에는 서버 값이 남고, React는 브라우저 값을 알고 있다. 둘이 어긋난
+                    채로 남는다
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <h3>개발 모드의 차이 표시 읽는 법</h3>
+          <p>개발 모드 오류에는 어느 컴포넌트의 어디가 다른지가 나온다. localStorage 사례의 실제 메시지 끝부분이다.</p>
+          <pre><code>&lt;ProbeHyd&gt;
+  &lt;main&gt;
+    &lt;StorageBad&gt;
+      &lt;p id="out"&gt;
++       3
+-       0</code></pre>
+          <ul>
+            <li><code>+</code>는 브라우저(클라이언트)에서 나온 값, <code>-</code>는 서버 HTML에 있던 값이다.</li>
+            <li>위의 컴포넌트 이름(<code>StorageBad</code>)을 따라가면 어느 코드에서 생겼는지 찾을 수 있다.</li>
+          </ul>
+          <div class="callout warn">
+            <p>
+              "복구됨"도 공짜가 아니다. 서버가 만든 HTML을 버리고 그 트리를 브라우저에서 처음부터 다시 그리므로, SSR로 얻은 이점이 그
+              부분에서 사라지고 화면이 한 번 바뀐다. 그리고 속성 불일치는 배포 빌드에서 소리 없이 남는다. 그래서 불일치는 개발 모드
+              콘솔에서 보일 때 바로 고쳐야 한다.
+            </p>
+          </div>
+        </section>
+
+        <section id="cases">
+          <h2>실무에서 마주치는 불일치</h2>
+          <p>
+            <code>Math.random()</code>, <code>Date.now()</code> 같은 교과서 예제 말고, 공연 예매 서비스에서 실제로 나올 만한
+            경우를 재현했다. 경우마다 문제 버전과 고친 버전을 따로 띄워 개발 모드 콘솔과 화면을 확인했다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>경우</th>
+                  <th>원인 분류</th>
+                  <th>고친 방법</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><a href="#case-storage">1. 최근 본 공연 수 (localStorage)</a></td>
+                  <td>브라우저에만 있는 값</td>
+                  <td>서버 값으로 먼저 그리고, hydration 뒤 바꾸기</td>
+                </tr>
+                <tr>
+                  <td><a href="#case-viewport">2. 모바일 필터와 데스크톱 칩 (화면 폭)</a></td>
+                  <td>브라우저에만 있는 값</td>
+                  <td>둘 다 그리고 CSS로 하나만 보이기</td>
+                </tr>
+                <tr>
+                  <td><a href="#case-nested">3. 공연 카드 안의 예매 링크</a></td>
+                  <td>잘못된 HTML 구조</td>
+                  <td>링크를 겹치지 않기</td>
+                </tr>
+                <tr>
+                  <td><a href="#case-id">4. 라벨과 입력 칸 id</a></td>
+                  <td>실행할 때마다 다른 값</td>
+                  <td><code>useId</code></td>
+                </tr>
+                <tr>
+                  <td><a href="#case-extension">5. 브라우저 확장</a></td>
+                  <td>바깥에서 DOM을 바꿈</td>
+                  <td>막을 수 없는 부분과 할 수 있는 부분 나누기</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3 id="case-storage">1. 최근 본 공연 수 (localStorage)</h3>
+          <p>
+            <strong>상황:</strong> 사용자가 본 공연 목록을 브라우저의 <code>localStorage</code>에 저장해 두고, 헤더에 "최근 본 공연
+            3개"를 보여 준다.
+          </p>
+
+          <h4>데이터와 readRecentCount</h4>
+          <p>
+            <code>localStorage</code>는 브라우저가 사이트마다 따로 가진 작은 저장소다. 글자만 저장할 수 있어서 배열은 JSON 글자로
+            바꿔 넣는다. 공연 상세 페이지를 열 때마다 이렇게 저장한다고 하자.
+          </p>
+          <pre><code class="language-ts">// 공연 상세 페이지를 열 때 (브라우저에서)
+const recent = JSON.parse(localStorage.getItem('recentShows') ?? '[]');
+localStorage.setItem('recentShows', JSON.stringify([...recent, showId]));
+// 저장된 모습: recentShows → '["a","b","c"]'</code></pre>
+          <p><code>readRecentCount</code>는 이 저장소에서 "최근 본 공연이 몇 개인지"를 읽는 작은 함수다.</p>
+          <pre><code class="language-ts">function readRecentCount(): number {
+  const saved = localStorage.getItem('recentShows'); // '["a","b","c"]' 또는 null
+  const list: string[] = JSON.parse(saved ?? '[]'); // ['a', 'b', 'c']
+  return list.length; // 3
+}</code></pre>
+          <p>
+            <code>localStorage</code>는 <strong>브라우저에만</strong> 있다. 서버(Node.js)에는 없어서, 서버에서 이 함수를 부르면
+            "localStorage is not defined" 오류가 난다.
+          </p>
+
+          <h4>문제 버전</h4>
+          <pre><code class="language-tsx">// ❌ 문제 버전
+export function RecentCount() {
+  // 서버에서는 localStorage가 없으니 0으로 두고, 브라우저에서만 읽는다
+  const count = typeof window === 'undefined' ? 0 : readRecentCount();
+  return &lt;p&gt;최근 본 공연 {count}개&lt;/p&gt;;
+}</code></pre>
+          <p>서버 오류를 피하려고 <code>typeof window</code>로 나눴는데, 이것이 불일치를 만든다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>때</th>
+                  <th>어디서</th>
+                  <th><code>count</code></th>
+                  <th>결과</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>서버에서 HTML 만들 때</td>
+                  <td>서버</td>
+                  <td>0 (<code>window</code> 없음)</td>
+                  <td>"최근 본 공연 0개"</td>
+                </tr>
+                <tr>
+                  <td>hydration 때</td>
+                  <td>브라우저</td>
+                  <td>3 (<code>window</code> 있음)</td>
+                  <td>"최근 본 공연 3개" → 서버 HTML과 다름</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            <strong>증상:</strong> "Hydration failed"가 나고 차이 표시는 <code>+ 3 / - 0</code>이었다. React가 트리를 다시 그려
+            화면은 "3개"가 됐다. 배포 빌드에서는 #418 오류였다.
+          </p>
+          <div class="callout">
+            <p>
+              핵심은 이것이다. hydration은 브라우저에서 실행되지만, <strong>hydration 때의 결과는 서버 HTML과 같아야</strong> 한다.
+              그러니 브라우저에만 있는 값은 <strong>hydration이 끝난 뒤에</strong> 써야 한다. 고친 버전들은 모두 이 원칙을 따른다.
+            </p>
+          </div>
+
+          <h4>고치는 방법 ①: useEffect (익숙한 방식)</h4>
+          <pre><code class="language-tsx">export function RecentCount() {
+  const [count, setCount] = useState&lt;number | null&gt;(null); // 처음엔 null
+
+  useEffect(() =&gt; {
+    // useEffect는 hydration이 끝난 뒤 브라우저에서만 실행된다
+    setCount(readRecentCount());
+  }, []);
+
+  return (
+    &lt;p&gt;{count === null ? '불러오는 중' : `최근 본 공연 ${count}개`}&lt;/p&gt;
+  );
+}</code></pre>
+          <ul>
+            <li>서버와 hydration 때는 <code>count</code>가 둘 다 <code>null</code>이라 "불러오는 중"으로 같다. 비교를 통과한다.</li>
+            <li><code>useEffect</code>는 hydration이 끝난 뒤에만 실행되니, 그때 <code>localStorage</code>를 읽어 "3개"로 바꾼다.</li>
+            <li>단점: 처음 한 번만 읽는다. 다른 탭에서 공연을 더 봐서 값이 바뀌어도 이 화면은 그대로다.</li>
+          </ul>
+
+          <h4>고치는 방법 ②: useSyncExternalStore</h4>
+          <p>
+            <code>useSyncExternalStore</code>는 <strong>React 바깥에 있는 값</strong>을 컴포넌트에서 읽기 위한 React 훅이다.
+            "external store(외부 저장소)"는 <code>useState</code>처럼 React가 관리하지 않는 값을 말한다. <code>localStorage</code>,
+            화면 크기, 온라인 여부(<code>navigator.onLine</code>) 같은 것들이다.
+          </p>
+          <p>세 개의 함수를 받는다.</p>
+          <pre><code class="language-ts">const 값 = useSyncExternalStore(
+  subscribe, // ① 값이 바뀌면 알려 달라고 등록하는 함수
+  getSnapshot, // ② 지금 값을 읽는 함수 (브라우저에서)
+  getServerSnapshot, // ③ 서버와 hydration 때 쓸 값을 주는 함수
+);</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>함수와 하는 일</th>
+                  <th>이 예제에서</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>①</td>
+                  <td>
+                    <strong><code>subscribe</code></strong>: 
+                    값이 바뀌는 순간을 감시하다가 <code>callback</code>을 부른다. React는 <code>callback</code>이 불리면 ②로 값을 다시 읽어
+                    화면을 바꾼다. 감시를 멈추는 함수를 돌려준다
+                  </td>
+                  <td>
+                    <code>storage</code> 이벤트를 감시한다. 이 이벤트는 <strong>다른 탭</strong>에서 <code>localStorage</code>를 바꿨을 때
+                    일어난다
+                  </td>
+                </tr>
+                <tr>
+                  <td>②</td>
+                  <td>
+                    <strong><code>getSnapshot</code></strong>: 지금 값을 읽어 돌려준다. hydration이 끝난 뒤 브라우저에서 쓰인다</td>
+                  <td><code>readRecentCount</code> (3을 돌려줌)</td>
+                </tr>
+                <tr>
+                  <td>③</td>
+                  <td>
+                    <strong><code>getServerSnapshot</code></strong>: 
+                    서버에서 HTML을 만들 때와 <strong>hydration 때</strong> 쓸 값을 돌려준다. 두 번 모두 같은 값이라 불일치가 나지
+                    않는다
+                  </td>
+                  <td><code>() =&gt; null</code> ("아직 모름")</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <pre><code class="language-tsx">// ✅ 고친 버전
+function subscribe(callback: () =&gt; void) {
+  window.addEventListener('storage', callback); // 다른 탭에서 바뀌면 알려 줘
+  return () =&gt; window.removeEventListener('storage', callback); // 감시 멈추기
+}
+
+export function RecentCount() {
+  const count = useSyncExternalStore(
+    subscribe,
+    readRecentCount, // 브라우저에서 지금 값 읽기
+    () =&gt; null, // 서버와 hydration 때는 "아직 모름"
+  );
+  return (
+    &lt;p&gt;{count === null ? '불러오는 중' : `최근 본 공연 ${count}개`}&lt;/p&gt;
+  );
+}</code></pre>
+          <p>시간 순서로 보면 이렇다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>때</th>
+                  <th>React가 쓰는 함수</th>
+                  <th><code>count</code></th>
+                  <th>화면</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>① 서버에서 HTML 만들 때</td>
+                  <td>③ <code>getServerSnapshot</code></td>
+                  <td><code>null</code></td>
+                  <td>불러오는 중</td>
+                </tr>
+                <tr>
+                  <td>② hydration 때 (브라우저)</td>
+                  <td>③ <code>getServerSnapshot</code></td>
+                  <td><code>null</code></td>
+                  <td>불러오는 중 → 서버와 같아서 통과</td>
+                </tr>
+                <tr>
+                  <td>③ hydration 직후</td>
+                  <td>② <code>getSnapshot</code> (= <code>readRecentCount</code>)</td>
+                  <td>3</td>
+                  <td>최근 본 공연 3개</td>
+                </tr>
+                <tr>
+                  <td>④ 다른 탭에서 공연을 하나 더 봄</td>
+                  <td>① <code>subscribe</code>의 <code>callback</code> → ② 다시 읽기</td>
+                  <td>4</td>
+                  <td>최근 본 공연 4개</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>실험에서 고친 버전은 오류 없이 "최근 본 공연 3개"가 보였다.</p>
+
+          <h4>두 방법 비교와 주의할 점</h4>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>① useEffect</th>
+                  <th>② useSyncExternalStore</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>hydration 불일치</td>
+                  <td>막는다</td>
+                  <td>막는다</td>
+                </tr>
+                <tr>
+                  <td>값이 나중에 바뀌면</td>
+                  <td>그대로 (처음 한 번만 읽음)</td>
+                  <td>따라 바뀐다 (<code>subscribe</code>로 감시)</td>
+                </tr>
+                <tr>
+                  <td>코드</td>
+                  <td>익숙하다</td>
+                  <td>함수 세 개를 알아야 한다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <ul>
+            <li>
+              <strong>같은 탭에서 바꾼 값은 <code>storage</code> 이벤트가 알려 주지 않는다.</strong> 이 이벤트는 다른 탭에서 바꿨을
+              때만 일어난다. 같은 탭에서도 바로 반영하려면, 저장하는 코드에서 직접 알림을 보내는 작은 저장소를 만들어
+              <code>subscribe</code>에 연결한다.
+            </li>
+            <li>
+              <strong><code>getSnapshot</code>은 값이 그대로면 같은 값을 돌려줘야 한다.</strong> 숫자(3)는 매번 같지만, 부를 때마다
+              새 배열(<code>JSON.parse(…)</code>의 결과)을 돌려주면 React가 매번 "값이 바뀌었다"고 보고 계속 다시 그린다(React
+              문서의 규칙). 그래서 이 예제는 배열이 아니라 개수를 돌려준다.
+            </li>
+            <li>
+              값이 화면 구조를 크게 바꾼다면(로그인 여부, 테마 등) "불러오는 중"이 거슬린다. 그때는 값을 쿠키에 두고 서버가 요청에서
+              읽어 처음부터 맞게 그리는 편이 낫다.
+            </li>
+          </ul>
+
+          <h3 id="case-viewport">2. 모바일 필터와 데스크톱 칩 (화면 폭)</h3>
+          <p>
+            <strong>상황:</strong> 1.3의 목록 화면에서 모바일은 "필터 열기" 버튼(바텀 시트), 데스크톱은 필터 칩 줄을 보여 준다.
+          </p>
+          <pre><code class="language-tsx">// ❌ 문제 버전
+export function Filters() {
+  // 서버는 화면 폭을 모르니 모바일로 가정한다
+  const isMobile =
+    typeof window === 'undefined' ? true : window.innerWidth &lt; 768;
+  return isMobile ? &lt;MobileFilterButton /&gt; : &lt;FilterChips /&gt;;
+}</code></pre>
+          <p>
+            <strong>증상:</strong> 데스크톱(폭 1920px) 브라우저에서 "Hydration failed", 차이 표시는 <code>+ &lt;p&gt;</code>(칩 줄)
+            / <code>- &lt;button&gt;</code>(시트 버튼)이었다. 화면 폭을 읽는 <code>useMediaQuery</code> 같은 훅을 첫 그리기에
+            바로 쓰면 똑같은 문제가 생긴다.
+          </p>
+          <pre><code class="language-tsx">// ✅ 고친 버전: 둘 다 그리고 CSS로 하나만 보인다
+export function Filters() {
+  return (
+    &lt;&gt;
+      &lt;div className="md:hidden"&gt;
+        &lt;MobileFilterButton /&gt;
+      &lt;/div&gt;
+      &lt;div className="hidden md:block"&gt;
+        &lt;FilterChips /&gt;
+      &lt;/div&gt;
+    &lt;/&gt;
+  );
+}</code></pre>
+          <ul>
+            <li>서버와 브라우저의 HTML이 같다. 어느 쪽을 보일지는 브라우저의 CSS가 정한다. 확인해 보니 오류 없이 데스크톱 폭에서 칩 줄만 보였다.</li>
+            <li>첫 화면부터 맞는 쪽이 보여서 깜빡임도 없다. 반응형은 가능하면 JS가 아니라 CSS로 나눈다.</li>
+            <li>
+              둘 다 그리기에 너무 무겁다면, 서버용 값으로 먼저 그리고 hydration 뒤 바꾸는 방식(1번)을 쓴다. 대신 첫 화면이 한 번
+              바뀐다.
+            </li>
+          </ul>
+
+          <h3 id="case-nested">3. 공연 카드 안의 예매 링크</h3>
+          <p><strong>상황:</strong> 공연 카드 전체를 상세 페이지 링크로 감싸고, 카드 안에 "예매하기" 링크를 또 넣었다.</p>
+          <pre><code class="language-tsx">// ❌ 문제 버전 (Server Component여도 생긴다)
+&lt;a href="/shows/1"&gt;
+  &lt;span&gt;공연 A&lt;/span&gt;
+  &lt;a href="/shows/1/book"&gt;예매하기&lt;/a&gt;
+&lt;/a&gt;</code></pre>
+          <p><strong>증상:</strong> React 코드는 같은데도 불일치가 난다. 원인은 브라우저의 HTML 해석이다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>모습</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>서버가 보낸 글자</td>
+                  <td><code>&lt;a …&gt;&lt;span&gt;공연 A&lt;/span&gt;&lt;a …&gt;예매하기&lt;/a&gt;&lt;/a&gt;</code> (겹침)</td>
+                </tr>
+                <tr>
+                  <td>브라우저가 해석한 DOM</td>
+                  <td>
+                    <code>&lt;a …&gt;&lt;span&gt;공연 A&lt;/span&gt;&lt;/a&gt;&lt;a …&gt;예매하기&lt;/a&gt;</code> (나란히 떼어 놓음)
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            HTML 규칙상 링크 안에 링크를 둘 수 없어서 브라우저가 HTML을 읽으며 구조를 고쳐 버린다. React가 기대한 구조와 달라
+            "Hydration failed"가 났다. 오류 메시지의 원인 목록에도 "Invalid HTML tag nesting"이 있다.
+          </p>
+          <pre><code class="language-tsx">// ✅ 고친 버전: 링크를 겹치지 않는다
+&lt;div&gt;
+  &lt;Link href="/shows/1"&gt;공연 A&lt;/Link&gt;
+  &lt;Link href="/shows/1/book"&gt;예매하기&lt;/Link&gt;
+&lt;/div&gt;</code></pre>
+          <ul>
+            <li>확인해 보니 오류가 없었다.</li>
+            <li>
+              카드 전체를 눌러도 상세로 가게 하고 싶으면, 상세 링크에 <code>after:absolute after:inset-0</code>처럼 카드 전체를
+              덮는 영역을 주고 예매 링크를 그 위(<code>relative z-…</code>)에 둔다. 링크는 겹치지 않으면서 카드 전체가 눌린다.
+            </li>
+            <li>
+              같은 원리로 HTML 규칙을 어기는 중첩은 모두 위험하다. 예를 들어 <code>&lt;p&gt;</code> 안에
+              <code>&lt;div&gt;</code>(Skeleton처럼 div로 된 컴포넌트를 문단 안에 넣는 경우)도 HTML 규칙 위반이다. 이번에 따로
+              실험하지는 않았다.
+            </li>
+          </ul>
+
+          <h3 id="case-id">4. 라벨과 입력 칸 id</h3>
+          <p>
+            <strong>상황:</strong> 라벨과 입력 칸을 잇거나 <code>aria-describedby</code>를 걸려고 id가 필요해서
+            <code>crypto.randomUUID()</code>로 만들었다.
+          </p>
+          <pre><code class="language-tsx">// ❌ 문제 버전
+const [id] = useState(() =&gt; crypto.randomUUID()); // 서버와 브라우저가 따로 만든다
+return (
+  &lt;&gt;
+    &lt;label htmlFor={id}&gt;공연 제목&lt;/label&gt;
+    &lt;input id={id} /&gt;
+  &lt;/&gt;
+);</code></pre>
+          <p><strong>증상:</strong> 앞의 경우들보다 위험하다. 속성 불일치라서 React가 고치지 않는다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>개발 모드</th>
+                  <th>배포 빌드</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>콘솔</td>
+                  <td>"attributes … didn't match … won't be patched up"</td>
+                  <td><span class="badge blue">아무것도 안 나옴</span></td>
+                </tr>
+                <tr>
+                  <td>DOM의 input id</td>
+                  <td colspan="2">서버가 만든 값 (예: <code>cf9cad65-…</code>)</td>
+                </tr>
+                <tr>
+                  <td>React가 알고 있는 id</td>
+                  <td colspan="2">브라우저가 만든 다른 값 (예: <code>25c854fe-…</code>)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            지금은 label과 input이 둘 다 서버 값이라 우연히 서로 맞는다. 하지만 hydration 뒤에 새로 그려지는 요소(예: 입력 오류가
+            나면 나타나는 안내 문구의 <code>aria-describedby</code>)는 React가 아는 id를 쓰므로 가리킬 대상이 없다. 스크린 리더
+            사용자만 겪는 문제라 눈으로는 찾기 어렵고, 배포 빌드에서는 경고도 없다.
+          </p>
+          <pre><code class="language-tsx">// ✅ 고친 버전
+const id = useId(); // 트리 안 위치로 만들어 서버와 브라우저가 같다</code></pre>
+          <p>확인해 보니 label의 <code>for</code>와 input의 <code>id</code>가 서버와 브라우저 모두 <code>_R_2atpesnelb_</code>로 같았다.</p>
+
+          <h3 id="case-extension">5. 브라우저 확장</h3>
+          <p>
+            <strong>상황:</strong> 실험하다가 실제로 겪었다. 사전 확장 프로그램을 켠 Chrome에서 아무 문제 없는 페이지를 열었는데
+            "Hydration failed"가 났다. 차이 표시에 React가 만든 적 없는 것이 있었다.
+          </p>
+          <pre><code>&lt;div
++ hidden={true}
+- hidden={null}
+- data-wxt-integrated=""
+&gt;
++ &lt;Suspense name="Next.Metadata"&gt;
+- &lt;div id="__endic_crx__"&gt;</code></pre>
+          <ul>
+            <li>
+              확장이 React보다 먼저 페이지의 <code>&lt;body&gt;</code> 안에 속성과 요소를 넣어서, 서버 HTML과 브라우저 결과가 달라졌다.
+            </li>
+            <li>
+              React가 트리를 브라우저에서 다시 그리면서 부작용도 생겼다. <code>useId</code> 값이 서버의
+              <code>_R_95esnelb_</code>에서 브라우저 형식의 <code>_r_0_</code>로 바뀌었다.
+            </li>
+            <li>확장을 끄자 같은 페이지에서 오류가 사라졌다.</li>
+          </ul>
+          <p><strong>할 수 있는 것과 없는 것:</strong></p>
+          <ul>
+            <li>사용자가 어떤 확장을 쓰는지는 막을 수 없다. 그래서 복구되는(트리를 다시 그리는) 불일치는 앱이 견딜 수 있어야 한다.</li>
+            <li>
+              개발할 때는 확장을 끈 Chrome 프로필이나 시크릿 창으로 확인한다. 그래야 내 코드의 불일치와 확장의 불일치가 섞이지
+              않는다.
+            </li>
+            <li>
+              <code>&lt;html&gt;</code>, <code>&lt;body&gt;</code>의 속성만 바꾸는 확장(다크 모드 확장 등) 때문이라면 그 요소에
+              <code>suppressHydrationWarning</code>을 붙여 경고를 끌 수 있다. React 문서에 따르면 이 속성은 그 요소 한 단계의 속성과
+              글자에만 듣고, 이번처럼 요소를 끼워 넣는 경우는 막지 못한다.
+            </li>
+          </ul>
+        </section>
+
+        <section id="how">
+          <h2>불일치를 고치는 순서</h2>
+          <ol class="steps green">
+            <li>
+              <strong>개발 모드 콘솔의 차이 표시를 읽는다</strong>
+              <code>+</code>(브라우저)와 <code>-</code>(서버) 값, 위의 컴포넌트 이름으로 어느 코드인지 찾는다. 배포 빌드의 #418만으로는
+              어디인지 알 수 없다.
+            </li>
+            <li>
+              <strong>확장 때문인지부터 가린다</strong>
+              차이 표시에 내가 만든 적 없는 속성이나 요소가 있으면 확장을 끈 창에서 다시 연다.
+            </li>
+            <li>
+              <strong>원인을 분류한다</strong>
+              브라우저에만 있는 값인가(localStorage, 화면 폭, 브라우저 시간대), 실행할 때마다 다른 값인가(랜덤 id), HTML 구조
+              문제인가(링크 겹침).
+            </li>
+            <li>
+              <strong>분류에 맞는 방법을 고른다</strong>
+              아래 표에서 위쪽 방법일수록 깜빡임이 없다.
+            </li>
+            <li>
+              <strong>속성 불일치는 특히 꼼꼼히 본다</strong>
+              배포 빌드에서는 경고 없이 남는다. 개발 모드에서 "won't be patched up" 경고가 한 번이라도 보이면 넘기지 않는다.
+            </li>
+          </ol>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>방법</th>
+                  <th>쓰는 때</th>
+                  <th>예</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>서버와 브라우저가 같은 결과를 내게 한다</strong></td>
+                  <td>CSS로 나눌 수 있거나, 같은 값을 만들 수 있을 때</td>
+                  <td>화면 폭 → CSS, 랜덤 id → <code>useId</code>, 링크 겹침 → 구조 바꾸기</td>
+                </tr>
+                <tr>
+                  <td><strong>서버도 그 값을 알게 한다</strong></td>
+                  <td>값이 첫 화면 구조를 크게 바꿀 때</td>
+                  <td>로그인 여부, 테마를 쿠키에 두고 서버가 요청에서 읽기</td>
+                </tr>
+                <tr>
+                  <td><strong>서버 값으로 먼저 그리고 hydration 뒤 바꾼다</strong></td>
+                  <td>브라우저에만 있는 값이고, 첫 화면이 한 번 바뀌어도 될 때</td>
+                  <td>최근 본 공연 → <code>useSyncExternalStore</code>(서버용 값)나 <code>useEffect</code></td>
+                </tr>
+                <tr>
+                  <td><code>suppressHydrationWarning</code></td>
+                  <td>다른 방법이 없고, 그 요소 한 단계의 글자나 속성만 다를 때</td>
+                  <td><code>&lt;html&gt;</code>, <code>&lt;body&gt;</code>를 바꾸는 확장</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout warn">
+            <p>
+              <code>suppressHydrationWarning</code>은 경고만 끈다. 속성 불일치라면 DOM과 React가 어긋난 채 남는 것은 그대로다. 내
+              코드가 원인이라면 위의 세 방법으로 고친다.
+            </p>
+          </div>
+        </section>
+
+        <section id="ours">
+          <h2>우리 프로젝트에서는</h2>
+          <ul>
+            <li>
+              store-ui의 ToggleGroup(<code>packages/store-ui/src/toggle-group.tsx</code>)은 라벨과 칩 묶음을 이을 때
+              <code>useId</code>를 쓴다. 4번 경우를 이미 피하고 있다. Base UI 컴포넌트(Select, Drawer 등)도 안에서 같은 방식으로 id를
+              만든다.
+            </li>
+            <li>
+              1.3의 목록 화면에서 모바일 필터 시트(Drawer)와 데스크톱 필터 칩 줄은 2번처럼 CSS로 나눈다. 화면 폭을 JS로 읽어
+              하나만 그리지 않는다.
+            </li>
+            <li>
+              1.3의 공연 카드는 3번처럼 링크를 겹치지 않는다. 카드 전체를 누르게 하려면 덮는 영역 방식을 쓴다.
+            </li>
+            <li>
+              "최근 본 공연"처럼 브라우저에만 있는 값을 보여 줄 일이 생기면 1번 방식(<code>useSyncExternalStore</code>의 서버용 값)을
+              쓴다.
+            </li>
+            <li>개발할 때 hydration 경고를 확인하려면 확장을 끈 Chrome 프로필을 쓴다.</li>
+          </ul>
+        </section>
+
+        <section id="check">
+          <h2>스스로 확인하기</h2>
+          <details>
+            <summary>1. hydration 전에는 버튼이 왜 눌리지 않나? hydration 뒤 버튼 요소에는 무엇이 생기나?</summary>
+            <p>
+              HTML에는 onClick 함수가 없다. hydration이 끝나야 React가 그 요소를 컴포넌트와 연결한다. 실험에서 hydration 뒤 버튼에는
+              __reactFiber$… 연결 표시가 생겼지만 onclick 속성은 여전히 없었다. React는 앱 바깥 요소 한 곳에서 클릭을 받아
+              전달한다.
+            </p>
+          </details>
+          <details>
+            <summary>2. 글자가 다른 불일치와 속성이 다른 불일치는 React가 어떻게 다르게 처리하나?</summary>
+            <p>
+              글자나 태그가 다르면 서버 HTML을 버리고 브라우저에서 다시 그려 복구한다(개발: Hydration failed, 배포: #418). 속성이
+              다르면 고치지 않는다. DOM에는 서버 값이 남고 React는 브라우저 값을 알고 있어 어긋난 채 남는다. 배포 빌드에서는 경고도
+              없다.
+            </p>
+          </details>
+          <details>
+            <summary>3. typeof window로 서버와 브라우저를 나눠 값을 고르면 왜 불일치가 나나?</summary>
+            <p>
+              hydration은 브라우저에서 실행되므로 브라우저 쪽 값이 나온다. 그런데 hydration의 결과는 서버 HTML과 같아야 한다. 서버
+              쪽 값으로 만든 HTML과 브라우저 쪽 값으로 만든 결과가 다르니 비교가 실패한다.
+            </p>
+          </details>
+          <details>
+            <summary>4. useSyncExternalStore의 세 번째 인자는 언제 쓰이고, 왜 불일치를 막나?</summary>
+            <p>
+              서버에서 그릴 때와 hydration 때 둘 다 쓰인다. 두 번 모두 같은 값(예: null)이니 결과가 같아 통과하고, hydration이 끝난
+              뒤 브라우저 값으로 다시 그린다.
+            </p>
+          </details>
+          <details>
+            <summary>5. 공연 카드 전체를 링크로 감싸고 안에 예매 링크를 넣으면, Server Component여도 불일치가 나는 이유는?</summary>
+            <p>
+              브라우저가 HTML을 해석할 때 링크 안의 링크를 허용하지 않아 둘을 나란히 떼어 놓는다. React가 기대한 겹친 구조와 실제
+              DOM이 달라진다. 링크를 겹치지 않게 구조를 바꾼다.
+            </p>
+          </details>
+          <details>
+            <summary>6. 확장 때문에 생긴 불일치에 suppressHydrationWarning을 붙이면 해결되나?</summary>
+            <p>
+              html, body의 속성만 바꾸는 확장이면 그 요소에 붙여 경고를 끌 수 있다. 하지만 그 요소 한 단계에만 들어서, 이번처럼
+              body 안에 요소를 끼워 넣는 확장은 막지 못한다. 사용자 환경은 막을 수 없으니 복구되는 불일치를 견디게 하고, 개발할
+              때는 확장을 끈 창으로 확인한다.
+            </p>
+          </details>
+        </section>
+
+        <section id="more">
+          <h2>더 읽을거리</h2>
+          <ol>
+            <li>
+              <a href="https://react.dev/reference/react-dom/client/hydrateRoot">React: hydrateRoot</a> (hydration, 불일치 처리)
+            </li>
+            <li><a href="https://react.dev/link/hydration-mismatch">React: hydration mismatch</a> (오류 메시지의 링크)</li>
+            <li><a href="https://react.dev/errors/418">React: Minified error #418</a></li>
+            <li>
+              <a href="https://react.dev/reference/react/useSyncExternalStore">React: useSyncExternalStore</a>
+              (<code>getServerSnapshot</code>)
+            </li>
+            <li><a href="https://react.dev/reference/react/useId">React: useId</a></li>
+            <li>
+              <a href="https://react.dev/reference/react-dom/components/common">React: 공통 컴포넌트 props</a>
+              (<code>suppressHydrationWarning</code>)
+            </li>
+            <li><a href="016-server-component가-해결하는-문제.html">016 Server Component가 해결하는 문제</a></li>
+            <li><a href="015-서버-컴포넌트-단계와-SSR-단계.html">015 Server Component 단계와 SSR 단계</a></li>
+          </ol>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

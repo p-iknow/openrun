@@ -24,6 +24,7 @@
 | `nextjs` | Next.js의 렌더링, 캐시, 앱 구조 |
 | `openapi` | OpenAPI 계약, 생성 클라이언트, API 호출 방식 |
 | `design-system` | `store-ui`의 토큰, 컴포넌트, Storybook |
+| `base-ui` | Base UI의 API와 동작(`useRender`, 컴포넌트 부품, 데이터 속성 등) |
 
 ## 모듈
 
@@ -34,6 +35,7 @@
 | 모듈 | 클래스 | 용도 |
 |---|---|---|
 | 문서 틀 | `layout`, `lead` | 목차와 본문 배치, 제목 아래 요약 |
+| 소제목 | `h3`, `h4` | 절 안을 나눌 때 `h3`, `h3` 안을 다시 나눌 때 `h4` |
 | 문서 탐색 | `doc-nav`, `doc-nav-kind` | 목차 아래의 이전/다음 문서와 전체 목록 링크. `learn.js`가 그리므로 문서에 직접 쓰지 않는다 |
 | 전체 목록 | `layout single`, `doc-index` | `index.html`의 한 열 배치와 태그로 거를 수 있는 전체 문서 목록. 목록은 `learn.js`가 채운다 |
 | 태그 | `tags`, `tag-filter` | 문서 주제 표시와 `index.html`의 태그 필터. `learn.js`가 그린다 |
@@ -47,7 +49,7 @@
 
 `lane`, `steps`, `badge`에는 색을 정하는 클래스를 함께 붙인다. `blue`와 `green`이 있다.
 
-코드 블록에 `<pre><code class="language-ts">`처럼 언어를 지정하면 highlight.js가 구문을 강조한다. 오류 메시지처럼 코드가 아닌 블록에는 붙이지 않는다.
+코드 블록에 `<pre><code class="language-ts">`처럼 언어를 지정하면 highlight.js가 구문을 강조한다. 오류 메시지처럼 코드가 아닌 블록에는 붙이지 않는다. 코드 블록의 긴 줄은 가로 스크롤 없이 줄바꿈되므로, 읽기 좋게 하려고 일부러 짧게 자르지 않아도 된다.
 
 자가 점검 질문처럼 문단만 접어 둘 때는 클래스 없이 `<details>`를 쓴다. 코드나 표가 든 선택 읽기 내용을 접을 때는 `<details class="fold">` 안에 `<div class="fold-body">`를 두고, 접어도 흐름이 이어지도록 결론은 접기 밖에 적는다.
 

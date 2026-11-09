@@ -1,0 +1,591 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Server Component가 해결하는 문제</title>
+    <link rel="stylesheet" href="learn.css" />
+    <script src="vendor/highlightjs/highlight.min.js" defer></script>
+    <script src="learn.js" defer></script>
+  </head>
+  <body>
+    <div class="layout">
+      <nav aria-label="목차">
+        <strong>목차</strong>
+        <ol>
+          <li><a href="#answer">한 줄 답</a></li>
+          <li><a href="#old">기존 SSR은 어떻게 동작했나</a></li>
+          <li><a href="#hydrate">HTML이 있는데 왜 다시 실행하나</a></li>
+          <li><a href="#problems">기존 SSR의 네 가지 문제</a></li>
+          <li><a href="#experiment">같은 화면을 두 방식으로</a></li>
+          <li><a href="#changed">Server Component가 바꾼 것</a></li>
+          <li><a href="#not">SSR을 없앤 것은 아니다</a></li>
+          <li><a href="#cost">대가: 서버와 클라이언트의 경계</a></li>
+        </ol>
+        <strong>마무리</strong>
+        <ol>
+          <li><a href="#ours">우리 프로젝트에서는</a></li>
+          <li><a href="#check">스스로 확인하기</a></li>
+          <li><a href="#more">더 읽을거리</a></li>
+        </ol>
+      </nav>
+
+      <main>
+        <h1>Server Component가 해결하는 문제</h1>
+        <p class="lead">
+          기존 SSR도 서버에서 HTML을 만들어 줬다. 그런데 왜 Server Component가 따로 나왔을까? 기존 SSR이 하이드레이션 때문에
+          모든 컴포넌트를 브라우저로 보내 다시 실행해야 했던 문제를 짚고, 같은 화면을 기존 방식(<code>pages</code> 폴더)과 Server
+          Component 방식(<code>app</code> 폴더)으로 만들어 브라우저로 가는 코드와 데이터를 직접 비교한다.
+        </p>
+
+        <section id="answer">
+          <h2>한 줄 답</h2>
+          <div class="callout">
+            <p>
+              기존 SSR은 HTML을 미리 만들어 줄 뿐, <strong>모든 컴포넌트의 코드를 브라우저로 보내 다시 실행</strong>(하이드레이션)해야
+              했다. Server Component는 <strong>서버에서만 실행하고 결과만 보내는 컴포넌트</strong>를 만들어, 클릭할 것이 없는 부분은
+              브라우저로 보내지도, 다시 실행하지도 않게 했다.
+            </p>
+          </div>
+          <p>
+            이 문서는 <a href="015-서버-컴포넌트-단계와-SSR-단계.html">015 Server Component 단계와 SSR 단계</a>를 읽었다고 보고
+            쓴다. "1단계(설계도 만들기)", "2단계(HTML 만들기)", "RSC payload" 같은 말은 015에서 설명했다.
+          </p>
+        </section>
+
+        <section id="old">
+          <h2>기존 SSR은 어떻게 동작했나</h2>
+          <p>
+            App Router(<code>app</code> 폴더)가 나오기 전 Next는 <code>pages</code> 폴더를 썼다. 서버에서 데이터가 필요한 페이지는
+            이렇게 만들었다.
+          </p>
+          <pre><code class="language-tsx">// pages/shows.tsx (기존 방식)
+export async function getServerSideProps() {
+  const shows = await fetchShows(); // 데이터는 페이지 맨 위 이 함수에서만 읽는다
+  return { props: { shows } };
+}
+
+export default function ShowsPage({ shows }) {
+  return (
+    &lt;main&gt;
+      &lt;Badge tone="primary"&gt;테스트 서비스&lt;/Badge&gt;
+      &lt;ShowList shows={shows} /&gt; {/* 아래 컴포넌트에는 props로 내려보낸다 */}
+    &lt;/main&gt;
+  );
+}</code></pre>
+          <div class="flow">
+            <div class="lane blue">
+              <div class="lane-title">서버</div>
+              <ol class="chain">
+                <li><span>getServerSideProps로 데이터 읽기</span></li>
+                <li><span>모든 컴포넌트를 실행해 HTML 만들기</span></li>
+                <li><span>HTML + 데이터(JSON) 보내기</span></li>
+              </ol>
+            </div>
+            <div class="lane green">
+              <div class="lane-title">브라우저</div>
+              <ol class="chain">
+                <li><span>HTML 그리기</span></li>
+                <li><span>모든 컴포넌트의 JS 받기</span></li>
+                <li><span>모든 컴포넌트를 다시 실행해 하이드레이션</span></li>
+              </ol>
+            </div>
+          </div>
+          <p>
+            서버가 HTML을 만들어 주니 첫 화면은 빨리 뜬다. 문제는 브라우저 쪽이다. HTML이 있는데도 모든 컴포넌트를 다시 실행해야
+            했다. 왜 그런지부터 본다.
+          </p>
+        </section>
+
+        <section id="hydrate">
+          <h2>HTML이 있는데 왜 다시 실행하나</h2>
+          <p>서버가 만든 HTML은 이런 글자다.</p>
+          <pre><code class="language-html">&lt;button class="group relative inline-flex h-[52px] …"&gt;클라이언트 버튼&lt;/button&gt;</code></pre>
+          <p>여기에는 <strong>모양</strong>만 있고, 다음 세 가지가 없다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>HTML에 없는 것</th>
+                  <th>왜 없나</th>
+                  <th>없으면</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>onClick</code> 같은 함수</td>
+                  <td>함수는 글자로 적을 수 없다</td>
+                  <td>버튼이 보이지만 눌러도 아무 일도 없다</td>
+                </tr>
+                <tr>
+                  <td>상태 (<code>useState</code>)</td>
+                  <td>열림/닫힘 같은 값은 JS 메모리에만 있다</td>
+                  <td>상태에 따라 화면을 바꿀 수 없다</td>
+                </tr>
+                <tr>
+                  <td>어느 컴포넌트의 결과인지</td>
+                  <td>브라우저에게는 그냥 <code>&lt;button&gt;</code> 태그다</td>
+                  <td>함수와 상태를 어디에 붙일지 모른다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>그래서 React는 브라우저에서 컴포넌트를 한 번 더 실행한다. 이것이 하이드레이션이다.</p>
+          <ol class="steps blue">
+            <li>
+              <strong>다시 실행</strong>
+              Button 함수를 실행하면 "<code>&lt;button&gt;</code>을 이 클래스로, <code>onClick</code>은 이 함수로"라는 결과가
+              나온다.
+            </li>
+            <li>
+              <strong>맞춰 보기</strong>
+              그 결과를 이미 그려진 HTML과 하나씩 맞춰 본다. "이 <code>&lt;button&gt;</code>이 아까 실행한 Button의 결과구나."
+            </li>
+            <li>
+              <strong>붙이기</strong>
+              맞으면 HTML을 새로 그리지 않고, 그 <code>&lt;button&gt;</code>에 함수와 상태만 붙인다.
+            </li>
+          </ol>
+          <div class="callout">
+            <p>
+              다시 실행하는 목적은 화면을 다시 그리는 것이 아니라 <strong>이미 그려진 HTML에 함수와 상태를 연결하는 것</strong>이다.
+              다만 연결하려면 컴포넌트를 실행해 봐야 하므로, 그 컴포넌트의 JS 코드가 브라우저에 있어야 한다.
+            </p>
+          </div>
+          <h3>기존 SSR은 왜 "모든" 컴포넌트를 다시 실행했나</h3>
+          <p>
+            기존 방식에서 페이지는 통째로 하나의 클라이언트 앱이다. React는 어떤 컴포넌트가 연결할 함수나 상태가 없는지 미리 알 수
+            없다. 그래서 클릭할 것이 없는 배지, 제목, 목록까지 <strong>모든 컴포넌트를 실행해 맞춰 봐야</strong> 했고, 그러려면
+            모든 컴포넌트의 JS가 브라우저로 가야 했다.
+          </p>
+        </section>
+
+        <section id="problems">
+          <h2>기존 SSR의 네 가지 문제</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>문제</th>
+                  <th>기존 SSR</th>
+                  <th>Server Component</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>1. 브라우저로 가는 코드</strong></td>
+                  <td>클릭할 것이 없는 컴포넌트도 하이드레이션 때문에 코드가 전부 브라우저로 간다</td>
+                  <td>Server Component 코드는 브라우저로 가지 않는다. 결과만 RSC payload에 실린다</td>
+                </tr>
+                <tr>
+                  <td><strong>2. 같은 일을 두 번</strong></td>
+                  <td>서버가 실행해 HTML을 만들고, 브라우저가 같은 컴포넌트를 또 실행한다</td>
+                  <td>Server Component는 서버에서 한 번만 실행한다. 브라우저는 Client Component만 다시 실행한다</td>
+                </tr>
+                <tr>
+                  <td><strong>3. 데이터를 읽는 곳과 보내는 양</strong></td>
+                  <td>
+                    페이지 맨 위 <code>getServerSideProps</code>에서만 읽고 props로 내려보낸다. 하이드레이션에 필요해서 props
+                    데이터 <strong>전체</strong>가 HTML과 별도로 JSON으로 한 번 더 간다
+                  </td>
+                  <td>필요한 컴포넌트가 <code>async</code>로 직접 읽는다. 브라우저로는 그린 결과만 간다</td>
+                </tr>
+                <tr>
+                  <td><strong>4. 무거운 라이브러리와 서버 자원</strong></td>
+                  <td>컴포넌트 코드가 브라우저로 가니, 안에서 쓴 라이브러리도 같이 간다. DB나 비밀값은 컴포넌트 안에서 못 쓴다</td>
+                  <td>서버에서만 실행되니 마크다운 변환기 같은 라이브러리나 DB 접근을 컴포넌트 안에서 써도 브라우저로 가지 않는다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            1번과 3번은 <a href="#experiment">아래 실험</a>에서 직접 확인했다. 2번과 4번은 React와 Next 공식 문서의 설명이고, 이번에
+            따로 측정하지는 않았다.
+          </p>
+        </section>
+
+        <section id="experiment">
+          <h2>같은 화면을 두 방식으로</h2>
+          <p>
+            스토어 앱에 같은 화면을 두 방식으로 만들었다(실험 뒤 지웠다). 서버용 Badge, 클라이언트용 Button, 데이터 목록이 있다.
+            데이터에는 화면에 쓰지 않는 필드 <code>internalMemo</code>를 일부러 넣었다.
+          </p>
+          <pre><code class="language-tsx">// 기존 방식: pages/probe-pages.tsx
+export async function getServerSideProps() {
+  const items = [{ title: '공연 A', internalMemo: '화면에-안-쓰는-값-PAGES' }];
+  return { props: { items } };
+}
+
+export default function ProbePages({ items }) {
+  return (
+    &lt;main&gt;
+      &lt;Badge tone="primary"&gt;서버용 배지&lt;/Badge&gt;
+      &lt;Button variant="secondary"&gt;클라이언트 버튼&lt;/Button&gt;
+      &lt;ul&gt;
+        {items.map((item) =&gt; (
+          &lt;li key={item.title}&gt;{item.title}&lt;/li&gt;
+        ))}
+      &lt;/ul&gt;
+    &lt;/main&gt;
+  );
+}</code></pre>
+          <pre><code class="language-tsx">// Server Component 방식: app/probe-app/page.tsx
+async function readItems() {
+  return [{ title: '공연 A', internalMemo: '화면에-안-쓰는-값-APP' }];
+}
+
+export default async function ProbeApp() {
+  await connection();
+  const items = await readItems(); // 컴포넌트 안에서 직접 읽는다
+  return (
+    &lt;main&gt;
+      &lt;Badge tone="primary"&gt;서버용 배지&lt;/Badge&gt;
+      &lt;Button variant="secondary"&gt;클라이언트 버튼&lt;/Button&gt;
+      &lt;ul&gt;
+        {items.map((item) =&gt; (
+          &lt;li key={item.title}&gt;{item.title}&lt;/li&gt;
+        ))}
+      &lt;/ul&gt;
+    &lt;/main&gt;
+  );
+}</code></pre>
+          <p>
+            <code>next build</code> 뒤 <code>next start</code>로 띄우고, 각 페이지의 HTML과 HTML이 불러오는 브라우저 JS 파일을 모두
+            받아 살펴봤다.
+          </p>
+
+          <h3>결과 1: 브라우저로 가는 코드</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>브라우저 JS 안에</th>
+                  <th>기존 방식 (<code>pages</code>)</th>
+                  <th>Server Component 방식 (<code>app</code>)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Badge 코드 (<code>rounded-badge</code> 클래스)</td>
+                  <td><span class="badge blue">있음</span></td>
+                  <td><span class="badge green">없음</span></td>
+                </tr>
+                <tr>
+                  <td>Button 코드 (<code>h-[52px]</code> 클래스)</td>
+                  <td>있음</td>
+                  <td>있음</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            Badge는 클릭할 것이 없는데도, 기존 방식에서는 하이드레이션 때문에 브라우저로 갔다. Server Component 방식에서는 Badge가
+            서버에서 실행돼 결과만 payload에 실리므로 코드가 가지 않았다. Button은 두 방식 모두 브라우저에서 실행해야 하므로 간다.
+          </p>
+
+          <h3>결과 2: 브라우저로 가는 데이터 (처음 열 때)</h3>
+          <p>기존 방식의 HTML에는 그린 화면과 별도로 이런 태그가 있었다.</p>
+          <pre><code class="language-html">&lt;script id="__NEXT_DATA__" type="application/json"&gt;
+  {
+    "props": {
+      "pageProps": {
+        "items": [
+          { "title": "공연 A", "internalMemo": "화면에-안-쓰는-값-PAGES" }
+        ]
+      }
+    },
+    …
+  }
+&lt;/script&gt;</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>기존 방식</th>
+                  <th>Server Component 방식</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>HTML 안의 <code>internalMemo</code> 값</td>
+                  <td><span class="badge blue">있음</span> <code>__NEXT_DATA__</code>에 props 전체</td>
+                  <td><span class="badge green">없음</span></td>
+                </tr>
+                <tr>
+                  <td>데이터가 실리는 모습</td>
+                  <td>그린 HTML(<code>&lt;li&gt;공연 A&lt;/li&gt;</code>) + 원본 데이터 JSON, <strong>두 번</strong></td>
+                  <td>그린 결과만</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            기존 방식은 브라우저에서 ProbePages를 다시 실행해야 하니, 그때 넘길 props 데이터를 통째로 보내야 한다. 화면에 쓰지
+            않는 필드까지 따라간다.
+          </p>
+
+          <h3>결과 3: 링크로 이동할 때 받는 것</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>기존 방식</th>
+                  <th>Server Component 방식</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>요청 주소</td>
+                  <td><code>/_next/data/&lt;빌드 ID&gt;/probe-pages.json</code></td>
+                  <td><code>/probe-app?_rsc=…</code></td>
+                </tr>
+                <tr>
+                  <td>Content-Type</td>
+                  <td><code>application/json</code></td>
+                  <td><code>text/x-component</code> (RSC payload)</td>
+                </tr>
+                <tr>
+                  <td>받은 내용</td>
+                  <td>
+                    <code>{"pageProps":{"items":[{"title":"공연 A","internalMemo":"…"}]}}</code><br />원본 데이터. 브라우저가 모든
+                    컴포넌트를 실행해 그린다
+                  </td>
+                  <td>
+                    <code>["$","li","공연 A",{"children":"공연 A"}]</code><br />그린 결과. <code>internalMemo</code>는 0번 나온다
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>그런데 JS 전체 크기는 오히려 컸다</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>기존 방식</th>
+                  <th>Server Component 방식</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>브라우저 JS 합계 (압축 전)</td>
+                  <td>517,455바이트</td>
+                  <td>617,159바이트</td>
+                </tr>
+                <tr>
+                  <td>HTML 크기</td>
+                  <td>2,301바이트</td>
+                  <td>8,134바이트 (RSC payload가 함께 실림)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout warn">
+            <p>
+              이 작은 페이지에서는 Server Component 방식이 JS가 약 100KB 더 컸다. App Router 자체의 기본 코드(라우터,
+              RSC payload를 읽는 코드 등)가 Pages Router보다 크기 때문이다. Server Component로 줄어드는 것은
+              <strong>서버에서만 쓰는 컴포넌트와 그 라이브러리의 코드</strong>라서, 이 실험처럼 Badge 하나뿐이면 줄어드는 양보다 기본
+              코드 차이가 더 크다. 화면에 서버용 컴포넌트와 무거운 라이브러리가 많을수록 차이가 반대로 벌어진다. "Server Component를
+              쓰면 무조건 JS가 작아진다"가 아니라 "서버에서만 쓰는 부분의 코드를 보내지 않게 된다"로 이해해야 한다.
+            </p>
+          </div>
+        </section>
+
+        <section id="changed">
+          <h2>Server Component가 바꾼 것</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>기존 SSR</th>
+                  <th>Server Component + SSR</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>HTML</td>
+                  <td>서버가 만든다</td>
+                  <td>서버가 만든다 (015의 2단계)</td>
+                </tr>
+                <tr>
+                  <td>하이드레이션 때 다시 실행하는 것</td>
+                  <td><strong>모든</strong> 컴포넌트</td>
+                  <td><strong>Client Component만</strong></td>
+                </tr>
+                <tr>
+                  <td>브라우저로 가는 컴포넌트 코드</td>
+                  <td>모든 컴포넌트</td>
+                  <td>Client Component만</td>
+                </tr>
+                <tr>
+                  <td>함께 가는 데이터</td>
+                  <td>props 데이터 전체 (<code>__NEXT_DATA__</code>)</td>
+                  <td>그린 결과와 Client Component에 넘긴 props만 (RSC payload)</td>
+                </tr>
+                <tr>
+                  <td>데이터를 읽는 곳</td>
+                  <td>페이지 맨 위 <code>getServerSideProps</code></td>
+                  <td>필요한 컴포넌트 안 (<code>async</code>)</td>
+                </tr>
+                <tr>
+                  <td>링크로 이동할 때 받는 것</td>
+                  <td>원본 데이터 JSON</td>
+                  <td>그린 결과 (RSC payload)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            핵심은 "모든 컴포넌트"가 "Client Component만"으로 바뀐 것이다. 하이드레이션 범위가 줄어드니, 브라우저로 가는 코드와
+            데이터, 브라우저가 다시 하는 일이 함께 줄어든다.
+          </p>
+        </section>
+
+        <section id="not">
+          <h2>SSR을 없앤 것은 아니다</h2>
+          <p>
+            Server Component는 SSR을 대신하지 않는다. 015에서 본 2단계(HTML 만들기)가 그대로 SSR이다. Server Component는 SSR
+            <strong>앞에</strong> 1단계(설계도 만들기)를 하나 더 둔 것이다.
+          </p>
+          <ul>
+            <li>처음 열 때 HTML을 빨리 보여 주는 일은 여전히 SSR이 한다.</li>
+            <li>Server Component는 그 HTML에 이벤트를 붙이는 하이드레이션의 범위를 줄인다.</li>
+            <li>
+              링크로 이동할 때는 SSR 없이 RSC payload만 받는다(<a href="015-서버-컴포넌트-단계와-SSR-단계.html#navigate">015</a>).
+            </li>
+          </ul>
+        </section>
+
+        <section id="cost">
+          <h2>대가: 서버와 클라이언트의 경계</h2>
+          <p>
+            Server Component를 쓰면 한 페이지 안에 서버에서만 도는 코드와 브라우저에서도 도는 코드가 섞인다. 그 사이의 경계를
+            개발자가 신경 써야 한다. 이 PR에서 겪은 일들이 모두 여기서 나왔다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>경계에서 생기는 일</th>
+                  <th>이 PR에서</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>어느 파일에 <code>'use client'</code>를 붙일지 정해야 한다</td>
+                  <td>store-ui 컴포넌트마다 서버용·클라이언트용을 나누고 문서에 적었다</td>
+                </tr>
+                <tr>
+                  <td><code>'use client'</code> 파일은 서버에서 이름표로만 보인다</td>
+                  <td>
+                    <code>Drawer.Root</code>가 undefined가 됐다(<a href="014-서버가-받는-use-client-이름표.html">014</a>). 동적
+                    페이지였다면 빌드를 통과하고 요청 때 터졌다
+                  </td>
+                </tr>
+                <tr>
+                  <td>Server Component가 Client Component에 넘기는 props는 글자로 적을 수 있어야 한다</td>
+                  <td>함수 props(<code>onClick</code>, <code>onOpenChange</code>)는 앱의 클라이언트 컴포넌트에서만 넘긴다</td>
+                </tr>
+                <tr>
+                  <td>Client Component에 넘긴 props는 payload에 그대로 보인다</td>
+                  <td>화면에 필요한 값만 골라 넘겨야 한다(015 "RSC payload 자세히")</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="ours">
+          <h2>우리 프로젝트에서는</h2>
+          <ul>
+            <li>
+              스토어 홈(<code>apps/store/app/page.tsx</code>)은 Server Component다. 컴포넌트 안에서
+              <code>await fetchShows(…)</code>로 공연 목록을 직접 읽는다. 기존 방식이었다면 <code>getServerSideProps</code>에 있어야
+              했다.
+            </li>
+            <li>
+              store-ui의 Badge, Skeleton, Pagination은 지시어 없는 컴포넌트라 Server Component에서 쓰면 코드가 브라우저로 가지
+              않는다. Button, TextField, Select, ToggleGroup, Drawer만 브라우저로 간다.
+            </li>
+            <li>
+              공연 목록 화면(1.3)에서도 목록과 카드는 Server Component로 두고, 필터처럼 이벤트가 필요한 부분만 앱의 클라이언트
+              컴포넌트로 분리하면 브라우저로 가는 코드가 줄어든다.
+            </li>
+          </ul>
+        </section>
+
+        <section id="check">
+          <h2>스스로 확인하기</h2>
+          <details>
+            <summary>1. 기존 SSR은 HTML을 미리 만들어 주는데, 브라우저에서 컴포넌트를 다시 실행하는 이유는?</summary>
+            <p>
+              HTML에는 모양만 있고 onClick 같은 함수, 상태, 어느 컴포넌트의 결과인지가 없다. React가 컴포넌트를 다시 실행해 결과를
+              HTML과 맞춰 보고, 그 자리에 함수와 상태를 붙인다. 이것이 하이드레이션이다.
+            </p>
+          </details>
+          <details>
+            <summary>2. 기존 SSR은 왜 클릭할 것이 없는 컴포넌트까지 다시 실행했나?</summary>
+            <p>
+              페이지가 통째로 하나의 클라이언트 앱이라, React가 어떤 컴포넌트에 붙일 함수나 상태가 없는지 미리 알 수 없다. 그래서
+              모든 컴포넌트를 실행해 맞춰 봐야 했고, 모든 컴포넌트의 JS가 브라우저로 가야 했다.
+            </p>
+          </details>
+          <details>
+            <summary>3. 실험에서 기존 방식과 Server Component 방식의 브라우저 JS는 무엇이 달랐나?</summary>
+            <p>
+              기존 방식에는 Badge 코드가 있었고 Server Component 방식에는 없었다. Button 코드는 둘 다 있었다. 다만 JS 전체 크기는
+              App Router의 기본 코드 때문에 Server Component 방식이 약 100KB 더 컸다.
+            </p>
+          </details>
+          <details>
+            <summary>4. 화면에 쓰지 않는 데이터 필드는 두 방식에서 각각 어떻게 됐나?</summary>
+            <p>
+              기존 방식은 props 전체가 HTML 안의 __NEXT_DATA__와 이동 때의 JSON에 실려 브라우저로 갔다. Server Component 방식은 그린
+              결과만 RSC payload에 실려서 그 필드가 0번 나왔다.
+            </p>
+          </details>
+          <details>
+            <summary>5. Server Component가 나오면서 SSR은 없어졌나?</summary>
+            <p>
+              아니다. 처음 열 때 HTML을 만드는 2단계가 그대로 SSR이다. Server Component는 그 앞에 설계도를 만드는 1단계를 두고,
+              하이드레이션 범위를 Client Component로 줄였다.
+            </p>
+          </details>
+          <details>
+            <summary>6. Server Component를 쓰는 대가는 무엇인가?</summary>
+            <p>
+              서버와 클라이언트의 경계를 개발자가 관리해야 한다. 'use client'를 어디에 붙일지 정하고, 'use client' 파일은 서버에서
+              이름표로만 보인다는 점(Drawer.Root 문제), 함수 props를 넘길 수 없다는 점, Client Component props가 payload에 그대로
+              보인다는 점을 지켜야 한다.
+            </p>
+          </details>
+        </section>
+
+        <section id="more">
+          <h2>더 읽을거리</h2>
+          <ol>
+            <li><a href="https://react.dev/reference/rsc/server-components">React: Server Components</a></li>
+            <li>
+              <a href="https://nextjs.org/docs/app/getting-started/server-and-client-components"
+                >Next.js: Server and Client Components</a
+              >
+            </li>
+            <li>
+              <a href="https://nextjs.org/docs/pages/building-your-application/data-fetching/get-server-side-props"
+                >Next.js (Pages Router): getServerSideProps</a
+              >
+            </li>
+            <li><a href="https://react.dev/reference/react-dom/client/hydrateRoot">React: hydrateRoot</a></li>
+            <li><a href="015-서버-컴포넌트-단계와-SSR-단계.html">015 Server Component 단계와 SSR 단계</a></li>
+            <li><a href="014-서버가-받는-use-client-이름표.html">014 서버가 받는 'use client' 파일: 이름표 붙은 가짜</a></li>
+          </ol>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
