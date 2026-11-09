@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Button으로 보는 Tailwind 배치와 상태 패턴</title>
+    <link rel="stylesheet" href="learn.css" />
+    <script src="vendor/highlightjs/highlight.min.js" defer></script>
+    <script src="learn.js" defer></script>
+  </head>
+  <body>
+    <div class="layout">
+      <nav aria-label="목차">
+        <strong>목차</strong>
+        <ol>
+          <li><a href="#overview">한눈에 보기</a></li>
+          <li><a href="#inline-flex">inline-flex: 내용 폭과 가운데 정렬</a></li>
+          <li><a href="#overlay">relative와 absolute inset: 겹치기</a></li>
+          <li><a href="#group">group: 조상 상태로 자식 꾸미기</a></li>
+          <li><a href="#data">data-* 변형과 not-</a></li>
+          <li><a href="#motion">motion-safe: 움직임 줄이기</a></li>
+          <li><a href="#animation">애니메이션 토큰과 임의 속성</a></li>
+        </ol>
+        <strong>마무리</strong>
+        <ol>
+          <li><a href="#ours">우리 프로젝트에서는</a></li>
+          <li><a href="#check">스스로 확인하기</a></li>
+          <li><a href="#more">더 읽을거리</a></li>
+        </ol>
+      </nav>
+
+      <main>
+        <h1>Button으로 보는 Tailwind 배치와 상태 패턴</h1>
+        <p class="lead">
+          <code>packages/store-ui/src/button.tsx</code>에 쓰인 Tailwind 패턴을 정리한다. 다루는 것은
+          <code>inline-flex</code>, <code>relative</code>와 <code>absolute inset-0</code>, <code>group</code>,
+          <code>data-*</code>와 <code>not-*</code> 변형, <code>motion-safe</code>, 애니메이션 토큰이다. CSS 예시는
+          스토어 빌드(Tailwind 4.3) 결과를 바탕으로 적었다.
+        </p>
+
+        <section id="overview">
+          <h2>한눈에 보기</h2>
+          <p>로딩 중인 Button의 구조다. 패턴마다 아래 절에서 하나씩 다룬다.</p>
+          <ul class="tree" style="--tree-col: 19rem">
+            <li>
+              <div class="tree-row">
+                <span class="tree-node">button</span>
+                <span class="tree-note"
+                  ><code>group relative inline-flex items-center justify-center</code>와
+                  <code>data-loading</code>, <code>data-disabled</code> 속성</span
+                >
+              </div>
+              <ul>
+                <li>
+                  <div class="tree-row">
+                    <span class="tree-node">span (라벨)</span>
+                    <span class="tree-note"
+                      ><code>group-data-loading:opacity-0</code>. 흐름 안에 남아 버튼 폭을 정한다</span
+                    >
+                  </div>
+                </li>
+                <li>
+                  <div class="tree-row">
+                    <span class="tree-node">span (오버레이)</span>
+                    <span class="tree-note"
+                      ><code>absolute inset-0 flex items-center justify-center</code>. 버튼 전체를 덮는다</span
+                    >
+                  </div>
+                  <ul>
+                    <li>
+                      <div class="tree-row">
+                        <span class="tree-node">span × 3 (점)</span>
+                        <span class="tree-note"
+                          ><code>motion-safe:animate-loading-dot</code>, 지연 0 / 160 / 320ms</span
+                        >
+                      </div>
+                    </li>
+                  </ul>
+                </li>
+              </ul>
+            </li>
+          </ul>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>패턴</th>
+                  <th>푸는 문제</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>inline-flex</code></td>
+                  <td>버튼이 내용 폭만 차지하고, 고정 높이 안에서 라벨을 가운데에 둔다</td>
+                </tr>
+                <tr>
+                  <td><code>relative</code> + <code>absolute inset-0</code></td>
+                  <td>폭을 바꾸지 않고 버튼 위에 같은 크기의 상자를 겹친다</td>
+                </tr>
+                <tr>
+                  <td><code>group</code> + <code>group-data-*</code></td>
+                  <td>버튼의 상태 속성을 보고 자식(라벨)의 스타일을 바꾼다</td>
+                </tr>
+                <tr>
+                  <td><code>data-*</code>, <code>not-data-*</code></td>
+                  <td>Base UI가 붙이는 상태 속성으로 스타일을 정하고, 겹치는 상태를 가른다</td>
+                </tr>
+                <tr>
+                  <td><code>motion-safe</code></td>
+                  <td>움직임 줄이기를 켠 사용자에게는 반복 애니메이션을 끈다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="inline-flex">
+          <h2>inline-flex: 내용 폭과 가운데 정렬</h2>
+          <p><code>inline-flex</code>는 두 성질을 합친 값이다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>값</th>
+                  <th>바깥에서 보면</th>
+                  <th>안쪽에서 보면</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>flex</code></td>
+                  <td>block: 부모 폭을 다 채우고 앞뒤로 줄이 바뀐다</td>
+                  <td>자식을 flex로 배치</td>
+                </tr>
+                <tr>
+                  <td><code>inline-flex</code></td>
+                  <td>inline: 내용 폭만 차지하고 글자나 다른 버튼 옆에 나란히 선다</td>
+                  <td>자식을 flex로 배치</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <ul>
+            <li>바깥은 inline이라, 홈 소개 영역의 새로고침 버튼은 줄 전체가 아니라 글자 폭만큼만 차지한다.</li>
+            <li>
+              안쪽은 flex라서 <code>items-center</code>로 높이 52px 안의 세로 가운데, <code>justify-center</code>로
+              가로 가운데에 라벨을 둔다. 브라우저의 <code>&lt;button&gt;</code>도 기본으로 세로 가운데에 두지만,
+              브라우저마다 다를 수 있어 flex로 명시한다.
+            </li>
+          </ul>
+          <div class="callout">
+            <p>
+              자식이 글자 하나뿐이면 그 자식에게 <code>flex</code>나 <code>gap</code>을 줄 이유가 없다.
+              <code>gap</code>은 flex 항목 <strong>사이</strong>의 간격이라 항목이 하나면 효과가 없다. 라벨 span에 있던
+              <code>inline-flex items-center gap-sm</code>은 아이콘을 함께 넣을 경우를 미리 대비한 것이라 뺐다.
+            </p>
+          </div>
+        </section>
+
+        <section id="overlay">
+          <h2>relative와 absolute inset: 겹치기</h2>
+          <pre><code class="language-css">.relative   { position: relative; }   /* 버튼: 기준이 된다 */
+.absolute   { position: absolute; }   /* 오버레이: 흐름에서 빠진다 */
+.inset-0    { inset: 0; }             /* top·right·bottom·left를 모두 0으로 */</code></pre>
+          <ol class="steps blue">
+            <li>
+              <strong>흐름에서 빼기</strong>
+              <code>absolute</code> 요소는 다른 요소의 자리를 차지하지 않는다. 그래서 버튼 폭은 계속 라벨 글자 폭으로
+              정해진다.
+            </li>
+            <li>
+              <strong>기준 정하기</strong>
+              위치는 가장 가까운, <code>position</code>이 <code>static</code>이 아닌 조상을 기준으로 정한다. 버튼에
+              <code>relative</code>를 붙여 기준을 버튼으로 만든다.
+            </li>
+            <li>
+              <strong>네 변에 붙이기</strong>
+              <code>inset: 0</code>은 기준 요소의 네 변에 붙인다. 결과적으로 버튼과 같은 크기의 상자가 버튼 위에
+              겹친다. 덮는 범위는 기준 요소의 padding 영역까지이고 border는 덮지 않는다.
+            </li>
+          </ol>
+          <ul>
+            <li>
+              기준이 없으면, 즉 버튼에 <code>relative</code>가 없으면 오버레이는 바깥 조상을 덮는다. 그런 조상이 하나도
+              없으면 첫 화면 크기의 상자(초기 포함 블록)를 기준으로 삼는다.
+            </li>
+            <li>
+              오버레이에 배경을 칠한다면 모서리도 맞춰야 한다. <code>rounded-button</code>은 버튼에만 걸려 있으므로,
+              오버레이에 같은 모서리를 주거나 버튼에 <code>overflow-hidden</code>을 준다. 지금 오버레이는 투명해서 상관없다.
+            </li>
+            <li>
+              라벨을 지우지 않고 <code>opacity-0</code>으로 투명하게만 만드는 것도 같은 목적이다. 라벨을 지우면 로딩이
+              시작될 때 버튼 폭이 줄었다가 끝나면 다시 늘어나 주변 레이아웃이 흔들린다. 투명한 글자는 스크린 리더가 읽는
+              버튼 이름으로도 그대로 남는다. <code>invisible</code>(<code>visibility: hidden</code>)은 이름까지 지운다.
+            </li>
+          </ul>
+        </section>
+
+        <section id="group">
+          <h2>group: 조상 상태로 자식 꾸미기</h2>
+          <p>
+            보통 클래스는 그 요소 자신의 상태(<code>hover:</code>, <code>data-loading:</code>)만 본다. 조상의 상태를
+            보려면 조상에 <code>group</code>을 붙이고 자식에 <code>group-*:</code> 변형을 쓴다.
+          </p>
+          <pre><code class="language-tsx">&lt;BaseButton data-loading={isLoading || undefined} className="group ..."&gt;
+  &lt;span className="group-data-loading:opacity-0"&gt;{children}&lt;/span&gt;</code></pre>
+          <pre><code class="language-css">/* 생성된 CSS */
+:is(:where(.group)[data-loading] .group-data-loading\:opacity-0) { opacity: 0; }</code></pre>
+          <ul>
+            <li>
+              "<code>group</code> 클래스가 있고 <code>data-loading</code> 속성이 있는 조상 아래의 이 요소"라는 뜻이다.
+              <code>group</code> 자체는 스타일이 없는 표시용 클래스다.
+            </li>
+            <li>
+              <code>:where()</code> 안의 선택자는 우선순위에 더해지지 않는다. 그래서 <code>.group</code>은 빠지고
+              <code>[data-loading]</code>과 자기 클래스만 계산된다. 조상에 <code>group</code>을 붙였다고 규칙이 더 강해지지는
+              않는다.
+            </li>
+            <li>
+              <code>group-hover:</code>, <code>group-focus-visible:</code>, <code>group-data-[state=open]:</code>처럼
+              다른 상태에도 쓴다. 카드 전체에 마우스를 올리면 제목 색이 바뀌는 효과가 대표적인 예다.
+            </li>
+            <li>
+              <code>group</code>이 중첩되면 가장 가까운 것이 아니라 <strong>어느 조상이든</strong> 걸린다. 이를 피하려면
+              <code>group/card</code>와 <code>group-hover/card:</code>처럼 이름을 붙인다.
+            </li>
+            <li>
+              형제 요소의 상태를 볼 때는 <code>peer</code>와 <code>peer-*:</code>를 쓴다. 예를 들어 앞에 오는 input이
+              <code>:invalid</code>일 때 뒤의 안내문을 빨갛게 바꾼다.
+            </li>
+          </ul>
+          <p>
+            Button에서는 렌더링할 때 이미 <code>isLoading</code>을 알고 있으므로 <code>group</code> 없이도 같은 결과를 낼 수
+            있다.
+          </p>
+          <pre><code class="language-tsx">&lt;span className={isLoading ? 'opacity-0' : undefined}&gt;{children}&lt;/span&gt;</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>방식</th>
+                  <th>장점</th>
+                  <th>단점</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>group-data-loading:</code> (지금)</td>
+                  <td>
+                    스타일이 DOM 속성 하나에 묶이고, 버튼의 다른 상태 스타일(<code>data-disabled:</code>)과 같은 방식이다
+                  </td>
+                  <td><code>group</code>을 모르면 읽기 어렵다</td>
+                </tr>
+                <tr>
+                  <td><code>isLoading ? ... : ...</code></td>
+                  <td>JS만 보면 바로 이해된다</td>
+                  <td>상태 스타일이 CSS 속성 방식과 JS 조건 방식으로 섞인다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            JS 조건 방식을 쓸 수 없는 경우가 있다. 상태를 Base UI가 안에서 관리해서 컴포넌트 코드가 그 값을 모를 때다.
+            예를 들어 Select가 열렸는지에 따라 화살표 아이콘을 돌리려면 <code>group-data-[popup-open]:rotate-180</code>처럼
+            속성을 봐야 한다. 이후 클라이언트용 컴포넌트에서 자주 쓰게 될 패턴이다.
+          </p>
+        </section>
+
+        <section id="data">
+          <h2>data-* 변형과 not-</h2>
+          <p>
+            Base UI는 상태를 <code>data-*</code> 속성으로 알려 준다. Button은 비활성일 때 <code>data-disabled</code>를
+            붙인다. Tailwind의 <code>data-disabled:</code>는 그 속성이 있을 때만 적용된다.
+          </p>
+          <pre><code class="language-css">/* hover:not-data-disabled:bg-primary-hover */
+@media (hover: hover) {
+  .hover\:not-data-disabled\:bg-primary-hover:hover:not([data-disabled]) { ... }
+}
+
+/* data-disabled:not-data-loading:bg-surface-muted */
+.data-disabled\:not-data-loading\:bg-surface-muted[data-disabled]:not([data-loading]) { ... }</code></pre>
+          <ul>
+            <li>
+              변형은 왼쪽부터 이어 붙는다. <code>hover:not-data-disabled:</code>는 "마우스가 올라가 있고 비활성이 아닐
+              때"다. <code>hover:</code>는 <code>@media (hover: hover)</code>로 감싸져서, 터치 화면에서 탭한 뒤 hover 색이
+              남지 않는다.
+            </li>
+            <li>
+              <code>not-</code>은 조건을 뒤집는다. 같은 우선순위의 규칙 두 개(<code>hover:bg-primary-hover</code>와
+              <code>data-disabled:bg-surface-muted</code>)가 부딪히면 CSS에서 뒤에 오는 규칙이 이기는데, 그 순서는 Tailwind가
+              정한다. <code>not-</code>으로 두 조건이 동시에 참이 되지 않게 하면 순서에 기대지 않아도 된다.
+            </li>
+            <li>
+              로딩 중에는 Base UI에 <code>disabled</code>를 넘기므로 <code>data-disabled</code>도 붙는다. 비활성 회색을
+              <code>data-disabled:not-data-loading:</code>에만 걸어서, 로딩 중에는 원래 종류의 색을 유지한다.
+            </li>
+            <li>
+              React에서 <code>data-loading={isLoading || undefined}</code>로 쓰는 이유가 있다. <code>false</code>를
+              넘기면 <code>data-loading="false"</code>라는 속성이 그대로 남아 <code>[data-loading]</code> 선택자에 걸린다.
+              <code>undefined</code>여야 속성이 사라진다.
+            </li>
+          </ul>
+        </section>
+
+        <section id="motion">
+          <h2>motion-safe: 움직임 줄이기</h2>
+          <pre><code class="language-css">@media (prefers-reduced-motion: no-preference) {
+  .motion-safe\:animate-loading-dot { animation: var(--animate-loading-dot); }
+}</code></pre>
+          <ul>
+            <li>
+              <code>prefers-reduced-motion</code>은 OS의 접근성 설정을 브라우저가 알려 주는 미디어 쿼리다. macOS에서는
+              시스템 설정 &gt; 손쉬운 사용 &gt; 디스플레이 &gt; "동작 줄이기"다.
+            </li>
+            <li>
+              <code>motion-safe:</code>는 이 설정이 꺼져 있을 때(<code>no-preference</code>)만 적용된다. 반대로
+              <code>motion-reduce:</code>는 켜져 있을 때만 적용된다.
+            </li>
+            <li>
+              움직이는 화면은 전정기관 장애나 편두통이 있는 사람에게 어지러움을 일으킬 수 있다(WCAG 2.3.3). 설정을 켠
+              사람에게 Button의 점은 멈춘 채로 보이고, 로딩 중이라는 사실은 점과 <code>aria-busy</code>로 계속 전달된다.
+            </li>
+            <li>Skeleton도 <code>motion-safe:animate-pulse</code>로 같은 규칙을 따른다.</li>
+          </ul>
+          <div class="callout">
+            <p>
+              Chrome DevTools에서 ⌘⇧P를 누르고 "Emulate CSS prefers-reduced-motion: reduce"를 고르면 설정을 바꾸지 않고
+              확인할 수 있다.
+            </p>
+          </div>
+        </section>
+
+        <section id="animation">
+          <h2>애니메이션 토큰과 임의 속성</h2>
+          <pre><code class="language-css">/* packages/store-ui/src/tokens.css */
+@theme {
+  --animate-loading-dot: loading-dot 1s ease-in-out infinite;
+
+  @keyframes loading-dot {
+    0%, 80%, 100% { opacity: 0.4; transform: scale(0.7); }
+    40%           { opacity: 1;   transform: scale(1); }
+  }
+}</code></pre>
+          <ul>
+            <li>
+              <code>--animate-*</code> 변수가 <code>animate-*</code> 클래스를 만든다. <code>@keyframes</code>를 같은
+              <code>@theme</code> 안에 두면 그 클래스를 실제로 쓸 때만 키프레임이 CSS에 나온다. 항상 내보내야 하는
+              키프레임만 <code>@theme</code> 밖에 둔다.
+            </li>
+            <li>
+              <code>@theme</code> 안에 중첩 블록이 생기면서 토큰 문서 파서도 고쳤다. 첫 <code>}</code>에서 자르던 방식을
+              중괄호 깊이를 세는 방식으로 바꿨다(<a href="008-토큰-CSS를-읽는-파서.html#block-after">008 문서</a>).
+            </li>
+            <li>
+              점 세 개는 같은 애니메이션을 쓰고 시작만 늦춘다. Tailwind에 <code>animation-delay</code> 전용 클래스가 없어서
+              <code>[animation-delay:160ms]</code>처럼 CSS 속성을 대괄호 안에 그대로 쓰는 <strong>임의 속성</strong> 문법을
+              쓴다.
+            </li>
+            <li>
+              <code>bg-current</code>는 <code>background-color: currentColor</code>다. 점이 버튼 글자색을 따라가서, 주요
+              버튼에서는 흰 점, 보조 버튼에서는 진한 회색 점이 된다.
+            </li>
+            <li>
+              <code>rounded-full</code>은 <code>tokens.css</code>에서 모서리 토큰을 지웠어도 생성된다. 테마 변수가 아니라
+              고정값(아주 큰 px)으로 만들기 때문이다.
+            </li>
+          </ul>
+        </section>
+
+        <section id="ours">
+          <h2>우리 프로젝트에서는</h2>
+          <ul>
+            <li>
+              Button의 상태 스타일은 모두 <code>data-*</code> 속성으로 건다. Base UI가 붙이는 속성을 그대로 쓰므로,
+              <code>focusableWhenDisabled</code>로 native <code>disabled</code> 대신 <code>aria-disabled</code>가 붙는
+              경우에도 같은 모습이 된다.
+            </li>
+            <li>
+              로딩 표시는 처음에 한쪽이 빈 원(border 스피너)이었다. 예매·금융 앱 버튼에서 흔하고 부드러운 방향(A)에 어울리는
+              점 세 개로 바꿨다.
+            </li>
+          </ul>
+        </section>
+
+        <section id="check">
+          <h2>스스로 확인하기</h2>
+          <details>
+            <summary>1. 버튼에서 relative를 빼면 로딩 점은 어디에 그려지나?</summary>
+            <p>
+              오버레이가 <code>position</code>이 지정된 가장 가까운 바깥 조상을 기준으로 <code>inset: 0</code>을 적용한다.
+              그 조상 전체를 덮는 상자가 되어 점이 그 조상의 가운데에 나타난다. 그런 조상이 없으면 첫 화면 크기의 상자를
+              기준으로 삼는다.
+            </p>
+          </details>
+          <details>
+            <summary>2. 라벨을 opacity-0 대신 invisible로 숨기면 무엇이 달라지나?</summary>
+            <p>
+              폭은 똑같이 유지된다. 하지만 <code>visibility: hidden</code>인 요소는 접근성 트리에서도 빠져서, 로딩 중에는
+              버튼의 이름이 없어진다. 스크린 리더가 "버튼"이라고만 읽는다.
+            </p>
+          </details>
+          <details>
+            <summary>3. data-disabled:bg-surface-muted에서 not-data-loading을 빼면 로딩 중인 주요 버튼은 어떤 색이 되나?</summary>
+            <p>
+              회색이 된다. 로딩 중에도 Base UI에 <code>disabled</code>를 넘기므로 <code>data-disabled</code>가 붙기 때문이다.
+              로딩과 비활성이 같은 모습이 되어, 사용자는 기다리면 되는지 누를 수 없는 상태인지 구분할 수 없다.
+            </p>
+          </details>
+          <details>
+            <summary>4. 카드 안에 버튼이 있고 둘 다 group이면 버튼 안의 group-hover: 는 언제 적용되나?</summary>
+            <p>
+              카드에 마우스를 올리기만 해도 적용된다. <code>group-hover:</code>는 가장 가까운 group이 아니라 group인 조상 중
+              하나라도 hover이면 걸린다. 버튼에만 반응하게 하려면 <code>group/button</code>과
+              <code>group-hover/button:</code>처럼 이름을 붙인다.
+            </p>
+          </details>
+        </section>
+
+        <section id="more">
+          <h2>더 읽을거리</h2>
+          <ol>
+            <li>
+              <a href="https://tailwindcss.com/docs/hover-focus-and-other-states"
+                >Tailwind CSS: Hover, focus, and other states</a
+              >
+              (group, peer, data-*, not-*, motion-safe)
+            </li>
+            <li><a href="https://tailwindcss.com/docs/animation">Tailwind CSS: animation</a></li>
+            <li><a href="https://tailwindcss.com/docs/theme">Tailwind CSS: Theme variables</a></li>
+            <li>
+              <a href="https://developer.mozilla.org/docs/Web/CSS/Containing_block">MDN: Containing block</a>
+              (absolute의 기준)
+            </li>
+            <li>
+              <a href="https://developer.mozilla.org/docs/Web/CSS/@media/prefers-reduced-motion"
+                >MDN: prefers-reduced-motion</a
+              >
+            </li>
+            <li><a href="https://base-ui.com/react/components/button">Base UI: Button</a></li>
+          </ol>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

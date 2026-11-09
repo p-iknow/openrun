@@ -34,12 +34,24 @@ function declarations(block: string): [string, string][] {
   return [...block.matchAll(declaration)].map((m) => [m[1]!, m[2]!.trim()]);
 }
 
-// 블록 안에 중첩 블록이나 `}`가 없다고 가정하고 첫 `}`에서 자른다.
+/**
+ * `selector` 블록의 최상위 내용만 돌려준다. 중괄호 깊이를 세어 짝이 맞는 `}`까지 읽고,
+ * `@keyframes` 같은 중첩 블록 안의 내용은 뺀다. 주석이나 문자열 안의 중괄호는 없다고 가정한다.
+ */
 function blockAfter(css: string, { selector }: { selector: string }): string {
   const start = css.indexOf(`${selector} {`);
   if (start === -1) throw new Error(`tokens.css에 ${selector} 블록이 없다.`);
-  const end = css.indexOf('}', start);
-  return css.slice(start, end);
+  let depth = 0;
+  let topLevel = '';
+  for (let i = css.indexOf('{', start); i < css.length; i++) {
+    const char = css[i];
+    if (char === '{') depth++;
+    else if (char === '}') {
+      depth--;
+      if (depth === 0) return topLevel;
+    } else if (depth === 1) topLevel += char;
+  }
+  throw new Error(`tokens.css의 ${selector} 블록이 닫히지 않았다.`);
 }
 
 /** `prefix`로 시작하는 토큰을 접두어를 뗀 이름으로 뽑는다. 지우기용 `initial`과 `--line-height` 같은 부가 값은 뺀다. */

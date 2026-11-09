@@ -17,6 +17,16 @@ const learnDocuments = [
   { file: '008-토큰-CSS를-읽는-파서.html', title: '008 토큰 CSS를 읽는 파서', tags: ['design-system', 'testing'] },
   { file: '009-storybook-설정과-스토리-문법.html', title: '009 Storybook 설정과 스토리 문법', tags: ['design-system'] },
   { file: '010-cn과-tailwind-merge-확장.html', title: '010 cn과 tailwind-merge 확장', tags: ['design-system'] },
+  {
+    file: '011-버튼으로-보는-tailwind-배치와-상태-패턴.html',
+    title: '011 Button으로 보는 Tailwind 배치와 상태 패턴',
+    tags: ['design-system'],
+  },
+  {
+    file: '012-라이브러리-빌드와-use-client-경계.html',
+    title: "012 라이브러리 빌드와 'use client' 경계",
+    tags: ['design-system', 'nextjs'],
+  },
 ];
 
 const currentFile = decodeURIComponent(location.pathname).split('/').pop();

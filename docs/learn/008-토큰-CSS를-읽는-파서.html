@@ -160,12 +160,24 @@ const tokens = readTokens(tokensCss);</code></pre>
 
         <section id="block-after">
           <h2>blockAfter: 블록 잘라 내기</h2>
-          <pre><code class="language-ts">// 블록 안에 중첩 블록이나 `}`가 없다고 가정하고 첫 `}`에서 자른다.
+          <pre><code class="language-ts">/**
+ * `selector` 블록의 최상위 내용만 돌려준다. 중괄호 깊이를 세어 짝이 맞는 `}`까지 읽고,
+ * `@keyframes` 같은 중첩 블록 안의 내용은 뺀다. 주석이나 문자열 안의 중괄호는 없다고 가정한다.
+ */
 function blockAfter(css: string, { selector }: { selector: string }): string {
   const start = css.indexOf(`${selector} {`);
   if (start === -1) throw new Error(`tokens.css에 ${selector} 블록이 없다.`);
-  const end = css.indexOf('}', start);
-  return css.slice(start, end);
+  let depth = 0;
+  let topLevel = '';
+  for (let i = css.indexOf('{', start); i &lt; css.length; i++) {
+    const char = css[i];
+    if (char === '{') depth++;
+    else if (char === '}') {
+      depth--;
+      if (depth === 0) return topLevel;
+    } else if (depth === 1) topLevel += char;
+  }
+  throw new Error(`tokens.css의 ${selector} 블록이 닫히지 않았다.`);
 }</code></pre>
           <ol class="steps blue">
             <li>
@@ -173,12 +185,16 @@ function blockAfter(css: string, { selector }: { selector: string }): string {
               <code>':root {'</code>라는 글자가 처음 나오는 위치를 <code>indexOf</code>로 찾는다.
             </li>
             <li>
-              <strong>끝 찾기</strong>
-              그 위치 뒤에서 처음 나오는 <code>}</code>를 찾는다.
+              <strong>깊이 세기</strong>
+              그 뒤의 <code>{</code>부터 한 글자씩 읽으며 <code>{</code>에서 깊이를 1 올리고 <code>}</code>에서 1 내린다.
             </li>
             <li>
-              <strong>자르기</strong>
-              둘 사이의 글자를 <code>slice</code>로 잘라 돌려준다.
+              <strong>최상위만 모으기</strong>
+              깊이가 1일 때의 글자만 모은다. <code>@keyframes</code> 안(깊이 2 이상)의 내용은 빠진다.
+            </li>
+            <li>
+              <strong>끝내기</strong>
+              깊이가 다시 0이 되는 <code>}</code>, 즉 짝이 맞는 닫는 괄호에서 모은 글자를 돌려준다.
             </li>
           </ol>
           <ul>
@@ -188,8 +204,12 @@ function blockAfter(css: string, { selector }: { selector: string }): string {
               때문이다.
             </li>
             <li>
-              블록을 못 찾으면 에러를 던진다. 누가 블록 이름을 바꿨을 때 토큰 화면이 빈 표를 조용히 보여 주는
-              대신 바로 깨진다.
+              블록을 못 찾거나 닫히지 않으면 에러를 던진다. 누가 블록 이름을 바꿨을 때 토큰 화면이 빈 표를 조용히
+              보여 주는 대신 바로 깨진다.
+            </li>
+            <li>
+              처음에는 첫 <code>}</code>에서 잘랐다. #22에서 로딩 애니메이션의 <code>@keyframes</code>를 Tailwind 권장대로
+              <code>@theme</code> 안에 두면서, 그 뒤의 토큰이 사라지지 않도록 깊이를 세는 방식으로 바꿨다.
             </li>
           </ul>
         </section>
@@ -414,9 +434,10 @@ const colors = themeValues(theme, { prefix: 'color-' }).map(({ name, value }) =&
               </thead>
               <tbody>
                 <tr>
-                  <td>블록 안에 <code>}</code>가 없다</td>
+                  <td>주석이나 문자열 안에 짝이 맞지 않는 중괄호가 없다</td>
                   <td>
-                    중첩 블록이나 <code>}</code>가 든 주석에서 블록이 잘린다. 그 뒤의 토큰이 표에서 사라진다.
+                    주석 속 <code>}</code> 하나에서 블록이 일찍 끝나 그 뒤의 토큰이 표에서 사라진다. 짝이 맞는
+                    <code>{ }</code>나 <code>@keyframes</code> 같은 중첩 블록은 괜찮다.
                   </td>
                 </tr>
                 <tr>
@@ -462,9 +483,9 @@ const colors = themeValues(theme, { prefix: 'color-' }).map(({ name, value }) =&
               이 파일만 살렸다.
             </li>
             <li>
-              스펙(#18)은 토큰에 자동 테스트를 두지 않기로 했으므로 파서 자체의 테스트는 없다.
-              <code>cn.spec.ts</code>가 파서 결과를 쓰므로, 파서가 토큰을 빠뜨리면 그쪽 테스트 개수가 줄어드는
-              식으로 간접적으로 드러난다.
+              파서 테스트는 <code>read-tokens.spec.ts</code> 하나다. <code>@theme</code> 중간에 <code>@keyframes</code>가
+              있어도 그 뒤의 토큰을 읽는지 확인한다. 그 밖에는 <code>cn.spec.ts</code>가 파서 결과를 쓰므로, 파서가
+              토큰을 빠뜨리면 그쪽 테스트 개수가 줄어드는 식으로 간접적으로 드러난다.
             </li>
           </ul>
         </section>
@@ -480,11 +501,12 @@ const colors = themeValues(theme, { prefix: 'color-' }).map(({ name, value }) =&
             </p>
           </details>
           <details>
-            <summary>2. @theme 블록 맨 위에 "/* 예: { a: b } */" 주석을 넣으면 토큰 화면은 어떻게 되나?</summary>
+            <summary>2. @theme 블록 맨 위에 "/* 닫는 괄호 } 주의 */" 주석을 넣으면 토큰 화면은 어떻게 되나?</summary>
             <p>
-              <code>blockAfter</code>가 주석 속 첫 <code>}</code>에서 블록을 자른다. 그 뒤의 모든 의미 토큰이
-              빠져 색, 글자 크기, 간격, 모서리 표가 비거나 줄어든다. 에러는 나지 않는다. 블록 시작은 찾았기
-              때문이다. <code>cn.spec.ts</code>도 돌 토큰이 없어 해당 테스트가 사라진다.
+              <code>blockAfter</code>가 주석 속 <code>}</code>에서 깊이가 0이 되어 블록을 끝낸다. 그 뒤의 모든 의미
+              토큰이 빠져 색, 글자 크기, 간격, 모서리 표가 비거나 줄어든다. 에러는 나지 않는다. 블록 시작을 찾았고
+              닫는 괄호도 만났기 때문이다. <code>cn.spec.ts</code>도 돌 토큰이 없어 해당 테스트가 사라진다.
+              <code>/* 예: { a: b } */</code>처럼 짝이 맞는 괄호는 깊이 2로 들어갔다 나오므로 괜찮다.
             </p>
           </details>
           <details>
