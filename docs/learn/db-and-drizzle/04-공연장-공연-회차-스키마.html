@@ -328,7 +328,8 @@ TRUNCATE "shows" RESTART IDENTITY;--&gt; statement-breakpoint</code></pre>
             Drizzle의 <a href="02-drizzle-스키마-문법.html#relations">relations()</a>를 쓰면 "공연과 그 회차들"을 중첩 객체로
             한 번에 받을 수 있지만, 이 저장소는 쓰지 않고 서비스에서
             <a href="01-프론트엔드-개발자를-위한-DB-개념.html#join">JOIN</a>을 직접 적는다. 아래 코드의 문법은
-            <a href="03-drizzle-쿼리-문법.html">db-and-drizzle 03 문서</a>에 있다.
+            <a href="03-drizzle-쿼리-문법.html">db-and-drizzle 03 문서</a>에 있고, 이 쿼리 전체를 따라가는 설명은
+            <a href="05-공연-목록-쿼리-읽기.html">db-and-drizzle 05 문서</a>에 있다.
           </p>
           <pre><code class="language-ts">this.db
   .select({ id: shows.id, venueName: venues.name, start: period.start, end: period.end })

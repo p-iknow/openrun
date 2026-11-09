@@ -35,6 +35,7 @@ const learnFolders = [
       { file: '02-drizzle-스키마-문법.html', title: '02 Drizzle 스키마 문법', tags: ['drizzle'] },
       { file: '03-drizzle-쿼리-문법.html', title: '03 Drizzle 쿼리 문법', tags: ['drizzle'] },
       { file: '04-공연장-공연-회차-스키마.html', title: '04 공연장·공연·회차 스키마', tags: ['drizzle', 'database'] },
+      { file: '05-공연-목록-쿼리-읽기.html', title: '05 공연 목록 쿼리 읽기', tags: ['drizzle', 'database'] },
     ],
   },
   {
