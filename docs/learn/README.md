@@ -35,6 +35,7 @@
 | 모듈 | 클래스 | 용도 |
 |---|---|---|
 | 문서 틀 | `layout`, `lead` | 목차와 본문 배치, 제목 아래 요약 |
+| 소제목 | `h3`, `h4` | 절 안을 나눌 때 `h3`, `h3` 안을 다시 나눌 때 `h4` |
 | 문서 탐색 | `doc-nav`, `doc-nav-kind` | 목차 아래의 이전/다음 문서와 전체 목록 링크. `learn.js`가 그리므로 문서에 직접 쓰지 않는다 |
 | 전체 목록 | `layout single`, `doc-index` | `index.html`의 한 열 배치와 태그로 거를 수 있는 전체 문서 목록. 목록은 `learn.js`가 채운다 |
 | 태그 | `tags`, `tag-filter` | 문서 주제 표시와 `index.html`의 태그 필터. `learn.js`가 그린다 |
