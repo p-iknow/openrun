@@ -6,7 +6,7 @@ import { cn } from './cn.js';
 
 // 클라이언트용 컴포넌트다. 지시어와 props 규칙은 Button과 같다.
 // Server Component에서 쓸 때는 직렬화할 수 있는 props만 넘기고, onValueChange는 클라이언트 컴포넌트에서만 넘긴다.
-// Field.Root가 라벨과 입력 칸에 같은 id를 이어 주고, 비활성·포커스 상태를 data-disabled, data-focused로 둘 다에 붙인다.
+// 라벨과 입력 칸은 Field.Root가 같은 id로 잇는다. htmlFor를 따로 넘기지 않는다.
 // Tailwind가 dist에서 클래스를 찾을 수 있도록 클래스 이름을 문자열 그대로 둔다.
 
 export interface TextFieldProps {
@@ -49,13 +49,12 @@ export function TextField({
         defaultValue={defaultValue}
         onValueChange={onValueChange}
         className={cn(
-          // 입력은 흰 바탕에 테두리로 칸을 보인다(Select와 같은 모양). 모서리는 Button과 같은 14px로 맞춘다.
           'h-[52px] w-full rounded-button border border-border-input bg-surface px-lg text-body text-text transition-colors',
           'hover:not-data-disabled:not-focus:border-border-input-hover',
           // 흰 바탕에서도 text-tertiary는 대비가 약 3:1이라, 4.5:1을 넘는 text-secondary를 쓴다.
           'placeholder:text-text-secondary',
           // 입력 칸은 마우스로 눌러도 어디에 쓰는지 보여야 하므로 focus-visible이 아니라 focus에 그린다.
-          // 1px 테두리를 파랑으로 바꾸고, 바로 안쪽에 1px outline을 더해 2px로 보이게 한다. 크기가 바뀌지 않아 글자가 밀리지 않는다.
+          // border-2 대신 안쪽에 1px outline을 더해 2px로 보인다. 칸 크기가 바뀌지 않아 글자가 밀리지 않는다.
           // outline 색은 평소에 정해 둔다. 포커스 때 정하면 transition-colors가 글자색(검정)에서 파랑으로 넘어가며 깜빡인다.
           'outline-primary focus:border-primary focus:outline-1 focus:-outline-offset-2',
           'data-disabled:cursor-not-allowed data-disabled:border-border data-disabled:bg-surface-muted data-disabled:text-text-tertiary',

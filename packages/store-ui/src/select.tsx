@@ -5,7 +5,7 @@ import { cn } from './cn.js';
 
 // 클라이언트용 컴포넌트다. 지시어와 props 규칙은 Button과 같다.
 // Server Component에서 쓸 때는 직렬화할 수 있는 props(items 배열 포함)만 넘기고, onValueChange는 클라이언트 컴포넌트에서만 넘긴다.
-// 키보드(Enter, Space, 화살표로 열기, 화살표와 글자로 이동, Enter로 고르기, Esc로 닫기)와 포커스 이동은 Base UI Select가 맡는다.
+// 키보드 조작과 포커스 이동은 Base UI Select가 맡는다.
 // Tailwind가 dist에서 클래스를 찾을 수 있도록 클래스 이름을 문자열 그대로 둔다.
 
 export interface SelectItem {
@@ -85,7 +85,7 @@ export function Select({
         </BaseSelect.Trigger>
       </div>
       <BaseSelect.Portal>
-        {/* 고른 항목을 트리거 위에 겹치지 않고, 드롭다운처럼 트리거 아래에 연다. */}
+        {/* Base UI 기본값은 고른 항목을 트리거 위에 겹쳐 연다. 드롭다운처럼 트리거 아래에 열도록 끈다. */}
         <BaseSelect.Positioner
           alignItemWithTrigger={false}
           sideOffset={4}
@@ -99,8 +99,7 @@ export function Select({
                   value={item.value}
                   className={cn(
                     'flex cursor-default items-center justify-between gap-lg rounded-badge px-md py-sm text-body text-text outline-none select-none',
-                    // 고른 항목은 연한 파랑 바탕, 키보드와 마우스로 가리킨 항목(data-highlighted)은 연한 회색 바탕으로 보인다.
-                    // 고른 항목을 가리켜도 파랑을 유지한다. 색만으로 구분하지 않도록 고른 항목에는 체크 표시도 둔다.
+                    // 고른 항목은 가리켜도 파랑을 유지한다. 색만으로 구분하지 않도록 체크 표시도 둔다.
                     'data-selected:bg-primary-subtle',
                     'data-highlighted:not-data-selected:bg-surface-muted',
                   )}
