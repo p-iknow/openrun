@@ -210,6 +210,10 @@ pre {
   background: var(--code-bg);
 }
 pre code {
+  /* 긴 줄은 가로 스크롤 대신 줄바꿈한다. 들여쓰기와 빈 줄은 그대로 둔다. */
+  white-space: pre-wrap;
+  /* RSC payload나 파일 경로처럼 띄어쓰기 없는 긴 글자도 칸 안에서 끊는다. */
+  overflow-wrap: anywhere;
   padding: 0;
   background: none;
   font-size: 0.85rem;
