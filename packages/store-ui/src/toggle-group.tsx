@@ -67,11 +67,8 @@ export function ToggleGroup({
             disabled={item.disabled}
             className={cn(
               // 고르기 전후로 칩 크기가 그대로이도록 테두리는 두 상태 모두 1px로 두고 색만 바꾼다.
+              // transition은 두지 않는다. 색과 굵기가 함께 즉시 바뀌어야 누른 결과가 바로 보인다.
               'inline-flex h-[40px] items-center rounded-full border border-border-strong bg-surface px-lg text-body-sm text-text select-none',
-              // 색과 글자 굵기를 같은 시간에 바꾼다. 굵기만 즉시 바뀌면 색보다 먼저 튀어 어색하다.
-              // Pretendard가 가변 글꼴이라 굵기도 중간값을 거쳐 부드럽게 바뀐다. 칩 폭은 아래의 겹친 글자가 잡고 있어 그대로다.
-              'transition-[color,background-color,border-color,font-weight]',
-              // 테두리 색은 평소에 정해 둔다. 포커스 때 정하면 transition-colors가 깜빡인다.
               'outline-primary focus-visible:outline-2 focus-visible:outline-offset-2',
               'hover:not-data-disabled:not-data-pressed:bg-surface-muted',
               // 색만으로 구분하지 않도록 고른 칩은 테두리와 글자 굵기도 바꾼다.
