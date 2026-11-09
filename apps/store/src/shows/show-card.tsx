@@ -1,4 +1,4 @@
-import { Skeleton } from '@openrun/store-ui';
+import { Badge, Skeleton } from '@openrun/store-ui';
 import type { ReactNode } from 'react';
 import type { ShowCardData } from './select-show-cards';
 
@@ -25,6 +25,9 @@ function ShowCardFrame({ children }: { children: ReactNode }) {
 export function ShowCard({ card }: { card: ShowCardData }) {
   return (
     <ShowCardFrame>
+      <div>
+        <Badge tone={card.salesStatus.tone}>{card.salesStatus.label}</Badge>
+      </div>
       <h2 className="line-clamp-2 text-body font-semibold break-keep">
         {card.title}
       </h2>
@@ -32,6 +35,11 @@ export function ShowCard({ card }: { card: ShowCardData }) {
         {card.venueName}
       </p>
       <p className="text-body-sm text-text-secondary">{card.period}</p>
+      {card.salesOpenAt === null ? null : (
+        <p className="text-body-sm font-semibold text-success-strong">
+          {card.salesOpenAt}
+        </p>
+      )}
     </ShowCardFrame>
   );
 }
@@ -39,6 +47,7 @@ export function ShowCard({ card }: { card: ShowCardData }) {
 export function ShowCardSkeleton() {
   return (
     <ShowCardFrame>
+      <Skeleton className="h-[24px] w-[56px] rounded-badge" />
       <Skeleton className="h-[20px] w-full rounded-badge" />
       <Skeleton className="h-[16px] w-1/2 rounded-badge" />
       <Skeleton className="h-[16px] w-2/3 rounded-badge" />

@@ -15,22 +15,39 @@ import {
   vi,
 } from 'vitest';
 import { AppModule } from '../src/app.module.js';
+import { Clock } from '../src/clock/clock.module.js';
 import { performances, shows } from '../src/db/schema/shows.js';
 import { venues } from '../src/db/schema/venues.js';
+
+// 테스트의 기본 현재 시각. 회차를 시작 일시만으로 넣으면 판매 오픈 일시가 DEFAULT_SALES_OPEN_AT이라,
+// 이 시각 뒤에 시작하는 회차는 판매 중이다.
+const DEFAULT_NOW = '2026-02-01T00:00:00Z';
+const DEFAULT_SALES_OPEN_AT = '2026-01-01T01:00:00Z';
+
+interface PerformanceInput {
+  startsAt: string;
+  salesOpenAt?: string;
+  isCancelled?: boolean;
+}
 
 describe('GET /shows', () => {
   const db = drizzle(inject('databaseUrl'));
   let app: INestApplication<App>;
+  // 테스트마다 바꿀 수 있는 현재 시각. 앱의 Clock이 이 값을 돌려준다.
+  let now: Date;
 
   // 공연 하나와 그 회차를 넣고 공연 id를 돌려준다. 목록 응답에 나오지 않는 컬럼은 고정값으로 채운다.
+  // 회차는 시작 일시만(performanceStarts) 주거나, 판매 오픈 일시와 회차 취소까지(performances) 준다.
   async function insertShow({
     venueId,
     title,
-    performanceStarts,
+    performanceStarts = [],
+    performances: performanceInputs = [],
   }: {
     venueId: number;
     title: string;
-    performanceStarts: string[];
+    performanceStarts?: string[];
+    performances?: PerformanceInput[];
   }): Promise<number> {
     const [show] = await db
       .insert(shows)
@@ -46,13 +63,20 @@ describe('GET /shows', () => {
     if (!show) {
       throw new Error('공연을 넣지 못했습니다.');
     }
-    if (performanceStarts.length > 0) {
+    const rows: PerformanceInput[] = [
+      ...performanceStarts.map((startsAt) => ({ startsAt })),
+      ...performanceInputs,
+    ];
+    if (rows.length > 0) {
       await db.insert(performances).values(
-        performanceStarts.map((startsAt) => ({
-          showId: show.id,
-          startsAt: new Date(startsAt),
-          salesOpenAt: new Date('2026-01-01T01:00:00Z'),
-        })),
+        rows.map(
+          ({ startsAt, salesOpenAt = DEFAULT_SALES_OPEN_AT, isCancelled }) => ({
+            showId: show.id,
+            startsAt: new Date(startsAt),
+            salesOpenAt: new Date(salesOpenAt),
+            isCancelled,
+          }),
+        ),
       );
     }
     return show.id;
@@ -83,9 +107,13 @@ describe('GET /shows', () => {
       'TRUNCATE performances, shows, venues RESTART IDENTITY CASCADE',
     );
 
+    now = new Date(DEFAULT_NOW);
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(Clock)
+      .useValue({ now: () => now })
+      .compile();
 
     app = moduleRef.createNestApplication();
     await app.init();
@@ -135,6 +163,8 @@ describe('GET /shows', () => {
             start: '2026-03-01T05:00:00.000Z',
             end: '2026-03-20T10:30:00.000Z',
           },
+          salesStatus: 'on_sale',
+          salesOpenAt: null,
         },
       ],
       page: 1,
@@ -206,5 +236,176 @@ describe('GET /shows', () => {
     const response = await request(app.getHttpServer()).get('/shows');
 
     expect(response.body).toMatchObject({ items: [], totalCount: 0 });
+  });
+
+  describe('판매 상태', () => {
+    const salesOpenAt = '2026-03-01T05:00:00.000Z';
+    const startsAt = '2026-03-10T10:00:00.000Z';
+
+    function msBefore(iso: string, ms: number): Date {
+      return new Date(new Date(iso).getTime() - ms);
+    }
+
+    async function fetchSalesStatus(): Promise<unknown> {
+      const response = await request(app.getHttpServer()).get('/shows');
+      return response.body.items[0]?.salesStatus;
+    }
+
+    it.each([
+      {
+        moment: '판매 오픈 직전',
+        at: msBefore(salesOpenAt, 1),
+        expected: 'upcoming',
+      },
+      {
+        moment: '판매 오픈 정각',
+        at: new Date(salesOpenAt),
+        expected: 'on_sale',
+      },
+    ])('$moment: $expected', async ({ at, expected }) => {
+      const venueId = await insertVenue('예술의전당');
+      await insertShow({
+        venueId,
+        title: '달빛 정원',
+        performances: [{ startsAt, salesOpenAt }],
+      });
+      now = at;
+
+      expect(await fetchSalesStatus()).toBe(expected);
+    });
+
+    // 판매 종료 공연은 목록에서 빠지므로, 취소된 회차를 함께 두어 회차가 판매 종료가 되면 공연이 회차 취소로 보이게 한다.
+    it.each([
+      {
+        moment: '회차 시작 직전',
+        at: msBefore(startsAt, 1),
+        expected: 'on_sale',
+      },
+      {
+        moment: '회차 시작 정각',
+        at: new Date(startsAt),
+        expected: 'cancelled',
+      },
+    ])('$moment: $expected', async ({ at, expected }) => {
+      const venueId = await insertVenue('예술의전당');
+      await insertShow({
+        venueId,
+        title: '달빛 정원',
+        performances: [
+          { startsAt, salesOpenAt },
+          {
+            startsAt: '2026-03-20T10:00:00.000Z',
+            salesOpenAt,
+            isCancelled: true,
+          },
+        ],
+      });
+      now = at;
+
+      expect(await fetchSalesStatus()).toBe(expected);
+    });
+
+    it('취소된 회차는 판매 오픈 전이어도 회차 취소다', async () => {
+      const venueId = await insertVenue('예술의전당');
+      await insertShow({
+        venueId,
+        title: '달빛 정원',
+        performances: [{ startsAt, salesOpenAt, isCancelled: true }],
+      });
+      now = msBefore(salesOpenAt, 1);
+
+      expect(await fetchSalesStatus()).toBe('cancelled');
+    });
+  });
+
+  describe('공연 판매 상태', () => {
+    // 기본 현재 시각(2026-02-01) 기준 회차 판매 상태별 회차
+    const onSale = { startsAt: '2026-03-05T10:00:00Z' };
+    const upcoming = {
+      startsAt: '2026-03-01T10:00:00Z',
+      salesOpenAt: '2026-02-10T05:00:00Z',
+    };
+    const cancelled = { startsAt: '2026-03-02T10:00:00Z', isCancelled: true };
+    const ended = { startsAt: '2026-01-20T10:00:00Z' };
+
+    it.each([
+      {
+        name: '판매 중 회차가 하나라도 있으면 판매 중이다',
+        performances: [ended, cancelled, upcoming, onSale],
+        expected: { salesStatus: 'on_sale', salesOpenAt: null },
+      },
+      {
+        name: '판매 중 회차가 없고 판매 예정 회차가 있으면 판매 예정이다',
+        performances: [ended, cancelled, upcoming],
+        expected: {
+          salesStatus: 'upcoming',
+          salesOpenAt: '2026-02-10T05:00:00.000Z',
+        },
+      },
+      {
+        name: '끝나지 않은 회차가 모두 취소됐으면 회차 취소다',
+        performances: [ended, cancelled],
+        expected: { salesStatus: 'cancelled', salesOpenAt: null },
+      },
+    ])('$name', async ({ performances: inputs, expected }) => {
+      const venueId = await insertVenue('예술의전당');
+      await insertShow({ venueId, title: '달빛 정원', performances: inputs });
+
+      const response = await request(app.getHttpServer()).get('/shows');
+
+      expect(response.body.items[0]).toMatchObject(expected);
+    });
+
+    it('판매 예정이면 판매 예정 회차 중 가장 이른 판매 오픈 일시를 담는다', async () => {
+      const venueId = await insertVenue('예술의전당');
+      await insertShow({
+        venueId,
+        title: '달빛 정원',
+        performances: [
+          {
+            startsAt: '2026-03-10T10:00:00Z',
+            salesOpenAt: '2026-02-20T05:00:00Z',
+          },
+          {
+            startsAt: '2026-03-11T10:00:00Z',
+            salesOpenAt: '2026-02-15T05:00:00Z',
+          },
+          // 취소된 회차의 판매 오픈 일시는 고르지 않는다.
+          {
+            startsAt: '2026-03-12T10:00:00Z',
+            salesOpenAt: '2026-02-05T05:00:00Z',
+            isCancelled: true,
+          },
+        ],
+      });
+
+      const response = await request(app.getHttpServer()).get('/shows');
+
+      expect(response.body.items[0]).toMatchObject({
+        salesStatus: 'upcoming',
+        salesOpenAt: '2026-02-15T05:00:00.000Z',
+      });
+    });
+  });
+
+  it('판매 종료 공연은 목록과 전체 개수에서 뺀다', async () => {
+    const venueId = await insertVenue('예술의전당');
+    await insertShow({
+      venueId,
+      title: '끝난 공연',
+      performanceStarts: ['2026-01-10T10:00:00Z', '2026-01-20T10:00:00Z'],
+    });
+    await insertShow({
+      venueId,
+      title: '판매 중 공연',
+      performanceStarts: ['2026-01-20T10:00:00Z', '2026-03-01T10:00:00Z'],
+    });
+
+    const response = await request(app.getHttpServer()).get('/shows');
+
+    expect(
+      response.body.items.map((item: { title: string }) => item.title),
+    ).toEqual(['판매 중 공연']);
+    expect(response.body).toMatchObject({ totalCount: 1, totalPages: 1 });
   });
 });
