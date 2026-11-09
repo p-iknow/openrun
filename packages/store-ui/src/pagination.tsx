@@ -1,5 +1,6 @@
 import { useRender } from '@base-ui/react/use-render';
 import type { ReactElement, ReactNode } from 'react';
+import { cn } from './cn.js';
 
 // 서버용 컴포넌트다. 상태와 브라우저 API를 쓰지 않는다.
 // 모양과 접근성 속성만 맡고, 어떤 요소로 어디로 갈지(<a>, Next.js의 Link, 주소 규칙)는 쓰는 쪽이 render로 넘긴다.
@@ -10,13 +11,13 @@ const MAX_PAGE_LINKS = 5;
 
 // 상태는 Base UI처럼 data-active, data-disabled 속성으로 드러내고, 클래스도 그 속성으로 고른다(Button과 같은 방식).
 // 쓰는 쪽도 render 요소의 className에서 같은 속성으로 상태별 스타일을 덧댈 수 있다.
-const itemClass = [
+const itemClass = cn(
   'inline-flex size-[40px] items-center justify-center rounded-full text-body-sm font-semibold text-text-secondary transition-colors',
   'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary',
   'hover:not-data-active:not-data-disabled:bg-surface-muted',
   'data-active:bg-primary data-active:text-on-primary data-active:hover:bg-primary-hover',
   'data-disabled:cursor-not-allowed data-disabled:text-text-tertiary',
-].join(' ');
+);
 
 export interface PaginationPage {
   page: number;
