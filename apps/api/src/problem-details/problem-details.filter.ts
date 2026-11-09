@@ -33,32 +33,29 @@ export class ProblemDetailsFilter implements ExceptionFilter {
 }
 
 function toProblem(exception: unknown): ProblemDetailsDto {
-  if (exception instanceof ProblemException) {
-    return {
-      type: 'about:blank',
-      title: STATUS_CODES[exception.getStatus()] ?? 'Error',
-      status: exception.getStatus(),
-      detail: exception.message,
-      code: exception.code,
-      ...(exception.errors && { errors: exception.errors }),
-    };
-  }
-
   const status =
     exception instanceof HttpException
       ? exception.getStatus()
       : HttpStatus.INTERNAL_SERVER_ERROR;
+  // Nest가 던지는 HttpException에는 앱 오류 코드가 없으므로 상태 이름(NOT_FOUND 등)을 코드로 쓴다.
+  const code =
+    exception instanceof ProblemException
+      ? exception.code
+      : (HttpStatus[status] ?? 'HTTP_ERROR');
   // 5xx의 메시지에는 DB 주소 같은 내부 정보가 담길 수 있어 고정 문구로 바꾼다.
   const detail =
     exception instanceof HttpException && status < 500
       ? exception.message
       : '서버에서 요청을 처리하지 못했습니다.';
+  const errors =
+    exception instanceof ProblemException ? exception.errors : undefined;
 
   return {
     type: 'about:blank',
     title: STATUS_CODES[status] ?? 'Error',
     status,
     detail,
-    code: HttpStatus[status] ?? 'HTTP_ERROR',
+    code,
+    ...(errors && { errors }),
   };
 }

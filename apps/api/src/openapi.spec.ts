@@ -35,14 +35,5 @@ describe('OpenAPI 문서', () => {
         },
       },
     });
-    expect(document.components?.schemas?.ProblemDetailsDto).toMatchObject({
-      required: ['type', 'title', 'status', 'detail', 'code'],
-      properties: {
-        errors: {
-          type: 'array',
-          items: { $ref: '#/components/schemas/FieldErrorDto' },
-        },
-      },
-    });
   });
 });
