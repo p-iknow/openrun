@@ -9,7 +9,7 @@ const meta = {
     docs: {
       description: {
         component:
-          "**클라이언트용** 컴포넌트다(Base UI Field와 Input 바탕, 파일 첫 줄에 `'use client'`). Server Component에서도 import할 수 있지만 직렬화할 수 있는 props만 넘긴다. `onValueChange`는 함수라서 앱의 클라이언트 컴포넌트에서만 넘긴다. 라벨은 늘 보이고 입력 칸과 연결되어 라벨을 누르면 입력 칸에 포커스가 간다. 테두리 없는 회색 면, 높이 52px, 모서리 `rounded-button`(14px). 포커스되면 바탕이 흰색으로 바뀌고 안쪽에 테두리가 생긴다.",
+          "**클라이언트용** 컴포넌트다(Base UI Field와 Input 바탕, 파일 첫 줄에 `'use client'`). Server Component에서도 import할 수 있지만 직렬화할 수 있는 props만 넘긴다. `onValueChange`는 함수라서 앱의 클라이언트 컴포넌트에서만 넘긴다. 라벨은 늘 보이고 입력 칸과 연결되어 라벨을 누르면 입력 칸에 포커스가 간다. 흰 바탕에 회색 테두리, 높이 52px, 모서리 `rounded-button`(14px). 포커스되면 테두리가 2px 파랑으로 바뀐다.",
       },
     },
   },

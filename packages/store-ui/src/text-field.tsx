@@ -49,15 +49,16 @@ export function TextField({
         defaultValue={defaultValue}
         onValueChange={onValueChange}
         className={cn(
-          // 방향 A: 테두리 없이 회색 면으로 칸을 보이고, 모서리는 Button과 같은 14px로 맞춘다.
-          'h-[52px] w-full rounded-button bg-surface-muted px-lg text-body text-text transition-colors',
-          // 회색 면 위에서 대비 4.5:1을 넘는 글자 토큰은 text-secondary뿐이라 placeholder도 이 색을 쓴다.
+          // 입력은 흰 바탕에 테두리로 칸을 보인다(Select와 같은 모양). 모서리는 Button과 같은 14px로 맞춘다.
+          'h-[52px] w-full rounded-button border border-border-strong bg-surface px-lg text-body text-text transition-colors',
+          'hover:not-data-disabled:not-focus:border-text-tertiary',
+          // 흰 바탕에서도 text-tertiary는 대비가 약 3:1이라, 4.5:1을 넘는 text-secondary를 쓴다.
           'placeholder:text-text-secondary',
-          // 입력 칸은 마우스로 눌러도 어디에 쓰는지 보여야 하므로 focus-visible이 아니라 focus에 테두리를 그린다.
-          // 안쪽으로 그려 옆 요소와 겹치지 않게 하고, 바탕을 흰색으로 바꿔 쓰는 중임을 드러낸다.
-          // 테두리 색은 평소에 정해 둔다. 포커스 때 정하면 transition-colors가 글자색(검정)에서 파랑으로 넘어가며 깜빡인다.
-          'outline-primary focus:bg-surface focus:outline-2 focus:-outline-offset-2',
-          'data-disabled:cursor-not-allowed data-disabled:text-text-tertiary',
+          // 입력 칸은 마우스로 눌러도 어디에 쓰는지 보여야 하므로 focus-visible이 아니라 focus에 그린다.
+          // 1px 테두리를 파랑으로 바꾸고, 바로 안쪽에 1px outline을 더해 2px로 보이게 한다. 크기가 바뀌지 않아 글자가 밀리지 않는다.
+          // outline 색은 평소에 정해 둔다. 포커스 때 정하면 transition-colors가 글자색(검정)에서 파랑으로 넘어가며 깜빡인다.
+          'outline-primary focus:border-primary focus:outline-1 focus:-outline-offset-2',
+          'data-disabled:cursor-not-allowed data-disabled:border-border data-disabled:bg-surface-muted data-disabled:text-text-tertiary',
         )}
       />
     </Field.Root>

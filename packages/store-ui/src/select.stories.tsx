@@ -9,7 +9,7 @@ const meta = {
     docs: {
       description: {
         component:
-          "**클라이언트용** 컴포넌트다(Base UI Select 바탕, 파일 첫 줄에 `'use client'`). Server Component에서도 import할 수 있지만 직렬화할 수 있는 props(`items` 배열 포함)만 넘긴다. `onValueChange`는 함수라서 앱의 클라이언트 컴포넌트에서만 넘긴다. 키보드로 쓸 수 있다: Tab으로 트리거에 가서 Enter, Space, 위아래 화살표로 열고, 화살표나 글자로 항목을 옮겨 Enter로 고르며, Esc로 닫는다. `name`을 주면 고른 값이 숨은 입력에 담겨 폼으로 제출된다. 트리거는 TextField와 같은 회색 면, 높이 52px, 모서리 14px이고, 목록은 트리거 아래에 뜬다.",
+          "**클라이언트용** 컴포넌트다(Base UI Select 바탕, 파일 첫 줄에 `'use client'`). Server Component에서도 import할 수 있지만 직렬화할 수 있는 props(`items` 배열 포함)만 넘긴다. `onValueChange`는 함수라서 앱의 클라이언트 컴포넌트에서만 넘긴다. 키보드로 쓸 수 있다: Tab으로 트리거에 가서 Enter, Space, 위아래 화살표로 열고, 화살표나 글자로 항목을 옮겨 Enter로 고르며, Esc로 닫는다. `name`을 주면 고른 값이 숨은 입력에 담겨 폼으로 제출된다. 트리거는 TextField와 같은 흰 바탕과 회색 테두리, 높이 52px, 모서리 14px이고, 열리면 테두리가 2px 파랑이 된다. 목록은 트리거 아래에 뜨고, 고른 항목은 연한 파랑, 가리킨 항목은 연한 회색 바탕이다.",
       },
     },
   },

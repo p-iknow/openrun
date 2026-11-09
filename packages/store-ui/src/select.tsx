@@ -57,16 +57,16 @@ export function Select({
         </BaseSelect.Label>
         <BaseSelect.Trigger
           className={cn(
-            // 방향 A: TextField와 같은 회색 면, 높이, 모서리를 쓴다.
-            'flex h-[52px] w-full items-center justify-between gap-sm rounded-button bg-surface-muted px-lg text-left text-body text-text transition-colors select-none',
-            // 테두리 색은 평소에 정해 둔다. 포커스 때 정하면 transition-colors가 글자색(검정)에서 파랑으로 넘어가며 깜빡인다.
-            'outline-primary focus-visible:outline-2 focus-visible:-outline-offset-2',
-            'hover:not-data-disabled:not-data-popup-open:bg-border',
-            // 열린 동안은 TextField의 포커스처럼 흰 바탕과 안쪽 테두리로 쓰는 중임을 드러낸다.
-            'data-popup-open:bg-surface data-popup-open:outline-2 data-popup-open:-outline-offset-2',
-            // 회색 면 위에서 대비 4.5:1을 넘는 글자 토큰은 text-secondary뿐이라 placeholder도 이 색을 쓴다.
+            // TextField와 같은 흰 바탕, 테두리, 높이, 모서리를 쓴다.
+            'flex h-[52px] w-full items-center justify-between gap-sm rounded-button border border-border-strong bg-surface px-lg text-left text-body text-text transition-colors select-none',
+            'hover:not-data-disabled:not-data-popup-open:border-text-tertiary',
+            // 키보드 포커스와 열린 상태는 TextField의 포커스처럼 2px 파란 테두리로 그린다(1px 테두리 + 안쪽 1px outline).
+            // outline 색은 평소에 정해 둔다. 포커스 때 정하면 transition-colors가 글자색(검정)에서 파랑으로 넘어가며 깜빡인다.
+            'outline-primary focus-visible:border-primary focus-visible:outline-1 focus-visible:-outline-offset-2',
+            'data-popup-open:border-primary data-popup-open:outline-1 data-popup-open:-outline-offset-2',
+            // 흰 바탕에서도 text-tertiary는 대비가 약 3:1이라, 4.5:1을 넘는 text-secondary를 쓴다.
             'data-placeholder:text-text-secondary',
-            'data-disabled:cursor-not-allowed data-disabled:text-text-tertiary',
+            'data-disabled:cursor-not-allowed data-disabled:border-border data-disabled:bg-surface-muted data-disabled:text-text-tertiary',
           )}
         >
           <BaseSelect.Value placeholder={placeholder} className="truncate" />
@@ -90,7 +90,7 @@ export function Select({
         {/* 고른 항목을 트리거 위에 겹치지 않고, 드롭다운처럼 트리거 아래에 연다. */}
         <BaseSelect.Positioner
           alignItemWithTrigger={false}
-          sideOffset={8}
+          sideOffset={4}
           className="z-10 outline-none"
         >
           <BaseSelect.Popup className="max-h-[var(--available-height)] min-w-[var(--anchor-width)] overflow-y-auto rounded-card bg-surface p-xs shadow-floating outline-none">
@@ -101,11 +101,10 @@ export function Select({
                   value={item.value}
                   className={cn(
                     'flex cursor-default items-center justify-between gap-lg rounded-badge px-md py-sm text-body text-text outline-none select-none',
-                    // 키보드와 마우스 모두 data-highlighted로 지금 가리키는 항목을 보인다.
-                    // 연한 바탕은 흰 팝업과 대비가 약하므로, 글자색을 파랑으로 바꿔 위치를 드러낸다.
-                    'data-highlighted:bg-primary-subtle data-highlighted:text-primary-strong',
-                    // 고른 항목은 글자색을 바꾸지 않고 굵기와 체크 표시로만 구분해, 가리킨 항목과 겹치지 않게 한다.
-                    'data-selected:font-semibold',
+                    // 고른 항목은 연한 파랑 바탕, 키보드와 마우스로 가리킨 항목(data-highlighted)은 연한 회색 바탕으로 보인다.
+                    // 고른 항목을 가리켜도 파랑을 유지한다. 색만으로 구분하지 않도록 고른 항목에는 체크 표시도 둔다.
+                    'data-selected:bg-primary-subtle',
+                    'data-highlighted:not-data-selected:bg-surface-muted',
                   )}
                 >
                   <BaseSelect.ItemText>{item.label}</BaseSelect.ItemText>
