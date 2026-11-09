@@ -57,7 +57,6 @@ export function Select({
         </BaseSelect.Label>
         <BaseSelect.Trigger
           className={cn(
-            // TextField와 같은 흰 바탕, 테두리, 높이, 모서리를 쓴다.
             'flex h-[52px] w-full items-center justify-between gap-sm rounded-button border border-border-input bg-surface px-lg text-left text-body text-text transition-colors select-none',
             'hover:not-data-disabled:not-data-popup-open:border-border-input-hover',
             // 키보드 포커스와 열린 상태는 TextField의 포커스처럼 2px 파란 테두리로 그린다(1px 테두리 + 안쪽 1px outline).
