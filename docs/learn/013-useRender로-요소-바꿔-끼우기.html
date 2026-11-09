@@ -1,0 +1,477 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>useRender로 요소 바꿔 끼우기</title>
+    <link rel="stylesheet" href="learn.css" />
+    <script src="vendor/highlightjs/highlight.min.js" defer></script>
+    <script src="learn.js" defer></script>
+  </head>
+  <body>
+    <div class="layout">
+      <nav aria-label="목차">
+        <strong>목차</strong>
+        <ol>
+          <li><a href="#problem">어떤 문제를 푸는가</a></li>
+          <li><a href="#overview">한눈에 보기</a></li>
+          <li><a href="#code">우리 코드에서</a></li>
+          <li><a href="#result">넣은 것과 나온 것</a></li>
+          <li><a href="#merge">같은 속성이 겹치면</a></li>
+          <li><a href="#state">state와 data 속성</a></li>
+          <li><a href="#disabled">비활성 이전·다음은 왜 다르게 하나</a></li>
+          <li><a href="#server">이름이 use…인데 서버에서 도는 이유</a></li>
+          <li><a href="#manual">직접 만들면</a></li>
+          <li><a href="#rules">쓸 때 지킬 규칙</a></li>
+        </ol>
+        <strong>마무리</strong>
+        <ol>
+          <li><a href="#ours">우리 프로젝트에서는</a></li>
+          <li><a href="#check">스스로 확인하기</a></li>
+          <li><a href="#more">더 읽을거리</a></li>
+        </ol>
+      </nav>
+
+      <main>
+        <h1>useRender로 요소 바꿔 끼우기</h1>
+        <p class="lead">
+          Pagination을 만들며 쓴 Base UI의 <code>useRender</code>를 다룬다. 쓰는 쪽이 건넨 요소(<code>&lt;a&gt;</code>나
+          Next.js의 <code>Link</code>)에 디자인 시스템의 모양과 접근성 속성을 얹는 방법, 속성이 겹칠 때의 규칙, 이름이
+          훅인데도 Server Component에서 도는 이유를 설명한다. 기준 버전은 <code>@base-ui/react</code> 1.9.0이다.
+        </p>
+
+        <section id="problem">
+          <h2>어떤 문제를 푸는가</h2>
+          <p>Pagination에는 두 쪽의 바람이 부딪힌다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>누가</th>
+                  <th>정하고 싶은 것</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><span class="badge blue">store-ui</span> 디자인 시스템</td>
+                  <td>원형 40px, 현재 페이지는 파란색, <code>aria-current</code>와 이름 붙이기</td>
+                </tr>
+                <tr>
+                  <td><span class="badge green">apps/store</span> 쓰는 쪽</td>
+                  <td><code>&lt;a&gt;</code>를 쓸지 Next.js의 <code>Link</code>를 쓸지, 주소를 어떻게 만들지</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            store-ui가 <code>&lt;a&gt;</code>를 직접 그리면 쓰는 쪽은 <code>Link</code>로 바꿀 수 없다. 반대로 쓰는 쪽이 다
+            그리면 모양과 접근성 속성을 매번 손으로 붙여야 하고, 빠뜨리기 쉽다.
+          </p>
+          <div class="callout">
+            <p>
+              <code>useRender</code>는 이 둘을 합친다. <strong>쓰는 쪽이 "이 요소로 그려 줘"라고 요소를 건네면, 디자인
+              시스템이 그 요소에 자기 속성을 정해진 규칙으로 얹어서 돌려준다.</strong>
+            </p>
+          </div>
+          <p>
+            비유하면 쓰는 쪽은 <strong>빈 컵</strong>(<code>&lt;Link href="/shows?page=3" /&gt;</code>)을 건네고,
+            디자인 시스템은 그 컵에 <strong>색과 라벨</strong>(클래스, <code>aria-current</code>, 번호)을 붙여 돌려준다.
+            컵의 종류는 쓰는 쪽이, 꾸미기는 디자인 시스템이 맡는다.
+          </p>
+        </section>
+
+        <section id="overview">
+          <h2>한눈에 보기</h2>
+          <div class="flow">
+            <div class="lane green">
+              <div class="lane-title">쓰는 쪽이 건네는 것 (render)</div>
+              <ol class="chain">
+                <li><span>요소 종류: <code>Link</code></span></li>
+                <li><span>속성: <code>href="/shows?page=3"</code></span></li>
+              </ol>
+            </div>
+            <div class="lane blue">
+              <div class="lane-title">store-ui가 얹는 것 (props, state)</div>
+              <ol class="chain">
+                <li><span><code>className</code>, <code>aria-label="3페이지"</code></span></li>
+                <li><span><code>aria-current="page"</code>, 글자 <code>3</code></span></li>
+                <li><span><code>state: { active: true }</code> → <code>data-active</code></span></li>
+              </ol>
+            </div>
+          </div>
+          <p>
+            <code>useRender</code>가 두 쪽을 합쳐 <code>Link</code> 하나를 돌려주고, 그 <code>Link</code>가 최종적으로
+            <code>&lt;a&gt;</code>를 그린다.
+          </p>
+        </section>
+
+        <section id="code">
+          <h2>우리 코드에서</h2>
+          <p><code>packages/store-ui/src/pagination.tsx</code>의 <code>Pagination.Link</code>다.</p>
+          <pre><code class="language-tsx">function PaginationLink({ render, page, active = false }: PaginationLinkProps) {
+  const element = useRender({
+    render,                  // ① 쓰는 쪽이 건넨 요소 (빈 컵)
+    defaultTagName: 'a',     // ② render가 없을 때 쓸 기본 태그
+    state: { active },       // ③ 상태 → data-* 속성으로 바뀐다
+    props: {                 // ④ store-ui가 얹을 속성
+      'aria-label': `${page}페이지`,
+      'aria-current': active ? 'page' : undefined,
+      className: itemClass,
+      children: page,
+    },
+  });
+  return &lt;li&gt;{element}&lt;/li&gt;;  // ⑤ 완성된 요소를 받아 그대로 그린다
+}</code></pre>
+          <p>쓰는 쪽은 이렇게 부른다.</p>
+          <pre><code class="language-tsx">&lt;Pagination.Link page={3} active render={&lt;Link href="/shows?page=3" /&gt;} /&gt;</code></pre>
+          <ol class="steps blue">
+            <li>
+              <strong>render</strong>
+              쓰는 쪽이 건넨 React 요소다. 아직 그려지지 않은 "설계도"라서 Server Component에서 넘겨도 직렬화된다. 함수가
+              아니라 요소이기 때문이다.
+            </li>
+            <li>
+              <strong>defaultTagName</strong>
+              <code>render</code>가 없을 때 그릴 태그다. Pagination은 <code>render</code>를 필수로 받으므로 실제로는 쓰이지
+              않지만, 기본값(<code>div</code>)이 엉뚱하게 나오지 않도록 <code>a</code>로 둔다.
+            </li>
+            <li>
+              <strong>state</strong>
+              컴포넌트의 상태다. <code>useRender</code>가 <code>data-*</code> 속성으로 바꿔 붙인다(<a href="#state">아래</a>).
+            </li>
+            <li>
+              <strong>props</strong>
+              store-ui가 요소에 얹을 속성이다. <code>children</code>도 여기에 넣으면 요소의 내용이 된다.
+            </li>
+            <li>
+              <strong>반환값</strong>
+              속성이 합쳐진 React 요소 하나다. 그대로 JSX 안에 넣어 그린다.
+            </li>
+          </ol>
+        </section>
+
+        <section id="result">
+          <h2>넣은 것과 나온 것</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>들어간 것</th>
+                  <th>어디서 왔나</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>Link</code> 컴포넌트, <code>href="/shows?page=3"</code></td>
+                  <td><span class="badge green">쓰는 쪽</span> <code>render</code></td>
+                </tr>
+                <tr>
+                  <td><code>aria-label="3페이지"</code>, <code>aria-current="page"</code>, <code>className</code>, 글자 <code>3</code></td>
+                  <td><span class="badge blue">store-ui</span> <code>props</code></td>
+                </tr>
+                <tr>
+                  <td><code>active: true</code></td>
+                  <td><span class="badge blue">store-ui</span> <code>state</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p><code>react-dom/server</code>로 그려 보면 이렇게 나온다(클래스는 줄였다).</p>
+          <pre><code class="language-html">&lt;a href="/shows?page=3" data-active="" aria-label="3페이지" aria-current="page" class="inline-flex size-[40px] …"&gt;3&lt;/a&gt;</code></pre>
+          <p>쓰는 쪽이 고른 <code>Link</code>와 <code>href</code>가 그대로 남고, 그 위에 store-ui의 속성이 얹혔다.</p>
+        </section>
+
+        <section id="merge">
+          <h2>같은 속성이 겹치면</h2>
+          <p>
+            쓰는 쪽 요소에도 <code>className</code>이나 <code>aria-label</code>이 있을 수 있다. 겹칠 때의 규칙은
+            <code>useRender</code>의 <code>props</code> 설명과 Base UI의 <code>mergeProps</code> 문서에 적혀 있다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>속성</th>
+                  <th>합치는 방식</th>
+                  <th>예</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>className</code></td>
+                  <td><span class="badge green">이어 붙임</span></td>
+                  <td>store-ui <code>"rounded-full …"</code> + 쓰는 쪽 <code>"mt-sm"</code> → 둘 다 남는다</td>
+                </tr>
+                <tr>
+                  <td><code>style</code></td>
+                  <td><span class="badge green">합침</span></td>
+                  <td>같은 CSS 속성은 쓰는 쪽 값이 남는다</td>
+                </tr>
+                <tr>
+                  <td>이벤트(<code>onClick</code> 등)</td>
+                  <td><span class="badge green">둘 다 실행</span></td>
+                  <td>store-ui 핸들러와 쓰는 쪽 핸들러가 모두 불린다</td>
+                </tr>
+                <tr>
+                  <td>그 밖의 속성</td>
+                  <td><span class="badge blue">쓰는 쪽이 이김</span></td>
+                  <td>쓰는 쪽이 <code>aria-label="3페이지로 이동"</code>을 주면 그 값이 남는다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            그래서 Pagination 테스트의 "render로 넘긴 요소에 aria-label을 주면 기본 이름을 덮어쓴다"는 따로 코드를 쓰지
+            않아도 통과한다. 이 규칙이 그대로 적용된 결과다.
+          </p>
+          <pre><code class="language-tsx">&lt;Pagination.Link page={3} render={&lt;a href="/shows?page=3" aria-label="3페이지로 이동" /&gt;} /&gt;
+// → &lt;a href="/shows?page=3" aria-label="3페이지로 이동" …&gt;3&lt;/a&gt;</code></pre>
+          <div class="callout">
+            <p>
+              store-ui는 <strong>기본값</strong>을 주고, 쓰는 쪽은 필요할 때 <strong>덮어쓴다</strong>. 단, 클래스는
+              덮어쓰지 않고 더해지므로 쓰는 쪽이 store-ui의 모양을 실수로 지우지 않는다.
+            </p>
+          </div>
+        </section>
+
+        <section id="state">
+          <h2>state와 data 속성</h2>
+          <p>
+            <code>state: { active: true }</code>를 넘기면 <code>useRender</code>가 <code>data-active=""</code>를 붙인다.
+            값이 <code>false</code>면 속성을 아예 붙이지 않는다. 이전·다음은 <code>state: { disabled }</code>로
+            <code>data-disabled</code>를 붙인다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>state</th>
+                  <th>붙는 속성</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>{ active: true }</code></td>
+                  <td><code>data-active=""</code></td>
+                </tr>
+                <tr>
+                  <td><code>{ active: false }</code></td>
+                  <td>(없음)</td>
+                </tr>
+                <tr>
+                  <td><code>{ disabled: true }</code></td>
+                  <td><code>data-disabled=""</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>이 속성으로 Tailwind 클래스를 고른다.</p>
+          <pre><code class="language-ts">'data-active:bg-primary data-active:text-on-primary data-active:hover:bg-primary-hover',
+'data-disabled:cursor-not-allowed data-disabled:text-text-tertiary',</code></pre>
+          <p>
+            상태마다 클래스를 <code>cn</code>으로 고르는 분기가 없어지고, 클래스 목록 하나로 모든 상태를 표현한다. Base
+            UI의 Button도 상태를 <code>data-*</code>로 드러내므로 우리 Button의 <code>data-disabled:</code> 클래스와 쓰는
+            법이 같다(<a href="011-버튼으로-보는-tailwind-배치와-상태-패턴.html#data">011 문서</a>). 쓰는 쪽도
+            <code>render</code> 요소의 <code>className</code>에서 같은 속성으로 상태별 스타일을 덧댈 수 있다.
+          </p>
+        </section>
+
+        <section id="disabled">
+          <h2>비활성 이전·다음은 왜 다르게 하나</h2>
+          <pre><code class="language-tsx">const element = useRender({
+  render: disabled ? &lt;a role="link" aria-disabled="true" /&gt; : render,
+  defaultTagName: 'a',
+  state: { disabled },
+  props: { 'aria-label': label, className: itemClass, children: &lt;svg … /&gt; },
+});</code></pre>
+          <p>
+            비활성일 때는 쓰는 쪽이 건넨 요소를 쓰지 않고, store-ui가 만든 <code>href</code> 없는
+            <code>&lt;a&gt;</code>를 대신 넣는다. Next.js의 <code>Link</code>는 <code>href</code>가 꼭 있어야 해서, 건네받은
+            <code>Link</code>에서 <code>href</code>만 뺄 수 없기 때문이다. 컵을 꾸미는 대신 "못 쓰는 컵"으로 바꿔 끼우는
+            셈이다.
+          </p>
+          <ul>
+            <li><code>href</code>가 없으니 누를 수 없고 Tab 순서에서도 빠진다.</li>
+            <li><code>role="link"</code>와 <code>aria-disabled="true"</code>로 스크린 리더에 "비활성 링크"라고 알린다.</li>
+          </ul>
+        </section>
+
+        <section id="server">
+          <h2>이름이 use…인데 서버에서 도는 이유</h2>
+          <p>
+            React에서 <code>use</code>로 시작하는 함수는 훅이고, 보통 훅은 Server Component에서 쓸 수 없다. 그런데
+            <code>useRender</code>가 하는 일은 대부분 <strong>속성 합치기</strong>라서 순수한 계산이다. 훅이 필요한 일은
+            하나뿐인데, <strong>ref 합치기</strong>(쓰는 쪽 ref와 내부 ref를 한 요소에 함께 연결하기)다.
+          </p>
+          <p>Base UI 소스에서 그 부분은 이렇게 되어 있다.</p>
+          <pre><code class="language-js">// node_modules/@base-ui/react/internals/useRenderElement.mjs (1.9.0)
+// This also skips the `useMergedRefs` call on the server, which is fine because
+// refs are not used on the server side.
+if (typeof document !== 'undefined') {     // 브라우저일 때만
+  outProps.ref = useMergedRefs(outProps.ref, getReactElementRef(renderProp), ref);
+}</code></pre>
+          <ol class="steps green">
+            <li>
+              <strong>서버에는 document가 없다</strong>
+              그래서 ref를 합치는 훅을 건너뛰고, 순수한 속성 합치기만 한다.
+            </li>
+            <li>
+              <strong>서버에는 ref가 필요 없다</strong>
+              ref는 브라우저의 실제 DOM 요소를 가리키는 것이라, 서버에서 HTML을 만들 때는 쓰이지 않는다.
+            </li>
+            <li>
+              <strong>'use client'가 없다</strong>
+              <code>use-render</code> 모듈에는 지시어가 없어서 import해도 클라이언트 경계가 생기지 않는다(경계가 무엇인지는
+              <a href="012-라이브러리-빌드와-use-client-경계.html#directive">012 문서</a>).
+            </li>
+          </ol>
+          <p>
+            그래서 Pagination은 <code>'use client'</code> 없이 서버용으로 남는다. 스토어에 임시 정적 라우트를 만들고 Next.js의
+            <code>Link</code>를 넘긴 Pagination을 <code>next build</code>로 미리 렌더링해, HTML이 제대로 나오는 것을 확인했다.
+          </p>
+          <div class="callout warn">
+            <p>
+              이 동작은 Base UI 내부 구현에 기댄다. 문서에 "Server Component에서 쓸 수 있다"고 약속된 것이 아니라, 소스가
+              지금 그렇게 되어 있는 것이다. 그래서 두 가지로 지킨다. <code>package.json</code>에서 Base UI를
+              <code>1.9.0</code>으로 정확히 고정했고, 올릴 때 이 동작이 바뀌면 <code>react-dom/server</code>로 그리는
+              Pagination 테스트가 바로 깨진다.
+            </p>
+          </div>
+        </section>
+
+        <section id="manual">
+          <h2>직접 만들면</h2>
+          <p>
+            <code>useRender</code> 없이 React의 <code>cloneElement</code>로도 비슷하게 만들 수 있다. 하지만 합치는 규칙을
+            우리가 직접 관리해야 한다.
+          </p>
+          <details class="fold">
+            <summary>선택 읽기: cloneElement로 흉내 내기</summary>
+            <div class="fold-body">
+              <pre><code class="language-tsx">import { cloneElement, type ReactElement } from 'react';
+
+function renderWith(render: ReactElement&lt;Record&lt;string, unknown&gt;&gt;, ours: Record&lt;string, unknown&gt;, state: { active: boolean }) {
+  const theirs = render.props;
+  return cloneElement(render, {
+    ...ours,
+    ...theirs,                                                      // 그 밖의 속성은 쓰는 쪽이 이김
+    className: cn(ours.className as string, theirs.className as string), // 클래스는 이어 붙임
+    ...(state.active &amp;&amp; { 'data-active': '' }),                    // state → data 속성
+    // 이벤트 핸들러 둘 다 부르기, style 합치기, ref 합치기는 아직 없다
+  });
+}</code></pre>
+              <p>
+                이벤트 합치기, <code>style</code> 합치기, ref 합치기까지 넣으면 훨씬 길어지고, Base UI 컴포넌트(Button
+                등)와 합치는 방식이 미묘하게 어긋날 수 있다.
+              </p>
+            </div>
+          </details>
+          <p>
+            같은 규칙을 Base UI와 공유하려고 <code>useRender</code>를 골랐다. 우리 Button의 바탕인 Base UI Button을
+            비롯한 Base UI 컴포넌트가 모두 같은 <code>render</code> 규칙을 쓰므로, 나중에 store-ui 컴포넌트에
+            <code>render</code>를 열어 줄 때도 방식이 하나로 맞는다.
+          </p>
+        </section>
+
+        <section id="rules">
+          <h2>쓸 때 지킬 규칙</h2>
+          <ul>
+            <li>
+              <strong>훅 규칙을 따른다.</strong> 컴포넌트 맨 위에서 조건 없이 한 번 부른다.
+              <code>if (disabled) useRender(...)</code>처럼 조건 안에서 부르지 않는다. 그래서 비활성 이전·다음도
+              <code>useRender</code>는 늘 부르고, 넘기는 <code>render</code> 값만 바꾼다.
+            </li>
+            <li>
+              <strong>render에는 요소를 넘긴다.</strong> <code>useRender</code>는 함수(<code>(props, state) =&gt; …</code>)도
+              받지만, 함수는 Server Component에서 넘길 수 없다. Pagination의 <code>render</code> 타입은
+              <code>ReactElement</code>로 좁혀 두었다.
+            </li>
+            <li>
+              <strong>클래스는 문자열 그대로 둔다.</strong> Tailwind가 <code>dist</code>에서 클래스 이름을 찾아 CSS를
+              만들기 때문에, 조각을 이어 붙여 만든 이름(<code>`data-${x}:…`</code>)은 쓰지 않는다.
+            </li>
+          </ul>
+        </section>
+
+        <section id="ours">
+          <h2>우리 프로젝트에서는</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>부품</th>
+                  <th>render</th>
+                  <th>store-ui가 얹는 것</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>Pagination.Link</code></td>
+                  <td>필수. 쓰는 쪽 링크</td>
+                  <td>클래스, <code>aria-label="N페이지"</code>, <code>aria-current</code>, <code>data-active</code>, 번호</td>
+                </tr>
+                <tr>
+                  <td><code>Pagination.Previous</code> / <code>Next</code></td>
+                  <td>필수. <code>disabled</code>면 쓰지 않음</td>
+                  <td>클래스, <code>aria-label</code>, <code>data-disabled</code>, 화살표 아이콘</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            Base UI 문서의 예시는 컴포넌트가 나머지 props를 모두 받아 <code>mergeProps</code>로 합친다. 우리
+            <code>Pagination.Link</code>는 <code>page</code>, <code>active</code>, <code>render</code>만 받고, 그 밖의
+            속성(<code>href</code>, 추가 클래스 등)은 모두 <code>render</code> 요소에 적게 했다. 속성을 넣는 곳이 한 군데라
+            헷갈리지 않는다.
+          </p>
+        </section>
+
+        <section id="check">
+          <h2>스스로 확인하기</h2>
+          <details>
+            <summary>1. 쓰는 쪽이 render 요소에 className="mt-sm"을 주면 store-ui의 원형 모양은 사라지나?</summary>
+            <p>
+              사라지지 않는다. <code>className</code>은 덮어쓰지 않고 이어 붙이므로 store-ui의 클래스와
+              <code>mt-sm</code>이 함께 남는다.
+            </p>
+          </details>
+          <details>
+            <summary>2. 쓰는 쪽이 render 요소에 aria-current="false"를 주면 어떻게 되나?</summary>
+            <p>
+              <code>className</code>, <code>style</code>, 이벤트가 아닌 속성은 쓰는 쪽이 이기므로
+              <code>aria-current="false"</code>가 남는다. 기본값을 덮어쓸 수 있다는 건 잘못 덮어쓸 수도 있다는 뜻이다.
+            </p>
+          </details>
+          <details>
+            <summary>3. 비활성 다음 링크에서 쓰는 쪽 요소의 href만 지우지 않고 요소를 통째로 바꾸는 이유는?</summary>
+            <p>
+              Next.js의 <code>Link</code>는 <code>href</code>가 꼭 필요해서 <code>href</code> 없이 그릴 수 없다. 쓰는 쪽이
+              어떤 컴포넌트를 넘길지 store-ui는 모르므로, 비활성일 때는 store-ui가 아는 <code>&lt;a&gt;</code>로 바꾼다.
+            </p>
+          </details>
+          <details>
+            <summary>4. Base UI를 올렸더니 useRender가 서버에서도 ref 훅을 부르게 바뀌었다. 무엇이 먼저 알려 주나?</summary>
+            <p>
+              <code>react-dom/server</code>로 그리는 Pagination 테스트가 먼저 깨진다. 스토어에서는 Pagination을 쓰는 Server
+              Component의 렌더링이 실패할 수 있다. Server Component에서는 ref 훅을 쓸 수 없기 때문이다.
+            </p>
+          </details>
+          <details>
+            <summary>5. state에 { active: false }를 넘기면 HTML에 data-active="false"가 붙나?</summary>
+            <p>붙지 않는다. <code>false</code>면 속성 자체를 빼서, <code>data-active:</code> 클래스가 적용되지 않는다.</p>
+          </details>
+        </section>
+
+        <section id="more">
+          <h2>더 읽을거리</h2>
+          <ul>
+            <li><a href="https://base-ui.com/react/utils/use-render">Base UI useRender</a>: 매개변수와 타입, 함수형 render</li>
+            <li><a href="https://base-ui.com/react/utils/merge-props">Base UI mergeProps</a>: 속성을 합치는 규칙</li>
+            <li><code>packages/store-ui/src/pagination.tsx</code>: 이 문서의 예시 코드</li>
+            <li><a href="012-라이브러리-빌드와-use-client-경계.html">012 라이브러리 빌드와 'use client' 경계</a></li>
+          </ul>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

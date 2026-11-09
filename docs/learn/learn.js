@@ -27,6 +27,7 @@ const learnDocuments = [
     title: "012 라이브러리 빌드와 'use client' 경계",
     tags: ['design-system', 'nextjs'],
   },
+  { file: '013-useRender로-요소-바꿔-끼우기.html', title: '013 useRender로 요소 바꿔 끼우기', tags: ['design-system'] },
 ];
 
 const currentFile = decodeURIComponent(location.pathname).split('/').pop();
