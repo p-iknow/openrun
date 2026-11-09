@@ -40,7 +40,7 @@ const kstDateTime = new Intl.DateTimeFormat('ko-KR', {
   hourCycle: 'h23',
 });
 
-function kstParts(iso: string) {
+function formatKst(iso: string) {
   const parts = kstDateTime.formatToParts(new Date(iso));
   const part = (type: Intl.DateTimeFormatPartTypes) =>
     parts.find((p) => p.type === type)?.value ?? '';
@@ -53,9 +53,9 @@ function kstParts(iso: string) {
 export function selectShowCards(page: ShowPage): ShowCardData[] {
   return page.items.map(
     ({ id, title, venueName, period, salesStatus, salesOpenAt }) => {
-      const start = kstParts(period.start).date;
-      const end = kstParts(period.end).date;
-      const open = salesOpenAt === null ? null : kstParts(salesOpenAt);
+      const start = formatKst(period.start).date;
+      const end = formatKst(period.end).date;
+      const open = salesOpenAt === null ? null : formatKst(salesOpenAt);
       return {
         id,
         title,
