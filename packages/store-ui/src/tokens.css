@@ -133,6 +133,9 @@
 
   --color-border: var(--grey-200);
   --color-border-strong: var(--grey-300);
+  /* 입력 칸(TextField, Select)의 경계. 칸이 어디 있는지 알 수 있도록 흰 바탕과 대비 3:1 이상(WCAG 1.4.11)을 맞춘다. */
+  --color-border-input: var(--grey-500);
+  --color-border-input-hover: var(--grey-700);
 
   --color-surface: #ffffff;
   --color-surface-muted: var(--grey-100);

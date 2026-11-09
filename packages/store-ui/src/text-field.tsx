@@ -50,8 +50,8 @@ export function TextField({
         onValueChange={onValueChange}
         className={cn(
           // 입력은 흰 바탕에 테두리로 칸을 보인다(Select와 같은 모양). 모서리는 Button과 같은 14px로 맞춘다.
-          'h-[52px] w-full rounded-button border border-border-strong bg-surface px-lg text-body text-text transition-colors',
-          'hover:not-data-disabled:not-focus:border-text-tertiary',
+          'h-[52px] w-full rounded-button border border-border-input bg-surface px-lg text-body text-text transition-colors',
+          'hover:not-data-disabled:not-focus:border-border-input-hover',
           // 흰 바탕에서도 text-tertiary는 대비가 약 3:1이라, 4.5:1을 넘는 text-secondary를 쓴다.
           'placeholder:text-text-secondary',
           // 입력 칸은 마우스로 눌러도 어디에 쓰는지 보여야 하므로 focus-visible이 아니라 focus에 그린다.
