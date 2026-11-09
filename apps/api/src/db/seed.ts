@@ -63,7 +63,7 @@ const FIXED_SCENARIOS: Scenario[] = [
   // 판매 예정
   { salesOpenDay: 3, pastCount: 0, firstFutureDay: 10, cancel: 'none' },
   // 판매 중. 지난 회차(판매 종료)와 취소된 회차가 섞여 있다.
-  { salesOpenDay: -10, pastCount: 2, firstFutureDay: 1, cancel: 'one-future' },
+  { salesOpenDay: -10, pastCount: 1, firstFutureDay: 1, cancel: 'one-future' },
   // 남은 회차가 모두 취소됐다(회차 취소).
   { salesOpenDay: -10, pastCount: 0, firstFutureDay: 2, cancel: 'all-future' },
   // 모든 회차가 끝났다(판매 종료).

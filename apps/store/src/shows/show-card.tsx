@@ -11,33 +11,37 @@ export function ShowCardList({ children }: { children: ReactNode }) {
   );
 }
 
-export function ShowCard({ show }: { show: ShowCardData }) {
+// 카드와 로딩 카드가 같은 틀을 써서, 응답이 와서 바뀌어도 자리가 흔들리지 않는다.
+function ShowCardFrame({ children }: { children: ReactNode }) {
   return (
     <li className="flex gap-md sm:flex-col sm:gap-sm">
-      {/* 포스터는 뒤 티켓에서 넣는다. 그때도 같은 3:4 자리를 차지해 목록이 흔들리지 않는다. */}
+      {/* 포스터는 뒤 티켓에서 넣는다. 그때도 같은 3:4 자리를 차지한다. */}
       <Skeleton className="aspect-[3/4] w-[96px] shrink-0 sm:w-full" />
-      <div className="flex min-w-0 flex-col gap-xs">
-        <h2 className="line-clamp-2 text-body font-semibold break-keep">
-          {show.title}
-        </h2>
-        <p className="truncate text-body-sm text-text-secondary">
-          {show.venueName}
-        </p>
-        <p className="text-body-sm text-text-secondary">{show.period}</p>
-      </div>
+      <div className="flex min-w-0 flex-1 flex-col gap-xs">{children}</div>
     </li>
+  );
+}
+
+export function ShowCard({ card }: { card: ShowCardData }) {
+  return (
+    <ShowCardFrame>
+      <h2 className="line-clamp-2 text-body font-semibold break-keep">
+        {card.title}
+      </h2>
+      <p className="truncate text-body-sm text-text-secondary">
+        {card.venueName}
+      </p>
+      <p className="text-body-sm text-text-secondary">{card.period}</p>
+    </ShowCardFrame>
   );
 }
 
 export function ShowCardSkeleton() {
   return (
-    <li className="flex gap-md sm:flex-col sm:gap-sm">
-      <Skeleton className="aspect-[3/4] w-[96px] shrink-0 sm:w-full" />
-      <div className="flex min-w-0 flex-1 flex-col gap-sm">
-        <Skeleton className="h-[20px] w-full rounded-badge" />
-        <Skeleton className="h-[16px] w-1/2 rounded-badge" />
-        <Skeleton className="h-[16px] w-2/3 rounded-badge" />
-      </div>
-    </li>
+    <ShowCardFrame>
+      <Skeleton className="h-[20px] w-full rounded-badge" />
+      <Skeleton className="h-[16px] w-1/2 rounded-badge" />
+      <Skeleton className="h-[16px] w-2/3 rounded-badge" />
+    </ShowCardFrame>
   );
 }

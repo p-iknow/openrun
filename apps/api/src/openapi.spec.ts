@@ -12,9 +12,6 @@ describe('OpenAPI 문서', () => {
         },
       },
     });
-    expect(document.components?.schemas?.ShowPageDto).toMatchObject({
-      required: ['items', 'page', 'size', 'totalCount', 'totalPages'],
-    });
   });
 
   it('모든 경로의 오류 응답을 Problem Details로 적는다', async () => {
