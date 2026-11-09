@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { overlay, OverlayProvider } from 'overlay-kit';
 import { useState } from 'react';
 import { Button } from './button.js';
 import { Drawer } from './drawer.js';
@@ -12,7 +13,7 @@ const meta = {
     docs: {
       description: {
         component:
-          "**클라이언트용** 컴포넌트다(Base UI Drawer 바탕, 파일 첫 줄에 `'use client'`). Server Component에서도 import할 수 있지만 직렬화할 수 있는 props와 요소만 넘긴다. `onOpenChange`는 함수라서 앱의 클라이언트 컴포넌트에서만 넘긴다. 화면 아래에서 올라오는 시트이고, 아래로 밀거나 바깥을 누르거나 Esc를 누르거나 닫기 버튼을 누르면 닫힌다. 열리면 포커스가 시트 안에 머물고 뒤 화면은 스크롤되지 않으며, 닫히면 포커스가 열었던 버튼으로 돌아간다. 본문이 길면 본문만 스크롤되고 `footer`의 버튼은 늘 보인다. `footer`의 버튼으로 시트를 닫으려면 `open`과 `onOpenChange`로 열림 상태를 제어한다.",
+          "**클라이언트용** 컴포넌트다(Base UI Drawer 바탕, 파일 첫 줄에 `'use client'`). Server Component에서도 import할 수 있지만 직렬화할 수 있는 props와 요소만 넘긴다. `onOpenChange`는 함수라서 앱의 클라이언트 컴포넌트에서만 넘긴다. 화면 아래에서 올라오는 시트이고, 아래로 밀거나 바깥을 누르거나 Esc를 누르거나 닫기 버튼을 누르면 닫힌다. 열리면 포커스가 시트 안에 머물고 뒤 화면은 스크롤되지 않으며, 닫히면 포커스가 열었던 버튼으로 돌아간다. 본문이 길면 본문만 스크롤되고 `footer`의 버튼은 늘 보인다. `footer`의 버튼으로 시트를 닫으려면 `open`과 `onOpenChange`로 열림 상태를 제어한다. `triggerLabel`을 빼면 여는 버튼 없이 시트만 그린다. 이때는 버튼을 화면 어디에든 따로 두고 `open`과 `onOpenChange`를 반드시 넘긴다. 닫히면 포커스는 시트를 열기 전에 포커스가 있던 요소로 돌아간다.",
       },
     },
     // 시트는 화면 폭을 꽉 채우므로 작은 휴대폰 폭으로 확인한다.
@@ -48,6 +49,76 @@ type Story = StoryObj<typeof meta>;
 
 /** 본문만 있는 시트. 열림 상태는 컴포넌트가 스스로 관리한다. */
 export const Default: Story = {};
+
+/**
+ * 여는 버튼을 Drawer와 떨어진 곳에 둔다. `triggerLabel`을 빼고 `open`과 `onOpenChange`로 열림 상태를 제어한다.
+ * 버튼 모양과 위치는 쓰는 쪽이 정한다. 닫히면 포커스가 이 버튼으로 돌아간다.
+ */
+export const WithoutTrigger: Story = {
+  parameters: { controls: { disable: true } },
+  render: function Render(args) {
+    const [open, setOpen] = useState(false);
+    return (
+      <div className="flex flex-col gap-lg">
+        <div className="flex items-center justify-between">
+          <span className="text-title font-bold">목록</span>
+          <Button variant="secondary" onClick={() => setOpen(true)}>
+            따로 둔 버튼
+          </Button>
+        </div>
+        <Drawer
+          title={args.title}
+          description={args.description}
+          open={open}
+          onOpenChange={setOpen}
+        >
+          {args.children}
+        </Drawer>
+      </div>
+    );
+  },
+};
+
+/**
+ * overlay-kit으로 시트를 코드로 연다. 상태를 따로 두지 않고 `overlay.openAsync`가 준 값을 그대로 넘긴다.
+ * `isOpen`은 `open`에, `close`는 `onOpenChange`와 footer 버튼에, `unmount`는 닫히는 애니메이션이 끝난 뒤 부르는 `onCloseComplete`에 넘긴다.
+ * `openAsync`는 `close`에 넘긴 값으로 끝나므로, 확인을 눌렀는지 결과로 받을 수 있다.
+ */
+export const WithOverlayKit: Story = {
+  parameters: { controls: { disable: true } },
+  render: function Render(args) {
+    const [result, setResult] = useState('아직 열지 않음');
+    return (
+      <OverlayProvider>
+        <div className="flex flex-col items-start gap-md">
+          <Button
+            variant="secondary"
+            onClick={async () => {
+              const confirmed = await overlay.openAsync<boolean>(
+                ({ isOpen, close, unmount }) => (
+                  <Drawer
+                    title={args.title}
+                    description={args.description}
+                    open={isOpen}
+                    onOpenChange={() => close(false)}
+                    onCloseComplete={unmount}
+                    footer={<Button onClick={() => close(true)}>확인</Button>}
+                  >
+                    {args.children}
+                  </Drawer>
+                ),
+              );
+              setResult(confirmed ? '확인을 눌러 닫음' : '확인 없이 닫음');
+            }}
+          >
+            overlay-kit으로 열기
+          </Button>
+          <p className="text-body-sm text-text-secondary">결과: {result}</p>
+        </div>
+      </OverlayProvider>
+    );
+  },
+};
 
 const groupA = [
   { value: 'a1', label: '항목 하나' },

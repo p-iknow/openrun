@@ -14,9 +14,7 @@ import { cn } from './cn.js';
 const motion =
   'duration-[450ms] ease-[cubic-bezier(0.32,0.72,0,1)] data-swiping:duration-0 data-ending-style:duration-[calc(var(--drawer-swipe-strength)*400ms)] motion-reduce:duration-0';
 
-export interface DrawerProps {
-  /** 시트를 여는 버튼의 글자. 버튼은 보조 Button 모양이다. */
-  triggerLabel: string;
+interface DrawerContentProps {
   /** 시트 맨 위의 제목. 시트의 접근 가능한 이름이 된다. */
   title: string;
   /** 제목 아래의 짧은 설명. */
@@ -25,11 +23,39 @@ export interface DrawerProps {
   children: ReactNode;
   /** 시트 아래에 붙는 행동 버튼들. 본문이 스크롤돼도 늘 보이고, 버튼들은 폭을 나눠 갖는다. */
   footer?: ReactNode;
+  /**
+   * 닫히는 애니메이션이 끝난 뒤 부른다. overlay-kit처럼 시트를 코드로 열고 닫는 도구에서
+   * 애니메이션을 끊지 않고 시트를 트리에서 빼낼 때 쓴다. 예: `onCloseComplete={unmount}`.
+   */
+  onCloseComplete?: () => void;
+}
+
+/** 시트를 여는 버튼까지 Drawer가 그린다. 열림 상태는 Drawer가 관리하고, 필요하면 제어할 수도 있다. */
+interface DrawerWithTriggerProps extends DrawerContentProps {
+  /** 시트를 여는 버튼의 글자. 버튼은 보조 Button 모양이다. */
+  triggerLabel: string;
   /** 제어할 때의 열림 상태. `footer`의 버튼으로 시트를 닫으려면 이 값과 `onOpenChange`를 함께 쓴다. */
   open?: boolean;
   /** 열림 상태가 바뀌려 할 때 부른다. 함수라서 Server Component에서는 넘길 수 없다. */
   onOpenChange?: (open: boolean) => void;
 }
+
+/**
+ * 시트만 그린다. 여는 버튼은 쓰는 쪽이 화면 어디에든 두고, 열림 상태를 직접 제어한다.
+ * 닫히면 포커스는 시트를 열기 전에 포커스가 있던 요소(보통 그 버튼)로 돌아간다.
+ */
+interface DrawerWithoutTriggerProps extends DrawerContentProps {
+  triggerLabel?: never;
+  /** 열림 상태. 여는 버튼이 없으므로 반드시 제어한다. */
+  open: boolean;
+  /**
+   * 바깥 누르기, Esc, 아래로 밀기, 닫기 버튼으로 닫히려 할 때 `false`로 부른다.
+   * 여는 버튼이 없어 `true`로는 부르지 않으므로, overlay-kit의 `close`를 그대로 넘겨도 된다.
+   */
+  onOpenChange: (open: boolean) => void;
+}
+
+export type DrawerProps = DrawerWithTriggerProps | DrawerWithoutTriggerProps;
 
 export function Drawer({
   triggerLabel,
@@ -39,16 +65,24 @@ export function Drawer({
   footer,
   open,
   onOpenChange,
+  onCloseComplete,
 }: DrawerProps) {
   return (
     <BaseDrawer.Root
       open={open}
       // Base UI가 두 번째 인자로 주는 eventDetails는 공개 API에 드러내지 않는다.
       onOpenChange={(nextOpen) => onOpenChange?.(nextOpen)}
+      onOpenChangeComplete={(nextOpen) => {
+        if (!nextOpen) onCloseComplete?.();
+      }}
     >
-      <BaseDrawer.Trigger className={buttonVariants({ variant: 'secondary' })}>
-        {triggerLabel}
-      </BaseDrawer.Trigger>
+      {triggerLabel !== undefined && (
+        <BaseDrawer.Trigger
+          className={buttonVariants({ variant: 'secondary' })}
+        >
+          {triggerLabel}
+        </BaseDrawer.Trigger>
+      )}
       <BaseDrawer.Portal>
         {/* 시트를 밀어 내리는 만큼 뒤 화면이 밝아진다. */}
         <BaseDrawer.Backdrop
