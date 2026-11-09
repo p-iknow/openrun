@@ -19,15 +19,5 @@ export { Select } from './select.js';
 export type { SelectItem, SelectProps } from './select.js';
 export { ToggleGroup } from './toggle-group.js';
 export type { ToggleGroupItem, ToggleGroupProps } from './toggle-group.js';
-export { Drawer } from './drawer.js';
-export type {
-  DrawerBodyProps,
-  DrawerCloseProps,
-  DrawerDescriptionProps,
-  DrawerFooterProps,
-  DrawerHeaderProps,
-  DrawerPopupProps,
-  DrawerRootProps,
-  DrawerTitleProps,
-  DrawerTriggerProps,
-} from './drawer.js';
+// 'use client' 파일의 부품을 서버에서 실행되는 이 파일에서 묶는다. 자세한 까닭은 drawer.tsx 머리 주석에 있다.
+export * as Drawer from './drawer.js';

@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { overlay, OverlayProvider } from 'overlay-kit';
 import { useState } from 'react';
 import { Button } from './button.js';
-import { Drawer } from './drawer.js';
+import * as Drawer from './drawer.js';
 import { ToggleGroup } from './toggle-group.js';
 
 const meta = {
@@ -24,7 +24,7 @@ const meta = {
     docs: {
       description: {
         component:
-          "**클라이언트용** 컴포넌트다(Base UI Drawer 바탕, 파일 첫 줄에 `'use client'`). 부품을 쓰는 쪽에서 조립하는 compound 컴포넌트이고, 부품은 `Drawer.Root`, `Drawer.Trigger`, `Drawer.Popup`, `Drawer.Header`, `Drawer.Title`, `Drawer.Description`, `Drawer.Body`, `Drawer.Footer`, `Drawer.Close`이다. 부품은 'use client' 파일에 두고 `Drawer` 객체는 지시어 없는 파일에서 묶어, Server Component에서도 `Drawer.Root`처럼 쓸 수 있다. Server Component에서도 import할 수 있지만 직렬화할 수 있는 props와 요소만 넘기고, `onOpenChange`, `onCloseComplete`, `Drawer.Close`의 `onClick`은 함수라서 앱의 클라이언트 컴포넌트에서만 넘긴다. 화면 아래에서 올라오는 시트이고, 아래로 밀거나 바깥을 누르거나 Esc를 누르거나 머리의 닫기 버튼을 누르면 닫힌다. 열리면 포커스가 시트 안에 머물고 뒤 화면은 스크롤되지 않으며, 닫히면 포커스가 열기 전 요소(보통 여는 버튼)로 돌아간다. 본문이 길면 `Drawer.Body`만 스크롤되고 `Drawer.Footer`는 늘 보인다. `Drawer.Trigger` 없이 쓰려면 `Drawer.Root`에 `open`과 `onOpenChange`를 넘겨 열림 상태를 제어한다.",
+          "**클라이언트용** 컴포넌트다(Base UI Drawer 바탕, 파일 첫 줄에 `'use client'`). 부품을 쓰는 쪽에서 조립하는 compound 컴포넌트이고, 부품은 `Drawer.Root`, `Drawer.Trigger`, `Drawer.Popup`, `Drawer.Header`, `Drawer.Title`, `Drawer.Description`, `Drawer.Body`, `Drawer.Footer`, `Drawer.Close`이다. 부품은 'use client' 파일에서 이름 단위로 내보내고 패키지 진입점이 `export * as Drawer`로 묶어, Server Component에서도 `Drawer.Root`처럼 쓸 수 있다. props 타입은 `Drawer.RootProps`처럼 쓴다. Server Component에서도 import할 수 있지만 직렬화할 수 있는 props와 요소만 넘기고, `onOpenChange`, `onCloseComplete`, `Drawer.Close`의 `onClick`은 함수라서 앱의 클라이언트 컴포넌트에서만 넘긴다. 화면 아래에서 올라오는 시트이고, 아래로 밀거나 바깥을 누르거나 Esc를 누르거나 머리의 닫기 버튼을 누르면 닫힌다. 열리면 포커스가 시트 안에 머물고 뒤 화면은 스크롤되지 않으며, 닫히면 포커스가 열기 전 요소(보통 여는 버튼)로 돌아간다. 본문이 길면 `Drawer.Body`만 스크롤되고 `Drawer.Footer`는 늘 보인다. `Drawer.Trigger` 없이 쓰려면 `Drawer.Root`에 `open`과 `onOpenChange`를 넘겨 열림 상태를 제어한다.",
       },
     },
     // 시트는 화면 폭을 꽉 채우므로 작은 휴대폰 폭으로 확인한다.

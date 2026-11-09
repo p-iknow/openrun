@@ -10,23 +10,38 @@ import { cn } from './cn.js';
 // 아래로 밀기, 바깥 누르기, Esc로 닫기와 포커스 가두기·되돌리기, 뒤 화면 스크롤 잠금은 Base UI Drawer가 맡는다.
 // Tailwind가 dist에서 클래스를 찾을 수 있도록 클래스 이름을 문자열 그대로 둔다.
 //
-// 쓰는 쪽에서 조립하는 compound 컴포넌트의 부품들이다. 쓰는 쪽은 drawer.ts의 `Drawer.Root` 같은 이름으로 쓴다.
-// 부품을 `Drawer` 객체로 묶는 일은 이 파일이 아니라 지시어 없는 drawer.ts에서 한다.
-// 'use client' 파일이 내보낸 객체의 속성(`Drawer.Root`)은 Server Component에서 undefined가 되어 렌더링이 실패하기 때문이다.
+// 쓰는 쪽에서 조립하는 compound 컴포넌트의 부품들이다. 이 파일은 `Root`, `Trigger`처럼 이름 단위로 내보내고,
+// 패키지 진입점(index.ts)이 `export * as Drawer from './drawer.js'`로 묶어 `Drawer.Root`처럼 쓰게 한다(Base UI와 같은 방식).
+// 이 파일 안에서 `Drawer` 객체를 만들어 내보내지 않는다. Server Component는 'use client' 파일의 export를 참조로만 받아
+// 객체의 속성(`Drawer.Root`)을 꺼낼 수 없어 undefined가 된다. 묶는 일은 서버에서 실행되는 index.ts가 한다.
+//
+// <Drawer.Root>
+//   <Drawer.Trigger>열기</Drawer.Trigger>
+//   <Drawer.Popup>
+//     <Drawer.Header>
+//       <Drawer.Title />
+//       <Drawer.Description />
+//     </Drawer.Header>
+//     <Drawer.Body />
+//     <Drawer.Footer>
+//       <Drawer.Close />
+//     </Drawer.Footer>
+//   </Drawer.Popup>
+// </Drawer.Root>
 
 // 열고 닫는 움직임. Base UI 예제의 값을 따른다.
 const motion =
   'duration-[450ms] ease-[cubic-bezier(0.32,0.72,0,1)] data-swiping:duration-0 data-ending-style:duration-[calc(var(--drawer-swipe-strength)*400ms)] motion-reduce:duration-0';
 
-export interface DrawerRootProps {
+export interface RootProps {
   /**
-   * 제어할 때의 열림 상태. 비우면 `DrawerTrigger`와 `DrawerClose`로 Drawer가 스스로 열고 닫는다.
-   * `DrawerTrigger` 없이 쓰려면(버튼을 따로 두거나 overlay-kit으로 열 때) 이 값과 `onOpenChange`를 함께 넘긴다.
+   * 제어할 때의 열림 상태. 비우면 `Drawer.Trigger`와 `Drawer.Close`로 Drawer가 스스로 열고 닫는다.
+   * `Drawer.Trigger` 없이 쓰려면(버튼을 따로 두거나 overlay-kit으로 열 때) 이 값과 `onOpenChange`를 함께 넘긴다.
    */
   open?: boolean;
   /**
    * 열림 상태가 바뀌려 할 때 부른다. 함수라서 Server Component에서는 넘길 수 없다.
-   * `DrawerTrigger` 없이 쓰면 `false`로만 불리므로, overlay-kit의 `close`를 그대로 넘겨도 된다.
+   * `Drawer.Trigger` 없이 쓰면 `false`로만 불리므로, overlay-kit의 `close`를 그대로 넘겨도 된다.
    */
   onOpenChange?: (open: boolean) => void;
   /**
@@ -38,12 +53,12 @@ export interface DrawerRootProps {
 }
 
 /** 부품들이 열림 상태를 나눠 갖게 한다. 요소를 그리지 않는다. */
-export function DrawerRoot({
+export function Root({
   open,
   onOpenChange,
   onCloseComplete,
   children,
-}: DrawerRootProps) {
+}: RootProps) {
   return (
     <BaseDrawer.Root
       open={open}
@@ -58,7 +73,7 @@ export function DrawerRoot({
   );
 }
 
-export interface DrawerTriggerProps {
+export interface TriggerProps {
   /** Button과 같은 종류. 기본은 `secondary`. */
   variant?: ButtonVariant;
   disabled?: boolean;
@@ -66,11 +81,11 @@ export interface DrawerTriggerProps {
 }
 
 /** 시트를 여는 버튼. Button 모양이고, 닫히면 포커스가 이 버튼으로 돌아온다. */
-export function DrawerTrigger({
+export function Trigger({
   variant = 'secondary',
   disabled = false,
   children,
-}: DrawerTriggerProps) {
+}: TriggerProps) {
   return (
     <BaseDrawer.Trigger
       disabled={disabled}
@@ -81,13 +96,13 @@ export function DrawerTrigger({
   );
 }
 
-export interface DrawerPopupProps {
-  /** `DrawerHeader`, `DrawerBody`, `DrawerFooter`를 위에서부터 차례로 넣는다. */
+export interface PopupProps {
+  /** `Drawer.Header`, `Drawer.Body`, `Drawer.Footer`를 위에서부터 차례로 넣는다. */
   children: ReactNode;
 }
 
 /** 화면 아래에서 올라오는 시트와 뒤 화면을 덮는 막. 맨 위에 아래로 밀 수 있음을 보여 주는 손잡이를 그린다. */
-export function DrawerPopup({ children }: DrawerPopupProps) {
+export function Popup({ children }: PopupProps) {
   return (
     <BaseDrawer.Portal>
       {/* 시트를 밀어 내리는 만큼 뒤 화면이 밝아진다. */}
@@ -118,13 +133,13 @@ export function DrawerPopup({ children }: DrawerPopupProps) {
   );
 }
 
-export interface DrawerHeaderProps {
-  /** `DrawerTitle`과 `DrawerDescription`을 넣는다. */
+export interface HeaderProps {
+  /** `Drawer.Title`과 `Drawer.Description`을 넣는다. */
   children: ReactNode;
 }
 
 /** 시트 맨 위. 왼쪽에 제목과 설명을 쌓고, 오른쪽에 닫기 버튼을 둔다. */
-export function DrawerHeader({ children }: DrawerHeaderProps) {
+export function Header({ children }: HeaderProps) {
   return (
     <div className="flex shrink-0 items-start justify-between gap-md px-xl pt-md">
       <div className="flex flex-col gap-xs">{children}</div>
@@ -149,12 +164,12 @@ export function DrawerHeader({ children }: DrawerHeaderProps) {
   );
 }
 
-export interface DrawerTitleProps {
+export interface TitleProps {
   children: ReactNode;
 }
 
 /** 시트의 제목. 시트의 접근 가능한 이름이 되므로 꼭 넣는다. */
-export function DrawerTitle({ children }: DrawerTitleProps) {
+export function Title({ children }: TitleProps) {
   return (
     <BaseDrawer.Title className="text-title font-bold">
       {children}
@@ -162,12 +177,12 @@ export function DrawerTitle({ children }: DrawerTitleProps) {
   );
 }
 
-export interface DrawerDescriptionProps {
+export interface DescriptionProps {
   children: ReactNode;
 }
 
 /** 제목 아래의 짧은 설명. 스크린 리더가 시트를 열 때 함께 읽는다. */
-export function DrawerDescription({ children }: DrawerDescriptionProps) {
+export function Description({ children }: DescriptionProps) {
   return (
     <BaseDrawer.Description className="text-body-sm text-text-secondary">
       {children}
@@ -175,12 +190,12 @@ export function DrawerDescription({ children }: DrawerDescriptionProps) {
   );
 }
 
-export interface DrawerBodyProps {
+export interface BodyProps {
   children: ReactNode;
 }
 
 /** 시트 본문. 길면 본문만 스크롤된다. */
-export function DrawerBody({ children }: DrawerBodyProps) {
+export function Body({ children }: BodyProps) {
   return (
     // Content 안에서는 마우스로 글자를 고를 때 시트가 밀리지 않는다.
     // 본문이 맨 아래이면(footer가 없으면) 홈 표시줄에 가리지 않도록 아래 안전 영역만큼 더 띄운다.
@@ -190,13 +205,13 @@ export function DrawerBody({ children }: DrawerBodyProps) {
   );
 }
 
-export interface DrawerFooterProps {
+export interface FooterProps {
   /** 행동 버튼들. 버튼들은 폭을 나눠 갖는다. */
   children: ReactNode;
 }
 
 /** 시트 아래에 붙는 행동 버튼 줄. 본문이 스크롤돼도 늘 보인다. */
-export function DrawerFooter({ children }: DrawerFooterProps) {
+export function Footer({ children }: FooterProps) {
   return (
     // 홈 표시줄이 있는 휴대폰에서 버튼이 가리지 않도록 아래 안전 영역만큼 띄운다.
     <div className="flex shrink-0 gap-sm border-t border-border px-xl pt-md pb-[calc(var(--spacing-lg)+env(safe-area-inset-bottom,0px))] *:flex-1">
@@ -205,7 +220,7 @@ export function DrawerFooter({ children }: DrawerFooterProps) {
   );
 }
 
-export interface DrawerCloseProps {
+export interface CloseProps {
   /** Button과 같은 종류. 기본은 `secondary`. */
   variant?: ButtonVariant;
   /** 시트를 닫기 전에 부른다. 예: 고른 값을 적용한다. 함수라서 Server Component에서는 넘길 수 없다. */
@@ -214,11 +229,11 @@ export interface DrawerCloseProps {
 }
 
 /** 누르면 시트를 닫는 Button 모양 버튼. 열림 상태를 제어하지 않아도 footer의 "적용" 같은 버튼으로 시트를 닫을 수 있다. */
-export function DrawerClose({
+export function Close({
   variant = 'secondary',
   onClick,
   children,
-}: DrawerCloseProps) {
+}: CloseProps) {
   return (
     <BaseDrawer.Close onClick={onClick} className={buttonVariants({ variant })}>
       {children}
