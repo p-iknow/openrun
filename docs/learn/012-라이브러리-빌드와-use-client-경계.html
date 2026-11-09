@@ -21,6 +21,7 @@
           <li><a href="#tsdown">tsdown으로 직접 확인하기</a></li>
           <li><a href="#keep">번들러를 쓰면서 경계 지키기</a></li>
           <li><a href="#others">다른 라이브러리는 어떻게 하나</a></li>
+          <li><a href="#why">왜 Base UI와 MUI는 번들러를 쓰지 않나</a></li>
           <li><a href="#enough">파일마다 지시어만 두면 될까</a></li>
           <li><a href="#publish">npm에 배포할 때</a></li>
         </ol>
@@ -37,7 +38,7 @@
         <p class="lead">
           "<code>store-ui</code>의 <code>dist</code>를 번들러로 한 파일에 묶으면 Button의 <code>'use client'</code>는 어떻게
           되고, Badge는 어떤 영향을 받는가?"라는 질문에서 시작한다. 지시어가 무엇을 표시하는지, 지금 빌드가 경계를 어떻게
-          지키는지, 번들러(tsdown, Rolldown)를 쓰면 무엇이 달라지는지, npm에 배포할 때 무엇을 챙기는지 차례로 정리한다.
+          지키는지, Base UI·MUI·Radix는 실제로 어떻게 빌드하고 왜 그렇게 하는지, 번들러(tsdown, Rolldown)를 쓰면 무엇이 달라지는지, npm에 배포할 때 무엇을 챙기는지 차례로 정리한다.
         </p>
 
         <section id="overview">
@@ -329,14 +330,21 @@ npx tsdown src/index.ts --format esm --no-dts --unbundle</code></pre>
           <h2>번들러를 쓰면서 경계 지키기</h2>
           <p>
             CSS 처리, ESM과 CJS 동시 출력, 경로 별칭 해석처럼 <code>tsc</code>로는 어려운 일이 생기면 번들러가 필요해진다.
-            그때 경계를 지키는 방법은 셋이다.
+            그때 경계를 지키는 방법은 넷이다.
           </p>
           <ol class="steps blue">
             <li>
-              <strong>모듈 구조 보존 (가장 흔함)</strong>
+              <strong>모듈 구조 보존</strong>
               tsdown은 <code>unbundle: true</code>, Rollup과 Vite는 <code>output.preserveModules: true</code>로 파일을 합치지
               않는다. Rollup은 이것만으로는 지시어를 지우므로 <code>rollup-preserve-directives</code> 같은 플러그인을
               함께 쓴다. <code>bunchee</code>처럼 지시어를 직접 지원하는 도구도 있다.
+            </li>
+            <li>
+              <strong>진입 파일에 지시어 두기</strong>
+              번들러는 다른 모듈의 맨 위 지시어는 버리지만 <strong>진입 모듈의 지시어는 남긴다</strong>. 그래서 진입 파일
+              (<code>src/index.ts</code>) 첫 줄에 <code>'use client'</code>를 두면 묶은 결과 파일 첫 줄에도 남는다. 진입점
+              전체가 클라이언트가 되므로, 패키지 하나에 클라이언트 컴포넌트 하나만 담을 때 맞는 방법이다. Radix가 이렇게
+              한다(<a href="#others">아래</a>).
             </li>
             <li>
               <strong>진입점 분리 + banner</strong>
@@ -379,7 +387,60 @@ it('클라이언트 입구 파일만 use client로 시작한다', () =&gt; {
         <section id="others">
           <h2>다른 라이브러리는 어떻게 하나</h2>
           <p>
-            이 저장소가 쓰는 <code>@base-ui/react</code> 1.9.0의 배포 파일을 <code>node_modules</code>에서 직접 열어 봤다.
+            Base UI, MUI, Radix의 배포 파일을 열어 보고, GitHub 저장소의 빌드 스크립트까지 따라가 확인했다. 셋 다
+            <code>unbundle</code>은 쓰지 않는다. 방식은 두 갈래로 나뉜다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>라이브러리</th>
+                  <th>빌드 도구</th>
+                  <th>출력</th>
+                  <th>경계를 지키는 방법</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Base UI 1.9.0</td>
+                  <td><span class="badge green">번들러 없음</span> Babel</td>
+                  <td>파일 단위</td>
+                  <td>클라이언트 파일마다 지시어. 파일마다 변환하므로 그대로 남는다</td>
+                </tr>
+                <tr>
+                  <td>MUI Material 9.5.0</td>
+                  <td><span class="badge green">번들러 없음</span> Babel</td>
+                  <td>파일 단위</td>
+                  <td>같음</td>
+                </tr>
+                <tr>
+                  <td>Radix (react-dialog 1.3.1)</td>
+                  <td><span class="badge blue">번들러</span> esbuild</td>
+                  <td>패키지마다 <code>dist/index.mjs</code> 한 파일</td>
+                  <td>컴포넌트마다 패키지를 나누고, 진입 파일에 지시어</td>
+                </tr>
+                <tr>
+                  <td>지금 <code>store-ui</code></td>
+                  <td><span class="badge green">번들러 없음</span> <code>tsc</code></td>
+                  <td>파일 단위</td>
+                  <td>Base UI, MUI와 같음</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Base UI와 MUI: Babel로 파일마다 변환</h3>
+          <p>
+            두 저장소(<code>mui/base-ui</code>, <code>mui/material-ui</code>)의 패키지 빌드 스크립트는 MUI 공용 빌드 도구
+            <code>code-infra build</code>다. 이 도구(<code>mui/mui-public</code>의 <code>packages/code-infra</code>)가 실제로
+            실행하는 명령은 Babel CLI다.
+          </p>
+          <pre><code># packages/code-infra/src/utils/babel.mjs (요약)
+babel --config-file ... ${sourceDir} --out-dir ${outDir} --out-file-extension ...</code></pre>
+          <p>
+            디렉터리를 받아 파일마다 변환해 <code>--out-dir</code>에 그대로 내놓는다. 번들러가 아니다. 코드에
+            <code>bundle</code>이라는 옵션이 나오지만 값이 <code>esm</code>/<code>cjs</code>라서 묶기가 아니라
+            <strong>출력 형식</strong>을 고르는 이름이다. 배포된 Base UI Button을 보면 이렇게 생겼다.
           </p>
           <ul class="tree" style="--tree-col: 16rem">
             <li>
@@ -422,11 +483,176 @@ it('클라이언트 입구 파일만 use client로 시작한다', () =&gt; {
               서브패스로 어느 파일이든 서버에서 바로 import할 수 있으니, 입구가 될 수 있는 파일을 모두 표시한 것이다.
             </li>
             <li>
-              Radix, MUI 같은 다른 대형 UI 라이브러리도 같은 패턴(파일 단위 출력 + 파일별 지시어)으로 알려져 있다. 이
-              문서에서는 직접 확인하지 않았다.
+              MUI도 같다. <code>Button/Button.mjs</code> 첫 줄에 <code>'use client'</code>가 있고,
+              <code>Button/buttonClasses.mjs</code>와 배럴 <code>index.mjs</code>에는 없다. 지시어가 든 파일이 444개다.
+            </li>
+            <li>
+              CJS 파일(<code>Button.js</code>)은 <code>@babel/runtime</code> 헬퍼를 <code>require</code>한다. 번들러가 넣는
+              런타임 코드는 없다.
             </li>
           </ul>
-          <p>지금 <code>store-ui</code>가 하는 방식이 이 패턴과 같다.</p>
+
+          <h3>Radix: 번들러로 묶고, 진입 파일에 지시어</h3>
+          <p>
+            Radix는 <code>@radix-ui/react-dialog</code>, <code>@radix-ui/react-slot</code>처럼 컴포넌트마다 npm 패키지가 따로
+            있다. 패키지 빌드 스크립트 <code>radix-build</code>의 실체는 <code>radix-ui/primitives</code> 저장소의
+            <code>internal/builder/builder.js</code>이고, esbuild로 묶는다.
+          </p>
+          <pre><code class="language-js">// internal/builder/builder.js (요약)
+const esbuildConfig = {
+  entryPoints: ['src/index.ts'],
+  packages: 'external', // 의존성은 묶지 않는다
+  bundle: true,
+  format: 'cjs', // ESM은 같은 설정에 format: 'esm', .mjs로 한 번 더
+  keepNames: true,
+};</code></pre>
+          <p>
+            이 파일에는 <code>banner</code>도 <code>use client</code>도 없다. 지시어는 진입 파일에 있고, 컴포넌트 본체인
+            <code>dialog.tsx</code>에는 없다.
+          </p>
+          <pre><code class="language-ts">// packages/react/dialog/src/index.ts
+'use client';
+export { createDialogScope, ... } from './dialog';</code></pre>
+          <ul>
+            <li>
+              번들러는 진입 모듈의 지시어를 남기므로, 결과물 <code>dist/index.mjs</code> 첫 줄에 <code>"use client";</code>가
+              있다. 그 아래는 esbuild가 넣은 <code>__defProp</code>, <code>__name</code> 헬퍼로 시작한다.
+            </li>
+            <li>
+              패키지 하나에 컴포넌트 하나라서 진입점 전체가 클라이언트여도 잃는 게 없다. 경계 단위가 파일이 아니라
+              <strong>패키지</strong>인 셈이다.
+            </li>
+            <li>클라이언트일 필요가 없는 <code>react-slot</code>은 진입점에 지시어가 없다.</li>
+          </ul>
+          <div class="callout">
+            <p>
+              <code>store-ui</code>는 공용 Badge와 클라이언트 Button을 한 패키지에 담는다. Radix 방식을 따르려면 패키지를
+              나눠야 하므로, Base UI와 MUI처럼 파일 단위로 빌드하는 쪽이 맞다.
+            </p>
+          </div>
+        </section>
+
+        <section id="why">
+          <h2>왜 Base UI와 MUI는 번들러를 쓰지 않나</h2>
+          <p>
+            "번들러로 묶고 압축하면 더 작아지고 좋은 것 아닌가?"라는 의문이 들 수 있다. 답은 압축은 사용하는 쪽이 어차피
+            다시 한다는 것이다. 라이브러리가 미리 하면 최종 크기는 거의 같고, 잃는 것만 생긴다.
+          </p>
+
+          <h3>npm 패키지 크기와 사용자가 받는 크기는 다르다</h3>
+          <div class="flow">
+            <div class="lane blue">
+              <div class="lane-title">개발자 컴퓨터와 빌드 서버</div>
+              <ol class="chain">
+                <li><span>라이브러리 배포본 (압축 안 됨, 파일 수백 개)</span></li>
+                <li><span>앱의 번들러 (Next 등)</span></li>
+              </ol>
+            </div>
+            <div class="lane green">
+              <div class="lane-title">사용자 브라우저</div>
+              <ol class="chain">
+                <li><span>쓰는 코드만, 압축된 JS</span></li>
+              </ol>
+            </div>
+          </div>
+          <ul>
+            <li><code>node_modules</code>의 파일은 개발자 컴퓨터와 빌드 서버에만 있다. 브라우저로 그대로 가지 않는다.</li>
+            <li>
+              브라우저로 가는 건 앱 번들러의 출력이다. 앱이 실제로 import한 코드만 골라 묶고, 압축하고, 페이지별로 나눈다.
+            </li>
+            <li>라이브러리가 미리 압축해도 앱 번들러가 다시 압축하므로 최종 크기는 거의 같다.</li>
+          </ul>
+
+          <h3>사용처에서 빌드된다. 단, 변환은 라이브러리 몫</h3>
+          <p>"사용처에서 빌드된다"는 맞다. 다만 묶기와 변환(transpile)은 하는 쪽이 다르다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>일</th>
+                  <th>누가 하나</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>TS 타입 지우기, JSX를 <code>jsx()</code> 호출로 바꾸기</td>
+                  <td><span class="badge blue">라이브러리</span> Babel, <code>tsc</code></td>
+                </tr>
+                <tr>
+                  <td>ESM과 CJS 두 형식 준비, <code>.d.ts</code> 생성</td>
+                  <td><span class="badge blue">라이브러리</span></td>
+                </tr>
+                <tr>
+                  <td>필요한 파일만 고르기, 묶기, 압축, 페이지별 분할</td>
+                  <td><span class="badge green">앱</span> Next, Vite 등</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <ul>
+            <li>
+              앱 번들러는 기본적으로 <code>node_modules</code> 안의 TS나 JSX를 변환해 주지 않는다. 그래서 라이브러리는 바로
+              실행할 수 있는 평범한 JS까지는 만들어 배포한다.
+            </li>
+            <li>
+              Next의 <code>transpilePackages</code>를 켜면 TS 소스를 받아 변환할 수도 있다. 하지만 공개 라이브러리는 모든
+              사용자가 그 설정을 하리라 기대할 수 없으니 변환해서 배포한다.
+            </li>
+            <li>
+              <code>store-ui</code>도 같다. <code>tsc</code>가 TS와 JSX를 JS로 바꿔 <code>dist</code>에 두고, 묶고 압축하는
+              일은 <code>apps/store</code>의 Next가 한다.
+            </li>
+          </ul>
+
+          <h3>미리 묶거나 압축하면 잃는 것</h3>
+          <ol class="steps blue">
+            <li>
+              <strong>tree-shaking이 둔해진다</strong>
+              Button만 import할 때 파일이 나뉘어 있으면 번들러는 <code>Button.mjs</code>와 그 파일이 import하는 파일만
+              가져온다. 한 파일로 묶여 있으면 그 안에서 안 쓰는 코드를 골라내야 하는데, 부수 효과가 있어 보이는 코드는 지우지
+              못하고 남긴다.
+            </li>
+            <li>
+              <strong>서버·클라이언트 경계를 나눌 수 없다</strong>
+              이 문서의 출발점이다. 파일 단위라야 컴포넌트마다 <code>'use client'</code>를 따로 둘 수 있다.
+            </li>
+            <li>
+              <strong>서브패스 import가 어렵다</strong>
+              <code>@base-ui/react/button</code>처럼 컴포넌트 하나만 가리키는 경로를 주려면 그 파일이 따로 있어야 한다.
+            </li>
+            <li>
+              <strong>디버깅이 어렵다</strong>
+              압축하면 함수 이름이 <code>a</code>, <code>b</code>로 바뀐다. 압축하지 않으면 에러 스택을 읽을 수 있고,
+              사용자가 <code>node_modules</code>의 코드를 열어 그대로 읽을 수 있다. 배포된 Base UI 코드에는 JSDoc 주석까지
+              남아 있다.
+            </li>
+            <li>
+              <strong>의존성이 중복될 수 있다</strong>
+              의존성을 실수로 함께 묶으면 앱에 같은 라이브러리가 두 벌 들어간다. React나 context처럼 하나여야 하는 것이
+              둘이 되면 버그가 난다. <a href="#tsdown">tsdown 실험</a>에서 Base UI가 번들 안으로 들어온 것이 이 경우다.
+            </li>
+          </ol>
+
+          <h3>번들하지 않는 쪽의 단점</h3>
+          <ul>
+            <li>
+              <strong>파일 수가 많다</strong>: 설치 용량과 파일 수가 늘어난다. 개발자 컴퓨터 사정이고, 사용자가 받는 크기와는
+              상관없다.
+            </li>
+            <li>
+              <strong>배럴 import가 개발 서버에서 느릴 수 있다</strong>: <code>import { Button } from '@mui/material'</code>처럼
+              배럴에서 가져오면, tree-shaking을 하지 않는 개발 모드에서는 배럴이 가리키는 모듈 수백 개를 읽는다. Next는
+              <code>optimizePackageImports</code>로 배럴 import를 개별 파일 import로 바꿔 준다. <code>store-ui</code>는 파일이
+              몇 개뿐이라 해당하지 않는다.
+            </li>
+          </ul>
+          <div class="callout">
+            <p>
+              라이브러리는 실행할 수 있는 JS로 <strong>변환</strong>만 하고 파일 구조를 그대로 넘긴다. <strong>묶기와
+              압축</strong>은 실제로 무엇을 쓰는지 아는 앱이 한다. 최적화를 포기한 게 아니라 더 잘할 수 있는 쪽에 맡긴
+              것이다.
+            </p>
+          </div>
         </section>
 
         <section id="enough">
@@ -534,6 +760,10 @@ it('클라이언트 입구 파일만 use client로 시작한다', () =&gt; {
               스토어 홈은 Server Component에서 Badge와 Button을 직접 렌더한다. Button에는 함수 prop 없이
               <code>type="submit"</code>만 넘긴다.
             </li>
+            <li>
+              Base UI, MUI와 같은 이유로 묶거나 압축하지 않는다. 변환만 <code>tsc</code>가 하고, 묶기와 압축은 스토어의 Next가
+              한다.
+            </li>
             <li>번들러로 바꾸게 되면 <code>unbundle: true</code>를 켜고, <code>dist</code> 검사 테스트를 함께 둔다.</li>
           </ul>
         </section>
@@ -577,6 +807,29 @@ it('클라이언트 입구 파일만 use client로 시작한다', () =&gt; {
               들어간 것이다. 의존성으로 선언해 번들 밖에 남기면 Base UI의 파일과 지시어가 그대로 유지된다.
             </p>
           </details>
+          <details>
+            <summary>6. Radix는 esbuild로 한 파일에 묶는데 어떻게 'use client'가 결과 파일에 남나?</summary>
+            <p>
+              지시어를 컴포넌트 파일이 아니라 진입 파일 <code>src/index.ts</code> 첫 줄에 둔다. 번들러는 다른 모듈의 맨 위
+              지시어는 버리지만 진입 모듈의 지시어는 남기므로 <code>dist/index.mjs</code> 첫 줄에 그대로 나온다. 패키지
+              하나에 컴포넌트 하나라서 진입점 전체가 클라이언트가 돼도 손해가 없다.
+            </p>
+          </details>
+          <details>
+            <summary>7. 라이브러리가 미리 압축해 배포하면 사용자가 받는 JS가 작아지나?</summary>
+            <p>
+              거의 그렇지 않다. 사용자가 받는 건 앱 번들러의 출력이고, 앱 번들러가 쓰는 코드만 골라 다시 압축한다. 미리
+              압축하면 최종 크기는 비슷한데 디버깅이 어려워지고, 한 파일로 묶었다면 tree-shaking과 경계 나누기까지 불리해진다.
+            </p>
+          </details>
+          <details>
+            <summary>8. 그럼 라이브러리가 TS 소스를 그대로 배포하면 안 되나?</summary>
+            <p>
+              앱 번들러는 기본적으로 <code>node_modules</code>의 TS와 JSX를 변환하지 않는다. Next의
+              <code>transpilePackages</code> 같은 설정이 있어야 하는데, 공개 라이브러리는 모든 사용자가 그렇게 하리라 기대할
+              수 없다. 그래서 변환까지는 라이브러리가 하고, 묶기와 압축만 앱에 맡긴다.
+            </p>
+          </details>
         </section>
 
         <section id="more">
@@ -591,6 +844,28 @@ it('클라이언트 입구 파일만 use client로 시작한다', () =&gt; {
             <li><a href="https://rolldown.rs/in-depth/directives">Rolldown: Directives</a> (번들링할 때 지시어가 남는 조건)</li>
             <li><a href="https://tsdown.dev/">tsdown</a> (<code>unbundle</code> 옵션)</li>
             <li><a href="https://www.npmjs.com/package/server-only">npm: server-only</a></li>
+            <li>
+              <a href="https://github.com/mui/mui-public/blob/master/packages/code-infra/src/utils/babel.mjs"
+                >mui/mui-public: code-infra의 Babel 빌드</a
+              >
+              (Base UI, MUI가 쓰는 빌드 도구)
+            </li>
+            <li>
+              <a href="https://github.com/radix-ui/primitives/blob/main/internal/builder/builder.js"
+                >radix-ui/primitives: internal/builder/builder.js</a
+              >
+              (Radix의 esbuild 설정)
+            </li>
+            <li>
+              <a href="https://nextjs.org/docs/app/api-reference/config/next-config-js/transpilePackages"
+                >Next.js: transpilePackages</a
+              >
+            </li>
+            <li>
+              <a href="https://nextjs.org/docs/app/api-reference/config/next-config-js/optimizePackageImports"
+                >Next.js: optimizePackageImports</a
+              >
+            </li>
             <li><a href="006-nextjs-렌더링-시점과-캐시.html">006 Next.js 렌더링 시점과 캐시</a></li>
             <li><a href="011-버튼으로-보는-tailwind-배치와-상태-패턴.html">011 Button으로 보는 Tailwind 배치와 상태 패턴</a></li>
           </ol>
