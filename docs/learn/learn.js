@@ -28,6 +28,11 @@ const learnDocuments = [
     tags: ['design-system', 'nextjs'],
   },
   { file: '013-useRender로-요소-바꿔-끼우기.html', title: '013 useRender로 요소 바꿔 끼우기', tags: ['design-system'] },
+  {
+    file: '014-서버가-받는-use-client-이름표.html',
+    title: "014 서버가 받는 'use client' 파일: 이름표 붙은 가짜",
+    tags: ['nextjs', 'design-system'],
+  },
 ];
 
 const currentFile = decodeURIComponent(location.pathname).split('/').pop();

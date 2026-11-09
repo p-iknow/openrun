@@ -1,0 +1,474 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>서버가 받는 'use client' 파일: 이름표 붙은 가짜</title>
+    <link rel="stylesheet" href="learn.css" />
+    <script src="vendor/highlightjs/highlight.min.js" defer></script>
+    <script src="learn.js" defer></script>
+  </head>
+  <body>
+    <div class="layout">
+      <nav aria-label="목차">
+        <strong>목차</strong>
+        <ol>
+          <li><a href="#question">출발점: Drawer.Root가 undefined</a></li>
+          <li><a href="#stub">서버는 'use client' 파일을 가짜로 바꾼다</a></li>
+          <li><a href="#manifest">진짜 코드는 어디 있나</a></li>
+          <li><a href="#render">이름표로 그리는 흐름</a></li>
+          <li><a href="#limits">이름표라서 생기는 규칙</a></li>
+          <li><a href="#object">객체로 묶으면 속이 비는 이유</a></li>
+          <li><a href="#namespace">서버 쪽 파일에서 묶으면 되는 이유</a></li>
+        </ol>
+        <strong>마무리</strong>
+        <ol>
+          <li><a href="#ours">우리 프로젝트에서는</a></li>
+          <li><a href="#check">스스로 확인하기</a></li>
+          <li><a href="#more">더 읽을거리</a></li>
+        </ol>
+      </nav>
+
+      <main>
+        <h1>서버가 받는 'use client' 파일: 이름표 붙은 가짜</h1>
+        <p class="lead">
+          Server Component가 <code>'use client'</code> 파일을 import하면 서버는 그 파일의 코드를 받지 않는다. 대신
+          export 이름마다 "어느 파일의 어느 export"라는 이름표가 붙은 가짜 함수를 받는다. 스토어 빌드 결과물에서 이 가짜를
+          직접 꺼내 보고, 그 때문에 <code>Drawer.Root</code>가 undefined가 됐던 이유와 <code>export * as Drawer</code>로
+          풀리는 이유를 정리한다.
+        </p>
+
+        <section id="question">
+          <h2>출발점: Drawer.Root가 undefined</h2>
+          <p>
+            Drawer를 compound 컴포넌트로 바꾸면서 <code>'use client'</code> 파일 안에서 부품을 객체로 묶어 내보냈다.
+          </p>
+          <pre><code class="language-ts">// drawer.tsx
+'use client';
+function Root() { /* … */ }
+function Trigger() { /* … */ }
+export const Drawer = { Root, Trigger };</code></pre>
+          <p>Server Component인 스토어 페이지에서 이것을 렌더링하자 빌드가 실패했다.</p>
+          <pre><code>Error: Element type is invalid: expected a string (for built-in components) or a class/function
+(for composite components) but got: undefined.</code></pre>
+          <p>
+            Client Component에서는 멀쩡히 동작하는 코드다. 서버에서만 <code>Drawer.Root</code>가 undefined가 된다. 그
+            까닭은 서버가 <code>drawer.tsx</code>를 어떤 모습으로 받는지 보면 알 수 있다.
+          </p>
+        </section>
+
+        <section id="stub">
+          <h2>서버는 'use client' 파일을 가짜로 바꾼다</h2>
+          <p>
+            store-ui의 <code>button.js</code>는 <code>'use client'</code> 파일이고, Server Component인 스토어 홈이
+            import한다. 원래 내용은 이렇다.
+          </p>
+          <pre><code class="language-ts">// packages/store-ui/dist/button.js (원래 코드, 줄임)
+'use client';
+export const buttonVariants = cva([/* 클래스 목록 */], { variants: { /* … */ } });
+export function Button({ variant, type, disabled, loading, onClick, children }) {
+  return &lt;BaseButton className={buttonVariants({ variant })} …&gt;{children}&lt;/BaseButton&gt;;
+}</code></pre>
+          <p>
+            그런데 <code>next build</code>가 만든 서버용 결과물(<code>.next/server/chunks/ssr/…js</code>)에서
+            <code>button.js</code> 자리에 들어 있는 코드는 이것이다. 압축된 코드를 읽기 쉽게 풀어 썼다.
+          </p>
+          <pre><code class="language-js">// 서버용 결과물에 들어 있는 button.js의 대역
+export const Button = registerClientReference(
+  function () {
+    throw Error(
+      "Attempted to call Button() from the server but Button is on the client. " +
+        "It's not possible to invoke a client function from the server, " +
+        'it can only be rendered as a Component or passed to props of a Client Component.',
+    );
+  },
+  '[project]/packages/store-ui/dist/button.js', // 어느 파일의
+  'Button', // 어느 export인지
+);
+
+export const buttonVariants = registerClientReference(
+  function () {
+    throw Error('Attempted to call buttonVariants() from the server …');
+  },
+  '[project]/packages/store-ui/dist/button.js',
+  'buttonVariants',
+);</code></pre>
+          <p>원래 코드와 비교하면 세 가지가 다르다.</p>
+          <ol class="steps blue">
+            <li>
+              <strong>원래 코드가 하나도 없다</strong>
+              <code>cva</code>도, Base UI도, JSX도 없다. Server Component를 실행하는 쪽은 <code>button.js</code>를 실행하지
+              않는다.
+            </li>
+            <li>
+              <strong>export 이름마다 가짜 함수가 하나씩 있다</strong>
+              <code>Button</code>과 <code>buttonVariants</code> 자리에 각각 가짜 함수가 들어 있다. 가짜를 실수로 호출하면
+              바로 오류를 던진다.
+            </li>
+            <li>
+              <strong>가짜마다 이름표가 붙어 있다</strong>
+              <code>registerClientReference</code>가 가짜 함수에 "파일 경로"와 "export 이름" 두 가지를 적어 붙인다.
+              이름표에 적힌 정보는 이 둘뿐이다.
+            </li>
+          </ol>
+          <div class="callout">
+            <p>
+              "<code>'use client'</code> 파일은 서버에 참조만 넘긴다"는 말의 뜻이 이것이다. 서버가 받는 것은
+              <strong>export 이름마다 하나씩 만든, 이름표 붙은 가짜 함수</strong>이고, 그 export가 원래 무엇이었는지(함수인지
+              객체인지, 안에 뭐가 들었는지)는 모른다.
+            </p>
+          </div>
+          <p>
+            이름표는 택배 송장에 비유할 수 있다. 서버는 상자(코드)를 받지 않고 "button.js 상자의 Button 칸"이라고 적힌
+            송장만 받는다. 상자는 브라우저로 바로 배송된다.
+          </p>
+        </section>
+
+        <section id="manifest">
+          <h2>진짜 코드는 어디 있나</h2>
+          <p>
+            이름표에는 파일 경로만 있고, 그 파일이 브라우저의 어느 JS 파일에 들어갔는지는 따로 적힌 표가 안다. 같은 빌드의
+            <code>.next/server/app/page_client-reference-manifest.js</code>에 이런 항목이 있다.
+          </p>
+          <pre><code class="language-js">"[project]/packages/store-ui/dist/button.js": {
+  "id": 86223,
+  "name": "*",
+  "chunks": ["/_next/static/chunks/2qj-s9lpzec8-.js", "/_next/static/chunks/16f11qb2p8waj.js"],
+  "async": false
+}</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>무엇</th>
+                  <th>어디에</th>
+                  <th>들어 있는 것</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>이름표 붙은 가짜</td>
+                  <td><span class="badge blue">서버</span> <code>.next/server/chunks/…</code></td>
+                  <td>파일 경로 + export 이름</td>
+                </tr>
+                <tr>
+                  <td>표 (client reference manifest)</td>
+                  <td><span class="badge blue">서버</span> <code>page_client-reference-manifest.js</code></td>
+                  <td>파일 경로 → 브라우저 JS 파일 목록</td>
+                </tr>
+                <tr>
+                  <td>진짜 <code>Button</code> 코드</td>
+                  <td><span class="badge green">브라우저</span> <code>/_next/static/chunks/…js</code></td>
+                  <td><code>cva</code>, Base UI, JSX 전부</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="render">
+          <h2>이름표로 그리는 흐름</h2>
+          <p>
+            서버가 가짜만 가지고 있는데 <code>&lt;Button&gt;</code>이 화면에 나오는 까닭은, 서버가 그리지 않고 브라우저에
+            "그려 달라"고 전달하기 때문이다. 스토어 홈의 이 코드로 따라가 본다.
+          </p>
+          <pre><code class="language-ts">// apps/store/app/page.tsx (Server Component)
+&lt;Button type="submit" variant="secondary"&gt;새로고침&lt;/Button&gt;</code></pre>
+          <div class="flow">
+            <div class="lane blue">
+              <div class="lane-title">서버</div>
+              <ol class="chain">
+                <li><span>Button이 이름표 붙은 가짜임을 알아봄</span></li>
+                <li><span>실행하지 않고 이름표와 props를 적음</span></li>
+              </ol>
+            </div>
+            <div class="lane green">
+              <div class="lane-title">브라우저</div>
+              <ol class="chain">
+                <li><span>표를 보고 button.js 코드를 받음</span></li>
+                <li><span>Button export를 꺼내 props로 그림</span></li>
+              </ol>
+            </div>
+          </div>
+          <ol class="steps blue">
+            <li>
+              <strong>알아보기</strong>
+              React가 <code>&lt;Button&gt;</code>을 렌더링하려다 <code>Button</code>에 이름표가 붙은 것을 본다. 일반
+              컴포넌트라면 함수를 호출해 결과를 얻겠지만, 이름표가 있으면 호출하지 않는다.
+            </li>
+            <li>
+              <strong>적기</strong>
+              결과물(RSC payload)에 "여기에 <code>button.js</code>의 <code>Button</code>을 이 props로 그려라"라고 적는다.
+              props는 <code>{ type: 'submit', variant: 'secondary', children: '새로고침' }</code>이다.
+            </li>
+            <li>
+              <strong>받기</strong>
+              브라우저가 결과물을 읽다가 그 표시를 만나면, 표에서 <code>button.js</code>가 든 JS 파일을 찾아 받는다.
+            </li>
+            <li>
+              <strong>그리기</strong>
+              받은 모듈에서 이름표에 적힌 export 이름 <code>Button</code>을 꺼내, 적혀 온 props로 그린다. 이때 이벤트가 붙는다
+              (하이드레이션).
+            </li>
+          </ol>
+          <div class="callout warn">
+            <p>
+              "Client Component도 서버에서 한 번 실행된다"는 말과 헷갈리기 쉽다. 둘 다 맞다. Next는 서버에서 두 단계를 거친다.
+              먼저 <strong>Server Component 단계</strong>가 컴포넌트 트리를 그리는데, 이 단계는 이 문서의 가짜(이름표)만 받고
+              Client Component를 실행하지 않는다. 그다음 <strong>HTML을 만드는 단계(SSR)</strong>가 그 결과를 받아, 이름표를
+              보고 진짜 <code>Button</code> 코드를 실행해 첫 화면 HTML을 만든다. 이 문서에서 "서버는 실행하지 않는다"고 할 때의
+              서버는 앞의 Server Component 단계다.
+            </p>
+          </div>
+        </section>
+
+        <section id="limits">
+          <h2>이름표라서 생기는 규칙</h2>
+          <p>
+            Server Component에서 클라이언트용 컴포넌트를 쓸 때 지켜야 하는 규칙들은 모두 "서버 손에는 이름표만 있다"에서
+            나온다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>서버에서 하려는 일</th>
+                  <th>결과</th>
+                  <th>이유</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>&lt;Button&gt;</code>으로 렌더링</td>
+                  <td><span class="badge green">됨</span></td>
+                  <td>이름표를 적어 브라우저에 넘기면 된다</td>
+                </tr>
+                <tr>
+                  <td><code>buttonVariants({ variant })</code>처럼 호출</td>
+                  <td><span class="badge blue">오류</span></td>
+                  <td>가짜 함수라서 호출하면 "Attempted to call … from the server" 오류를 던진다</td>
+                </tr>
+                <tr>
+                  <td><code>&lt;Button onClick={() =&gt; …}&gt;</code>처럼 함수 props 넘기기</td>
+                  <td><span class="badge blue">오류</span></td>
+                  <td>props를 글자로 적어 브라우저에 보내야 하는데, 함수는 글자로 적을 수 없다</td>
+                </tr>
+                <tr>
+                  <td><code>Drawer.Root</code>처럼 export의 속성 꺼내기</td>
+                  <td><span class="badge blue">undefined</span></td>
+                  <td>이름표 붙은 가짜에는 원래 객체의 속성이 없다 (<a href="#object">다음 절</a>)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            <code>buttonVariants</code> 호출이 안 되는 이유는
+            <a href="012-라이브러리-빌드와-use-client-경계.html#enough">012 문서의 "파일마다 지시어만 두면 될까"</a>에서도
+            다뤘다. 그때 "클라이언트 참조라서 호출할 수 없다"고 적은 것이 이 가짜 함수다.
+          </p>
+        </section>
+
+        <section id="object">
+          <h2>객체로 묶으면 속이 비는 이유</h2>
+          <p>처음 문제로 돌아간다. <code>'use client'</code> 파일 안에서 객체를 만들어 내보냈다.</p>
+          <pre><code class="language-ts">'use client';
+function Root() { /* … */ }
+function Trigger() { /* … */ }
+export const Drawer = { Root, Trigger };</code></pre>
+          <p>
+            서버는 이 파일도 실행하지 않는다. export 이름은 <code>Drawer</code> 하나이므로, 같은 방식대로 가짜도 하나만
+            만든다.
+          </p>
+          <pre><code class="language-js">// 서버가 받는 것
+export const Drawer = registerClientReference(function () { throw … }, 'drawer.js', 'Drawer');</code></pre>
+          <ol class="steps blue">
+            <li>
+              <strong>서버 손의 Drawer</strong>
+              <code>{ Root, Trigger }</code> 객체가 아니라 "drawer.js의 Drawer" 이름표가 붙은 가짜 함수다.
+            </li>
+            <li>
+              <strong>Drawer.Root 꺼내기</strong>
+              가짜 함수에는 <code>Root</code>라는 속성이 없다. 객체를 만드는 코드(<code>{ Root, Trigger }</code>)는 서버에서
+              실행된 적이 없기 때문이다. 그래서 undefined다.
+            </li>
+            <li>
+              <strong>렌더링</strong>
+              React가 <code>&lt;undefined&gt;</code>를 그리려다 "Element type is invalid … got: undefined"로 실패한다.
+            </li>
+          </ol>
+          <p>
+            컴포넌트에 정적 속성으로 붙여도(<code>Root.Trigger = Trigger</code>) 같다. 서버는 그 대입문도 실행하지 않으므로
+            가짜 <code>Root</code>에 <code>Trigger</code>가 생기지 않는다. 실제로 빌드해 보니 같은 오류로 실패했다.
+          </p>
+          <div class="callout warn">
+            <p>
+              객체를 내보낸 경우의 가짜 코드는 결과물에서 직접 꺼내 보지 않았다. 다만 함수 export에서 확인한 방식대로라면
+              나와야 하는 결과(undefined)가 실제 빌드 결과와 정확히 같다.
+            </p>
+          </div>
+        </section>
+
+        <section id="namespace">
+          <h2>서버 쪽 파일에서 묶으면 되는 이유</h2>
+          <p>
+            해결은 <strong>묶는 일을 서버가 실행하는 파일로 옮기는 것</strong>이다. <code>'use client'</code> 파일은 부품을
+            이름 단위로 내보내고, 지시어가 없는 진입점이 묶는다.
+          </p>
+          <pre><code class="language-ts">// drawer.tsx — 'use client', 부품을 이름 단위로 내보낸다
+'use client';
+export function Root() { /* … */ }
+export function Trigger() { /* … */ }
+
+// index.ts — 지시어 없음. 서버가 실제로 실행한다
+export * as Drawer from './drawer.js';</code></pre>
+          <ol class="steps green">
+            <li>
+              <strong>index.ts 실행</strong>
+              지시어가 없으니 서버가 <code>index.ts</code>를 실제로 실행하고, 그 과정에서 <code>drawer.js</code>를
+              import한다.
+            </li>
+            <li>
+              <strong>drawer.js는 가짜로 바뀜</strong>
+              <code>'use client'</code> 파일이라 가짜로 바뀐다. 다만 export가 <code>Root</code>, <code>Trigger</code>처럼
+              이름 단위이니 가짜도 이름마다 따로 생긴다. <code>Root</code>에는 "drawer.js의 Root", <code>Trigger</code>에는
+              "drawer.js의 Trigger" 이름표가 붙는다.
+            </li>
+            <li>
+              <strong>서버에서 객체를 만듦</strong>
+              <code>export * as Drawer</code>는 서버 쪽에서 그 가짜들을 담은 진짜 객체
+              <code>{ Root: 가짜, Trigger: 가짜 }</code>를 만든다.
+            </li>
+            <li>
+              <strong>Drawer.Root 꺼내기</strong>
+              진짜 객체이니 <code>Drawer.Root</code>로 Root 이름표 붙은 가짜를 꺼낼 수 있다. 그 뒤는
+              <a href="#render">이름표로 그리는 흐름</a>과 같다.
+            </li>
+          </ol>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>묶는 방법</th>
+                  <th>객체를 만드는 곳</th>
+                  <th>서버 손의 <code>Drawer</code></th>
+                  <th><code>Drawer.Root</code></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>'use client'</code> 파일 안에서 <code>{ Root, Trigger }</code></td>
+                  <td>서버가 실행하지 않는 파일</td>
+                  <td>이름표 1개 (<code>Drawer</code>)</td>
+                  <td><span class="badge blue">undefined</span></td>
+                </tr>
+                <tr>
+                  <td><code>'use client'</code> 파일 안에서 <code>Root.Trigger = Trigger</code></td>
+                  <td>서버가 실행하지 않는 파일</td>
+                  <td>이름표 1개 (<code>Root</code>)</td>
+                  <td><span class="badge blue">undefined</span></td>
+                </tr>
+                <tr>
+                  <td>지시어 없는 파일에서 <code>export * as Drawer</code></td>
+                  <td>서버가 실행하는 파일</td>
+                  <td>진짜 객체 <code>{ Root: 이름표, … }</code></td>
+                  <td><span class="badge green">이름표</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout">
+            <p>
+              차이는 객체를 <strong>어디서</strong> 만드느냐다. 서버가 꺼낼 수 있는 단위는 export 이름 하나하나의
+              이름표뿐이므로, 이름표들을 객체로 묶는 일은 서버가 실행하는 파일이 해야 한다.
+            </p>
+          </div>
+        </section>
+
+        <section id="ours">
+          <h2>우리 프로젝트에서는</h2>
+          <ul>
+            <li>
+              <code>packages/store-ui/src/drawer.tsx</code>는 <code>'use client'</code> 파일이고, 부품을
+              <code>Root</code>, <code>Trigger</code>, <code>Popup</code>처럼 이름 단위로 내보낸다. 파일 안에서
+              <code>Drawer</code> 객체를 만들지 않는다.
+            </li>
+            <li>
+              <code>packages/store-ui/src/index.ts</code>가 <code>export * as Drawer from './drawer.js'</code>로 묶는다.
+              Base UI도 같은 방식이다(<code>@base-ui/react/drawer/index.mjs</code>).
+            </li>
+            <li>
+              Pagination은 <code>'use client'</code>가 없는 서버용 파일이라 그 안에서 <code>Pagination</code> 객체를 만들어도
+              된다. 서버가 그 파일을 실제로 실행하기 때문이다.
+            </li>
+            <li>
+              Server Component에서 클라이언트용 컴포넌트에 함수 props를 넘기지 않는 규칙(스토어 홈의 새로고침 버튼은
+              <code>&lt;form action="/"&gt;</code>와 <code>type="submit"</code>을 쓴다)도 같은 이유에서 나온다.
+            </li>
+          </ul>
+        </section>
+
+        <section id="check">
+          <h2>스스로 확인하기</h2>
+          <details>
+            <summary>1. Server Component가 'use client' 파일을 import하면 서버가 받는 것은 정확히 무엇인가?</summary>
+            <p>
+              export 이름마다 하나씩 만든 가짜 함수다. 가짜에는 파일 경로와 export 이름이 적힌 이름표가 붙어 있고, 원래
+              코드는 들어 있지 않다. 호출하면 "Attempted to call … from the server" 오류를 던진다.
+            </p>
+          </details>
+          <details>
+            <summary>2. 서버가 가짜만 가지고 있는데 &lt;Button&gt;이 화면에 나오는 이유는?</summary>
+            <p>
+              React가 이름표를 보고 Button을 호출하지 않는다. 대신 "button.js의 Button을 이 props로 그려라"라고 결과물에
+              적는다. 브라우저가 manifest에서 button.js가 든 JS 파일을 찾아 받고, Button export를 꺼내 그 props로 그린다.
+            </p>
+          </details>
+          <details>
+            <summary>3. 'use client' 파일 안에서 export const Drawer = { Root, Trigger }로 묶으면 서버에서 Drawer.Root가 왜 undefined인가?</summary>
+            <p>
+              서버가 받는 Drawer는 "drawer.js의 Drawer" 이름표 붙은 가짜 함수 하나다. 객체를 만드는 코드는 서버에서 실행되지
+              않았으므로 가짜에는 Root 속성이 없다.
+            </p>
+          </details>
+          <details>
+            <summary>4. index.ts의 export * as Drawer는 왜 되는가?</summary>
+            <p>
+              index.ts에는 지시어가 없어 서버가 실제로 실행한다. drawer.js의 Root, Trigger가 각각 이름표 붙은 가짜로 바뀌고,
+              export * as가 서버 쪽에서 그 가짜들을 담은 진짜 객체를 만든다. 그래서 Drawer.Root로 Root 이름표를 꺼낼 수 있다.
+            </p>
+          </details>
+          <details>
+            <summary>5. Server Component에서 &lt;Button onClick={...}&gt;이 안 되는 이유를 이름표로 설명하면?</summary>
+            <p>
+              서버는 Button을 실행하지 않고 이름표와 props를 글자로 적어 브라우저에 보낸다. 함수는 글자로 적을 수 없으므로
+              props에 함수가 있으면 보낼 방법이 없어 오류가 난다.
+            </p>
+          </details>
+          <details>
+            <summary>6. Pagination은 지시어 없는 파일 안에서 Pagination 객체를 만드는데 왜 괜찮은가?</summary>
+            <p>
+              지시어가 없으니 서버가 그 파일을 실제로 실행한다. 객체도 서버에서 진짜로 만들어지고, 그 안의 부품도 서버에서
+              그리는 진짜 컴포넌트라 Pagination.Root를 문제없이 꺼낼 수 있다.
+            </p>
+          </details>
+        </section>
+
+        <section id="more">
+          <h2>더 읽을거리</h2>
+          <ol>
+            <li><a href="https://react.dev/reference/rsc/use-client">React: 'use client'</a> (직렬화할 수 있는 props)</li>
+            <li>
+              <a href="https://nextjs.org/docs/app/getting-started/server-and-client-components"
+                >Next.js: Server and Client Components</a
+              >
+            </li>
+            <li>
+              <a href="012-라이브러리-빌드와-use-client-경계.html#directive">012 라이브러리 빌드와 'use client' 경계</a>
+              ('use client'가 표시하는 것)
+            </li>
+          </ol>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
