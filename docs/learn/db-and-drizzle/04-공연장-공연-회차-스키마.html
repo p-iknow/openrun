@@ -316,10 +316,118 @@ TRUNCATE "shows" RESTART IDENTITY;--&gt; statement-breakpoint</code></pre>
           <div class="callout warn">
             <p>
               이 TRUNCATE는 지워질 행이 임시 데이터뿐이라 쓸 수 있었다. 실제 사용자 데이터가 있는 운영 DB에 그대로 적용하면
-              공연이 모두 지워진다. 그런 경우에는 "기본값을 두고 컬럼 추가 → 기존 행에 올바른 값 채우기 → NOT NULL로
-              바꾸기"처럼 여러 단계로 나눠야 한다.
+              공연이 모두 지워진다. 운영 DB에서 어떻게 하는지는 바로 아래에 있다.
             </p>
           </div>
+
+          <h3 id="production">운영 DB였다면: 세 단계로 나누기</h3>
+          <p>
+            운영 중인 <code>shows</code>에 공연이 1,000행 있다고 하자. 엑셀 시트에 이미 1,000줄이 있는데 "공연장" 칸을
+            <strong>반드시 채워야 하는 칸</strong>으로 새로 만들려는 상황이다. 칸을 만드는 순간 1,000줄의 새 칸은 비어 있는데
+            "비면 안 된다"는 규칙을 동시에 걸었으니 모순이다. 그래서 한 번에 하지 않고, 각 단계에서 모순이 생기지 않게 세
+            번에 나눈다.
+          </p>
+          <ol class="steps blue">
+            <li>
+              <strong>빈칸을 허용하는 컬럼으로 먼저 만든다</strong>
+              <code>NOT NULL</code>을 빼고 컬럼을 더한다. 기존 행은 <code>NULL</code>이 되지만 규칙 위반이 아니라 DB가
+              받아 준다. 외래 키는 지금 걸어도 된다. <code>NULL</code>은 검사하지 않고, 값을 넣을 때부터 "실제로 있는
+              공연장인가"를 검사한다. 공연장 테이블과 그 데이터는 이보다 먼저 있어야 한다.
+              <pre><code class="language-sql">ALTER TABLE "shows" ADD COLUMN "venue_id" integer REFERENCES "venues"("id");</code></pre>
+            </li>
+            <li>
+              <strong>기존 행에 올바른 값을 채운다</strong>
+              이 단계를 백필(backfill, 빈칸 메우기)이라고 한다. 기술보다 <strong>데이터의 문제</strong>다. "레미제라블이
+              어느 공연장에서 하는가"는 DB가 알아낼 수 없으니 운영 자료나 다른 컬럼(예: 공연장 이름을 글자로 적어 둔
+              칸)에서 가져와야 한다. 다 채웠는지 확인한 뒤 다음 단계로 간다.
+              <pre><code class="language-sql">UPDATE "shows" SET "venue_id" = 3 WHERE "id" = 1;  -- 레미제라블은 그랜드 씨어터
+UPDATE "shows" SET "venue_id" = 1 WHERE "id" = 2;  -- 햄릿은 낙산 소극장
+
+SELECT count(*) FROM "shows" WHERE "venue_id" IS NULL;  -- 0이어야 한다</code></pre>
+              행이 수백만 개라면 한 번에 고치지 않고 1,000행씩 나눠 고친다. 한 번에 고치면 그동안 그 행들이 잠겨, 사용자의
+              다른 요청이 기다리게 될 수 있다.
+            </li>
+            <li>
+              <strong>빈칸이 없으니 이제 NOT NULL로 바꾼다</strong>
+              모든 행이 채워져 있어 모순이 없다. 이 순간부터 공연장 없는 공연은 저장할 수 없다.
+              <pre><code class="language-sql">ALTER TABLE "shows" ALTER COLUMN "venue_id" SET NOT NULL;</code></pre>
+            </li>
+          </ol>
+          <p>
+            Drizzle로는 스키마에서 <code>.notNull()</code>을 뺀 채로 <code>db:generate</code>해 1단계 마이그레이션을 만들고,
+            채우는 SQL을 넣은 뒤, <code>.notNull()</code>을 붙여 다시 <code>db:generate</code>해 3단계 마이그레이션을 만든다.
+            마이그레이션 파일이 둘 이상이 된다.
+          </p>
+
+          <h4>기본값으로 한 번에 채우면 안 되는가</h4>
+          <pre><code class="language-sql">ALTER TABLE "shows" ADD COLUMN "venue_id" integer NOT NULL DEFAULT 1;</code></pre>
+          <p>
+            에러는 나지 않는다. 기존 행이 모두 1번 공연장으로 채워진다. 하지만 <strong>틀린 데이터</strong>다. 레미제라블이
+            낙산 소극장에서 하는 것으로 저장되고, 진짜 값과 임시로 채운 값을 구분할 수도 없다. 모든 행에 같은 값이 맞는
+            컬럼(예: <code>is_cancelled DEFAULT false</code>)일 때만 쓸 수 있다.
+          </p>
+
+          <h4>앱이 돌아가는 중이면 배포 순서도 정해야 한다</h4>
+          <p>
+            운영 중에는 앱 코드도 계속 공연을 저장한다. 옛 코드는 <code>venue_id</code>를 모르므로 새 공연을 저장할 때 그 칸을
+            비운다. 3단계(NOT NULL)를 먼저 하고 새 코드를 나중에 배포하면, 그 사이 옛 코드의 저장이 "venue_id가 비었다"는
+            에러로 실패한다. 그래서 마이그레이션 사이에 앱 배포를 끼운다.
+          </p>
+          <div class="flow">
+            <div class="lane blue">
+              <div class="lane-title">넓히고 줄이기(expand and contract)</div>
+              <ol class="chain">
+                <li><span>DB: 빈칸 허용 컬럼 추가 (옛 코드도 계속 동작)</span></li>
+                <li><span>앱 배포: 새 공연에 <code>venue_id</code>를 채우는 코드</span></li>
+                <li><span>DB: 기존 행 채우기</span></li>
+                <li><span>DB: NOT NULL로 바꾸기</span></li>
+              </ol>
+            </div>
+          </div>
+          <p>
+            먼저 넓혀서 옛 코드와 새 코드가 모두 동작하게 하고, 옛 코드가 사라진 뒤에 줄인다. 로드맵 4단계 CI/CD의 학습 개념인
+            "무중단 마이그레이션"이 이것이다.
+          </p>
+
+          <h4>이번 PR과 비교</h4>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>이번 PR(<code>0001</code>)</th>
+                  <th>운영 DB였다면</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>기존 행</td>
+                  <td>지운다(<code>TRUNCATE</code>)</td>
+                  <td>살려 두고 값을 채운다</td>
+                </tr>
+                <tr>
+                  <td>마이그레이션 수</td>
+                  <td>1개</td>
+                  <td>2개 이상(컬럼 추가, NOT NULL로 바꾸기)</td>
+                </tr>
+                <tr>
+                  <td>앱 배포</td>
+                  <td>함께</td>
+                  <td>마이그레이션 사이에 끼운다</td>
+                </tr>
+                <tr>
+                  <td>가능했던 이유</td>
+                  <td>지울 데이터가 임시 공연 2행뿐</td>
+                  <td></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            <code>TRUNCATE</code>를 운영 DB에 적용했을 때 생기는 일은 하나 더 있다. 다른 테이블(주문 등)이 외래 키로 공연을
+            가리키고 있으면 <code>TRUNCATE</code>가 거부되어 마이그레이션이 실패한다. <code>RESTART IDENTITY</code>로 id가
+            다시 1부터 매겨지면 밖에 공유된 <code>/shows/1</code> 링크가 다른 공연을 가리키게 된다.
+          </p>
         </section>
 
         <section id="relations">
@@ -399,8 +507,10 @@ TRUNCATE "shows" RESTART IDENTITY;--&gt; statement-breakpoint</code></pre>
             <summary>7. 이 PR의 <code>0001</code> 마이그레이션을 운영 데이터가 있는 DB에 적용하면 어떻게 되는가?</summary>
             <p>
               맨 앞의 <code>TRUNCATE "shows"</code>가 공연을 모두 지운다. 회차 테이블은 이 마이그레이션에서 처음 만들어지므로
-              그때는 비어 있다. 운영 DB였다면 컬럼을 기본값과 함께 더하고, 값을 채운 뒤 NOT NULL로 바꾸는 여러 단계로
-              나눠야 한다.
+              그때는 비어 있다. 운영 DB였다면 빈칸을 허용하는 컬럼으로 더하고, 기존 행에 올바른 값을 채운 뒤, NOT NULL로
+              바꾸는 세 단계로 나눠야 한다. 앱이 돌아가는 중이면 그 사이에 새 코드 배포를 끼운다(<a href="#production"
+                >운영 DB였다면</a
+              >).
             </p>
           </details>
         </section>
