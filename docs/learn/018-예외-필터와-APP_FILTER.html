@@ -1,0 +1,669 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>018 예외 필터와 APP_FILTER</title>
+    <link rel="stylesheet" href="learn.css" />
+    <script src="vendor/highlightjs/highlight.min.js" defer></script>
+    <script src="learn.js" defer></script>
+  </head>
+  <body>
+    <div class="layout">
+      <nav aria-label="목차">
+        <strong>1부: 예외가 응답이 되기까지</strong>
+        <ol>
+          <li><a href="#overview">한눈에 보기</a></li>
+          <li><a href="#flow">오류가 나면 누가 응답을 만드나</a></li>
+          <li><a href="#default">Nest 기본 필터의 응답</a></li>
+          <li><a href="#http-exception">HttpException이란</a></li>
+        </ol>
+        <strong>2부: ProblemDetailsFilter 읽기</strong>
+        <ol>
+          <li><a href="#catch">@Catch()와 catch 메서드</a></li>
+          <li><a href="#to-problem">toProblem: 세 가지 결정</a></li>
+          <li><a href="#examples">예시 세 개</a></li>
+          <li><a href="#hide">5xx는 왜 숨기고 로그에 남기나</a></li>
+        </ol>
+        <strong>3부: APP_FILTER로 등록하기</strong>
+        <ol>
+          <li><a href="#scopes">필터를 붙이는 세 범위</a></li>
+          <li><a href="#app-filter">APP_FILTER 문법 풀기</a></li>
+          <li><a href="#inside">Nest 안에서 일어나는 일</a></li>
+          <li><a href="#why-module">왜 main.ts가 아니라 모듈인가</a></li>
+        </ol>
+        <strong>마무리</strong>
+        <ol>
+          <li><a href="#check">스스로 확인하기</a></li>
+          <li><a href="#more">더 읽을거리</a></li>
+        </ol>
+      </nav>
+
+      <main>
+        <h1>예외 필터와 APP_FILTER: 모든 오류를 Problem Details로 보내기</h1>
+        <p class="lead">
+          <code>apps/api/src/problem-details/problem-details.filter.ts</code>가 무엇을 하는지,
+          <code>AppModule</code>의 <code>{ provide: APP_FILTER, useClass: ProblemDetailsFilter }</code>가 무슨
+          뜻인지 NestJS를 처음 보는 사람 기준으로 정리한다. Nest 내부 동작은 설치된
+          <code>@nestjs/core</code> 12.4 소스로 확인했다.
+        </p>
+
+        <section id="overview">
+          <h2>한눈에 보기</h2>
+          <div class="callout">
+            <p>
+              <strong>예외 필터</strong>는 "던져진 예외를 HTTP 응답으로 바꾸는 담당자"다. Nest에는 기본 담당자가
+              있고, 우리는 ADR 0007의 Problem Details 형식으로 응답하는 담당자
+              <code>ProblemDetailsFilter</code>를 만들어 바꿔 끼웠다. <code>APP_FILTER</code>는 그 담당자를
+              <strong>앱 전체</strong>에 끼우는 Nest의 이름표다.
+            </p>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>질문</th>
+                  <th>짧은 답</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>필터는 언제 실행되나</td>
+                  <td>컨트롤러나 서비스, Nest 내부에서 예외가 던져져 응답을 만들 수 없을 때.</td>
+                </tr>
+                <tr>
+                  <td>필터가 하는 일</td>
+                  <td>예외를 보고 status, code, detail을 정해 <code>application/problem+json</code>으로 응답한다.</td>
+                </tr>
+                <tr>
+                  <td>5xx는 왜 다르게 다루나</td>
+                  <td>메시지에 내부 정보가 섞일 수 있어 고정 문구로 바꾸고, 원래 예외는 서버 로그에 남긴다.</td>
+                </tr>
+                <tr>
+                  <td>APP_FILTER는 뭔가</td>
+                  <td>"이 provider를 전역 예외 필터로 써라"는 뜻의 Nest 예약 이름표.</td>
+                </tr>
+                <tr>
+                  <td>왜 main.ts가 아니라 모듈에 등록하나</td>
+                  <td>통합 테스트는 <code>main.ts</code>를 거치지 않고 <code>AppModule</code>로 앱을 만든다. 모듈에 적어야 테스트에도 붙는다.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="flow">
+          <h2>오류가 나면 누가 응답을 만드나</h2>
+          <p>
+            요청이 정상으로 처리되면 컨트롤러 메서드의 반환값이 그대로 JSON 응답이 된다. 컨트롤러와 서비스의
+            관계는 <a href="001-nestjs-기초.html">001 문서</a>에 있다.
+          </p>
+          <div class="flow">
+            <div class="lane blue">
+              <div class="lane-title">정상 흐름</div>
+              <ol class="chain">
+                <li><span>GET /shows</span></li>
+                <li><span>ShowsController.findAll()</span></li>
+                <li><span>ShowsService.findAll() → DB</span></li>
+                <li><span>반환값을 JSON으로 응답</span></li>
+              </ol>
+            </div>
+            <div class="lane green">
+              <div class="lane-title">도중에 throw</div>
+              <ol class="chain">
+                <li><span>GET /shows</span></li>
+                <li><span>ShowsService가 throw new Error('DB 연결 실패')</span></li>
+                <li><span>예외 필터가 예외를 받음</span></li>
+                <li><span>필터가 오류 응답을 만듦</span></li>
+              </ol>
+            </div>
+          </div>
+          <p>
+            중간에 누군가 <code>throw</code>하면 컨트롤러는 반환값을 만들지 못한다. Nest는 이 예외를 잡아
+            <strong>예외 필터</strong>에게 넘기고, 필터가 상태 코드와 본문을 정해 응답한다. 우리 코드에
+            <code>try/catch</code>를 하나도 쓰지 않아도 오류 응답이 나가는 이유다.
+          </p>
+          <p>
+            없는 경로도 같은 길을 탄다. 요청이 어떤 컨트롤러에도 맞지 않으면 Nest가 내부에서
+            <code>NotFoundException</code>을 던지고(<code>@nestjs/core</code>의
+            <code>routes-resolver.js</code>, <code>registerNotFoundHandler</code>), 그 예외도 같은 필터로 간다.
+          </p>
+          <pre><code class="language-ts">// @nestjs/core/router/routes-resolver.js (요약)
+const callback = (req, res) =&gt; {
+  throw new NotFoundException(`Cannot ${method} ${url}`);
+};</code></pre>
+        </section>
+
+        <section id="default">
+          <h2>Nest 기본 필터의 응답</h2>
+          <p>
+            필터를 따로 만들지 않아도 Nest에는 기본 필터(<code>BaseExceptionFilter</code>)가 있어서 오류 응답은
+            나간다. 모양이 Nest 고유의 형식일 뿐이다.
+          </p>
+          <pre><code class="language-json">// 없는 경로
+{ "statusCode": 404, "message": "Cannot GET /nope", "error": "Not Found" }
+
+// 예상하지 못한 오류 (new Error 등)
+{ "statusCode": 500, "message": "Internal server error" }</code></pre>
+          <p>
+            ADR 0007은 모든 오류를 RFC 9457 Problem Details(<code>type</code>, <code>title</code>,
+            <code>status</code>, <code>detail</code>)에 앱 오류 코드 <code>code</code>를 더한 형식으로 보내기로
+            정했다. 그래서 기본 담당자를 우리 담당자로 바꿔야 한다.
+          </p>
+          <pre><code class="language-json">{
+  "type": "about:blank",
+  "title": "Not Found",
+  "status": 404,
+  "detail": "Cannot GET /nope",
+  "code": "NOT_FOUND"
+}</code></pre>
+          <details class="fold">
+            <summary>선택 읽기: 우리 필터와 기본 필터는 어떻게 나뉘어 실행되나</summary>
+            <div class="fold-body">
+              <p>
+                Nest가 예외를 받으면 <code>ExceptionsHandler</code>가 먼저 등록된 필터(우리 필터)를 찾아 본다.
+                맞는 필터가 있으면 그것만 실행하고, 없으면 기본 필터로 넘긴다.
+              </p>
+              <pre><code class="language-ts">// @nestjs/core/exceptions/exceptions-handler.js (요약)
+next(exception, ctx) {
+  if (this.invokeCustomFilters(exception, ctx)) {
+    return;                    // 우리 필터가 처리했으면 끝
+  }
+  super.catch(exception, ctx); // 아니면 BaseExceptionFilter
+}</code></pre>
+              <p>
+                우리 필터는 <code>@Catch()</code>로 모든 예외를 맡으므로, 기본 필터까지 가는 경우가 없다.
+              </p>
+            </div>
+          </details>
+        </section>
+
+        <section id="http-exception">
+          <h2>HttpException이란</h2>
+          <p>
+            필터 코드를 읽기 전에 알아야 할 Nest 클래스가 하나 있다. <code>HttpException</code>은 Nest가
+            "HTTP 상태 코드를 가진 예외"로 미리 만들어 둔 클래스다. 자주 쓰는 상태마다 상속한 클래스가 있다.
+          </p>
+          <ul class="tree" style="--tree-col: 16rem">
+            <li>
+              <div class="tree-row">
+                <span class="tree-node">Error</span>
+                <span class="tree-note">JS 기본 예외. 상태 코드가 없다.</span>
+              </div>
+              <ul>
+                <li>
+                  <div class="tree-row">
+                    <span class="tree-node">HttpException</span>
+                    <span class="tree-note"><code>getStatus()</code>로 상태 코드를 꺼낼 수 있다.</span>
+                  </div>
+                  <ul>
+                    <li>
+                      <div class="tree-row">
+                        <span class="tree-node">NotFoundException</span>
+                        <span class="tree-note"><span class="badge blue">Nest</span> 404. 없는 경로에서 Nest가 던진다.</span>
+                      </div>
+                    </li>
+                    <li>
+                      <div class="tree-row">
+                        <span class="tree-node">BadRequestException</span>
+                        <span class="tree-note"><span class="badge blue">Nest</span> 400. Nest의 기본 ValidationPipe가 던진다.</span>
+                      </div>
+                    </li>
+                    <li>
+                      <div class="tree-row">
+                        <span class="tree-node">ProblemException</span>
+                        <span class="tree-note"><span class="badge green">우리</span> 앱 오류 코드(<code>code</code>)와 필드별 오류(<code>errors</code>)를 더 가진다.</span>
+                      </div>
+                    </li>
+                  </ul>
+                </li>
+              </ul>
+            </li>
+          </ul>
+          <p>
+            반대로 <code>throw new Error(...)</code>나 DB 드라이버가 던지는 오류는 <code>HttpException</code>이
+            아니다. Nest 입장에서는 "상태 코드를 모르는 예외"다. 필터는 이 차이로 응답을 나눈다.
+          </p>
+          <pre><code class="language-ts">// apps/api/src/problem-details/problem.exception.ts
+export class ProblemException extends HttpException {
+  readonly code: string;
+  readonly errors?: FieldErrorDto[];
+
+  constructor(options: { status: number; code: string; detail: string; errors?: FieldErrorDto[] }) {
+    super(options.detail, options.status); // 메시지와 상태 코드는 HttpException이 들고 있는다
+    this.code = options.code;
+    this.errors = options.errors;
+  }
+}</code></pre>
+          <p>
+            <code>ProblemException</code>이 <code>HttpException</code>을 상속하므로 <code>getStatus()</code>와
+            <code>message</code>를 그대로 쓸 수 있고, 거기에 <code>code</code>와 <code>errors</code>만 더했다.
+          </p>
+        </section>
+
+        <section id="catch">
+          <h2>@Catch()와 catch 메서드</h2>
+          <pre><code class="language-ts">// apps/api/src/problem-details/problem-details.filter.ts
+@Catch()
+export class ProblemDetailsFilter implements ExceptionFilter {
+  private readonly logger = new Logger(ProblemDetailsFilter.name);
+
+  catch(exception: unknown, host: ArgumentsHost) {
+    const problem = toProblem(exception);
+    if (problem.status &gt;= 500) {
+      this.logger.error(exception);
+    }
+
+    host
+      .switchToHttp()
+      .getResponse&lt;Response&gt;()
+      .status(problem.status)
+      .type('application/problem+json')
+      .json(problem);
+  }
+}</code></pre>
+          <ol class="steps blue">
+            <li>
+              <strong><code>@Catch()</code></strong>
+              "이 클래스는 예외 필터이고, 이런 예외를 맡는다"는 표시다. <code>@Catch(HttpException)</code>처럼 쓰면
+              그 종류만 맡고, 괄호를 비우면 <strong>모든 예외</strong>를 맡는다. 우리 목표가 "어디서 난 오류든"이라
+              비워 뒀다. 데코레이터가 클래스에 표시를 붙이는 원리는
+              <a href="002-데코레이터와-메타데이터.html">002 문서</a>에 있다.
+            </li>
+            <li>
+              <strong><code>implements ExceptionFilter</code></strong>
+              TypeScript 약속이다. <code>catch(exception, host)</code> 메서드를 꼭 구현하겠다는 뜻이고, Nest는 예외가
+              날 때마다 이 메서드를 부른다.
+            </li>
+            <li>
+              <strong><code>exception: unknown</code></strong>
+              던져진 값 그 자체다. JS에서는 문자열이나 숫자도 던질 수 있어서 타입을 <code>unknown</code>으로 두고,
+              아래에서 <code>instanceof</code>로 좁힌다.
+            </li>
+            <li>
+              <strong><code>host.switchToHttp().getResponse()</code></strong>
+              <code>host</code>는 지금 처리 중인 요청의 정보 묶음이다. Nest는 HTTP 말고 WebSocket이나
+              마이크로서비스도 지원해서, "HTTP 요청으로 보겠다"고 <code>switchToHttp()</code>를 먼저 부른다.
+              <code>getResponse()</code>가 돌려주는 것은 Express의 <code>res</code>다. Express를 써 봤다면
+              <code>res.status(404).type(...).json({...})</code>와 같은 코드다.
+            </li>
+            <li>
+              <strong><code>.type('application/problem+json')</code></strong>
+              RFC 9457이 정한 Content-Type이다. Express의 <code>res.json()</code>은 Content-Type이 비어 있을 때만
+              <code>application/json</code>을 넣으므로, 먼저 정해 두면 그대로 나간다.
+            </li>
+          </ol>
+        </section>
+
+        <section id="to-problem">
+          <h2>toProblem: 세 가지 결정</h2>
+          <p>응답의 내용은 <code>toProblem</code> 함수가 정한다. 예외를 보고 세 가지를 결정한다.</p>
+          <pre><code class="language-ts">function toProblem(exception: unknown): ProblemDetailsDto {
+  // ① 상태 코드
+  const status =
+    exception instanceof HttpException ? exception.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
+  // ② 앱 오류 코드
+  const code =
+    exception instanceof ProblemException ? exception.code : (HttpStatus[status] ?? 'HTTP_ERROR');
+  // ③ 사람이 읽는 설명
+  const detail =
+    exception instanceof HttpException &amp;&amp; status &lt; 500
+      ? exception.message
+      : '서버에서 요청을 처리하지 못했습니다.';
+  const errors = exception instanceof ProblemException ? exception.errors : undefined;
+
+  return {
+    type: 'about:blank',
+    title: STATUS_CODES[status] ?? 'Error',
+    status,
+    detail,
+    code,
+    ...(errors &amp;&amp; { errors }),
+  };
+}</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>결정</th>
+                  <th>규칙</th>
+                  <th>이유</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>① <code>status</code></td>
+                  <td><code>HttpException</code>이면 그 상태 코드, 아니면 500</td>
+                  <td>상태를 모르는 예외는 서버가 예상하지 못한 실패다.</td>
+                </tr>
+                <tr>
+                  <td>② <code>code</code></td>
+                  <td><code>ProblemException</code>이면 직접 준 코드, 아니면 상태 이름(<code>NOT_FOUND</code> 등)</td>
+                  <td>Nest가 던진 예외에는 앱 오류 코드가 없다. <code>HttpStatus[404]</code>는 <code>'NOT_FOUND'</code>다.</td>
+                </tr>
+                <tr>
+                  <td>③ <code>detail</code></td>
+                  <td>4xx <code>HttpException</code>이면 그 메시지, 5xx나 모르는 예외면 고정 문구</td>
+                  <td>5xx 메시지에는 DB 주소 같은 내부 정보가 섞일 수 있다(<a href="#hide">아래</a>).</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>나머지 필드는 정해진 규칙대로 채운다.</p>
+          <ul>
+            <li>
+              <code>type: 'about:blank'</code>: RFC 9457에서 "상태 코드 말고 따로 설명할 오류 종류가 없다"는 뜻의
+              기본값이다. 우리는 오류 종류를 <code>code</code>로 나누므로 종류별 URI를 만들지 않았다.
+            </li>
+            <li>
+              <code>title</code>: RFC 9457은 <code>type</code>이 <code>about:blank</code>이면 <code>title</code>을
+              HTTP 상태 문구로 두라고 한다. Node가 가진 표(<code>STATUS_CODES[404]</code> →
+              <code>'Not Found'</code>)에서 가져온다.
+            </li>
+            <li><code>errors</code>: 검증 오류처럼 <code>ProblemException</code>이 필드별 오류를 들고 있을 때만 붙인다.</li>
+          </ul>
+        </section>
+
+        <section id="examples">
+          <h2>예시 세 개</h2>
+          <p>세 경우 모두 <code>apps/api/test/problem-details.int.spec.ts</code>가 실제 HTTP 요청으로 확인한다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>던져진 것</th>
+                  <th>status</th>
+                  <th>code</th>
+                  <th>detail</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>GET /nope</code>에서 Nest가 던진 <code>NotFoundException</code></td>
+                  <td>404</td>
+                  <td><code>NOT_FOUND</code></td>
+                  <td><code>Cannot GET /nope</code></td>
+                </tr>
+                <tr>
+                  <td>서비스가 던진 <code>new Error('connection to db-internal:5432 refused')</code></td>
+                  <td>500</td>
+                  <td><code>INTERNAL_SERVER_ERROR</code></td>
+                  <td>고정 문구. 원래 메시지는 서버 로그에만 있다.</td>
+                </tr>
+                <tr>
+                  <td><code>new ProblemException({ status: 400, code: 'VALIDATION_FAILED', errors: [...] })</code></td>
+                  <td>400</td>
+                  <td><code>VALIDATION_FAILED</code></td>
+                  <td>직접 준 문구. <code>errors</code>도 그대로 실린다.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="hide">
+          <h2>5xx는 왜 숨기고 로그에 남기나</h2>
+          <p>
+            4xx는 "요청이 잘못됐다"는 뜻이라 메시지를 보여 줘야 클라이언트가 고칠 수 있다. 5xx는 "서버가 처리하지
+            못했다"는 뜻이고, 메시지는 대개 서버 내부 사정이다.
+          </p>
+          <pre><code>connection to db-internal:5432 refused
+relation "shows" does not exist
+pg-internal:8443 timeout</code></pre>
+          <p>
+            이런 문장이 응답에 실리면 DB 주소, 테이블 이름, 내부 서비스 구성이 밖으로 드러난다. 클라이언트가 이
+            문장으로 할 수 있는 일도 없다. 그래서 5xx는 앱 예외(<code>ProblemException</code>)라도
+            <code>detail</code>을 고정 문구로 바꾸고, <code>code</code>만 싣는다.
+          </p>
+          <div class="callout warn">
+            <p>
+              응답에서 숨기면 원인을 찾을 곳이 없어진다. 그래서 <code>catch</code>는 5xx일 때
+              <code>this.logger.error(exception)</code>로 원래 예외를 서버 로그에 남긴다. 기본 필터도 모르는 예외를
+              로그에 남기므로, 필터를 바꾸면서 이 동작을 잃지 않게 직접 넣었다.
+            </p>
+          </div>
+        </section>
+
+        <section id="scopes">
+          <h2>필터를 붙이는 세 범위</h2>
+          <p>
+            필터 클래스를 만들기만 하면 아무 일도 일어나지 않는다. Nest에게 "이 필터를 써라"고 알려야 한다. 붙이는
+            방법은 세 가지다.
+          </p>
+          <pre><code class="language-ts">// (가) 컨트롤러나 메서드 하나에만
+@UseFilters(ProblemDetailsFilter)
+@Controller('shows')
+export class ShowsController {}
+
+// (나) 앱 전체: main.ts에서
+const app = await NestFactory.create(AppModule);
+app.useGlobalFilters(new ProblemDetailsFilter());
+
+// (다) 앱 전체: 모듈에서 ← 우리가 쓴 방법
+@Module({
+  providers: [{ provide: APP_FILTER, useClass: ProblemDetailsFilter }],
+})
+export class AppModule {}</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>방법</th>
+                  <th>적용 범위</th>
+                  <th>적는 곳</th>
+                  <th>필터를 만드는 쪽</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>(가) <code>@UseFilters</code></td>
+                  <td>그 컨트롤러나 메서드</td>
+                  <td>컨트롤러 파일</td>
+                  <td>Nest</td>
+                </tr>
+                <tr>
+                  <td>(나) <code>useGlobalFilters</code></td>
+                  <td><span class="badge blue">전역</span></td>
+                  <td><code>main.ts</code></td>
+                  <td>우리가 <code>new</code></td>
+                </tr>
+                <tr>
+                  <td>(다) <code>APP_FILTER</code></td>
+                  <td><span class="badge blue">전역</span></td>
+                  <td>모듈의 <code>providers</code></td>
+                  <td>Nest</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            모든 경로에 적용해야 하니 (가)는 맞지 않는다. (나)와 (다)는 둘 다 전역이고, 적는 곳이 다르다. 이 차이가
+            <a href="#why-module">테스트에서 결과를 가른다</a>.
+          </p>
+          <p>
+            여러 범위에 필터가 있으면 요청에 더 가까운 쪽(메서드 → 컨트롤러 → 전역)이 먼저 예외를 맡는다. 우리는 전역
+            필터 하나만 둔다.
+          </p>
+        </section>
+
+        <section id="app-filter">
+          <h2>APP_FILTER 문법 풀기</h2>
+          <pre><code class="language-ts">// apps/api/src/app.module.ts
+@Module({
+  imports: [DatabaseModule, ShowsModule],
+  providers: [{ provide: APP_FILTER, useClass: ProblemDetailsFilter }],
+})
+export class AppModule {}</code></pre>
+          <p>
+            <code>providers</code>는 "앱이 시작할 때 Nest가 만들어 둘 물건 목록"이다.
+            <code>ShowsModule</code>의 <code>providers: [ShowsService]</code>도 같은 목록이다. 보통은 클래스 이름만
+            적지만, 객체로 적으면 이름표와 실제 물건을 따로 정할 수 있다. 이 문법은
+            <a href="003-의존성-주입.html#nest">003 문서</a>에서 <code>DATABASE</code> 토큰으로 이미 봤다.
+          </p>
+          <ol class="steps green">
+            <li>
+              <strong><code>provide: APP_FILTER</code></strong>
+              이 물건의 이름표다. <code>APP_FILTER</code>는 Nest가 미리 정해 둔 특별한 이름표(실제 값은 문자열
+              <code>'APP_FILTER'</code>)이고, Nest는 이 이름표가 붙은 물건을 <strong>전역 예외 필터</strong>로 쓴다.
+            </li>
+            <li>
+              <strong><code>useClass: ProblemDetailsFilter</code></strong>
+              그 이름표의 실제 물건은 이 클래스로 만들라는 뜻이다. Nest가 <code>new</code>를 대신 해 준다.
+            </li>
+          </ol>
+          <p>
+            합치면 "전역 예외 필터 자리에 <code>ProblemDetailsFilter</code>를 끼워라"를 모듈 설정으로 적은 것이다.
+            같은 방식의 이름표로 <code>APP_PIPE</code>(전역 파이프), <code>APP_GUARD</code>(전역 가드),
+            <code>APP_INTERCEPTOR</code>(전역 인터셉터)가 있다.
+          </p>
+        </section>
+
+        <section id="inside">
+          <h2>Nest 안에서 일어나는 일</h2>
+          <p>
+            Nest가 앱을 조립할 때 모듈의 <code>providers</code>를 훑는다. 이 일을 하는 코드가
+            <code>@nestjs/core</code>의 <code>scanner.js</code>다. 이름표가 <code>APP_FILTER</code>인 provider를 만나면
+            전역 필터 목록에 더한다.
+          </p>
+          <pre><code class="language-ts">// @nestjs/core/scanner.js (요약)
+getApplyProvidersMap() {
+  return {
+    [APP_INTERCEPTOR]: (interceptor) =&gt; this.applicationConfig.addGlobalInterceptor(interceptor),
+    [APP_PIPE]: (pipe) =&gt; this.applicationConfig.addGlobalPipe(pipe),
+    [APP_GUARD]: (guard) =&gt; this.applicationConfig.addGlobalGuard(guard),
+    [APP_FILTER]: (filter) =&gt; this.applicationConfig.addGlobalFilter(filter),
+  };
+}</code></pre>
+          <ol class="steps blue">
+            <li>
+              <strong>훑기</strong>
+              <code>AppModule</code>의 <code>providers</code>에서 <code>provide: APP_FILTER</code>를 발견한다.
+            </li>
+            <li>
+              <strong>만들기</strong>
+              다른 provider처럼 <code>ProblemDetailsFilter</code> 인스턴스를 하나 만든다.
+            </li>
+            <li>
+              <strong>등록</strong>
+              <code>addGlobalFilter</code>로 전역 필터 목록에 넣는다. (나)의 <code>app.useGlobalFilters</code>도
+              결국 같은 목록에 넣는다.
+            </li>
+            <li>
+              <strong>사용</strong>
+              어느 경로에서든 예외가 나면 이 목록의 필터가 맡는다. 없는 경로의 404 처리도 같은 목록을 쓴다.
+            </li>
+          </ol>
+          <p>
+            Nest가 직접 만들기 때문에, 나중에 필터가 다른 provider(예: 설정 값을 읽는 서비스)를 생성자로 받아야 할
+            때도 그대로 주입할 수 있다. (나)처럼 <code>new</code>로 만들면 주입을 받을 수 없다.
+          </p>
+        </section>
+
+        <section id="why-module">
+          <h2>왜 main.ts가 아니라 모듈인가</h2>
+          <p><code>main.ts</code>는 서버를 실제로 켤 때만 실행되는 파일이다.</p>
+          <pre><code class="language-ts">// apps/api/src/main.ts
+const app = await NestFactory.create(AppModule, { abortOnError: false });
+await app.listen(3000);</code></pre>
+          <p>
+            통합 테스트는 <code>main.ts</code>를 거치지 않고 <code>AppModule</code>로 앱을 직접 조립한다. 테스트 구성은
+            <a href="005-통합-테스트-구성.html">005 문서</a>에 있다.
+          </p>
+          <pre><code class="language-ts">// apps/api/test/problem-details.int.spec.ts (요약)
+const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+app = moduleRef.createNestApplication();
+await app.init();</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th><code>main.ts</code> 실행</th>
+                  <th><code>AppModule</code> 읽음</th>
+                  <th>(나) <code>useGlobalFilters</code></th>
+                  <th>(다) <code>APP_FILTER</code></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>운영 서버 (<code>pnpm start</code>)</td>
+                  <td>예</td>
+                  <td>예</td>
+                  <td>붙음</td>
+                  <td>붙음</td>
+                </tr>
+                <tr>
+                  <td>통합 테스트</td>
+                  <td>아니오</td>
+                  <td>예</td>
+                  <td><strong>안 붙음</strong></td>
+                  <td>붙음</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout">
+            <p>
+              필터를 <code>main.ts</code>에 붙이면 테스트 앱은 Nest 기본 형식으로 응답한다. 테스트는 실패하고, 운영과
+              테스트가 서로 다른 앱이 된다. <code>AppModule</code>에 붙이면 두 곳이 같은 필터를 쓴다.
+              <code>app.module.ts</code>의 주석이 이 이유를 적어 둔 것이다.
+            </p>
+          </div>
+        </section>
+
+        <section id="check">
+          <h2>스스로 확인하기</h2>
+          <details>
+            <summary>1. @Catch(HttpException)으로 바꾸면 서비스가 throw new Error()를 던질 때 응답은 어떻게 되나?</summary>
+            <p>
+              <code>Error</code>는 <code>HttpException</code>이 아니므로 우리 필터가 맡지 않는다. Nest 기본 필터로 넘어가
+              <code>{ "statusCode": 500, "message": "Internal server error" }</code>가
+              <code>application/json</code>으로 나간다. 500 통합 테스트가 실패한다.
+            </p>
+          </details>
+          <details>
+            <summary>2. 필터 등록을 APP_FILTER에서 main.ts의 useGlobalFilters로 옮기면 무엇이 깨지나? 운영 응답은 달라지나?</summary>
+            <p>
+              통합 테스트가 깨진다. 테스트 앱은 <code>main.ts</code>를 실행하지 않아 필터가 없으므로 Content-Type 검사와
+              본문 검사가 모두 실패한다. 운영 서버는 <code>main.ts</code>를 거치므로 응답이 같다. 테스트가 운영과 다른
+              앱을 검증하게 되는 것이 문제다.
+            </p>
+          </details>
+          <details>
+            <summary>3. 서비스가 new ProblemException({ status: 503, code: 'PAYMENT_GATEWAY_DOWN', detail: 'pg-internal:8443 timeout' })을 던지면 응답에 무엇이 실리나?</summary>
+            <p>
+              status 503, code <code>PAYMENT_GATEWAY_DOWN</code>, detail은 고정 문구다. 5xx라서 앱 예외라도 설명을
+              숨긴다. 원래 메시지 <code>pg-internal:8443 timeout</code>은 서버 로그에만 남는다.
+            </p>
+          </details>
+          <details>
+            <summary>4. 없는 경로 404는 컨트롤러를 거치지 않는데 어떻게 우리 필터가 처리하나?</summary>
+            <p>
+              Nest가 어떤 경로에도 맞지 않는 요청을 위해 별도 핸들러를 등록하고, 그 핸들러가
+              <code>NotFoundException</code>을 던진다. 이 핸들러도 전역 필터 목록을 쓰므로 우리 필터가 처리한다.
+            </p>
+          </details>
+          <details>
+            <summary>5. 운영에서 500이 났다는 신고를 받았다. 응답에는 고정 문구뿐인데 원인은 어디서 찾나?</summary>
+            <p>
+              API 서버 로그를 본다. 필터가 5xx일 때 <code>this.logger.error(exception)</code>로 원래 예외와 스택을
+              남긴다. 응답에 원인을 싣지 않는 대신 로그에 남기는 것이 이 설계의 짝이다.
+            </p>
+          </details>
+        </section>
+
+        <section id="more">
+          <h2>더 읽을거리</h2>
+          <ol>
+            <li><a href="https://docs.nestjs.com/exception-filters">NestJS: Exception filters</a></li>
+            <li>
+              <a href="https://docs.nestjs.com/exception-filters#binding-filters">NestJS: Binding filters (APP_FILTER)</a>
+            </li>
+            <li><a href="https://www.rfc-editor.org/rfc/rfc9457">RFC 9457: Problem Details for HTTP APIs</a></li>
+            <li><a href="../adr/0007-problem-details-error-response.md">ADR 0007: Problem Details로 통일</a></li>
+          </ol>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

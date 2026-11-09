@@ -40,6 +40,7 @@ const learnDocuments = [
   { file: '015-서버-컴포넌트-단계와-SSR-단계.html', title: '015 Server Component 단계와 SSR 단계', tags: ['nextjs'] },
   { file: '016-server-component가-해결하는-문제.html', title: '016 Server Component가 해결하는 문제', tags: ['nextjs'] },
   { file: '017-hydration-자세히.html', title: '017 hydration 자세히', tags: ['nextjs'] },
+  { file: '018-예외-필터와-APP_FILTER.html', title: '018 예외 필터와 APP_FILTER', tags: ['nestjs'] },
 ];
 
 const currentFile = decodeURIComponent(location.pathname).split('/').pop();
