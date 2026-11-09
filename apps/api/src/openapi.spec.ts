@@ -24,4 +24,25 @@ describe('OpenAPI 문서', () => {
       required: ['id', 'title'],
     });
   });
+
+  it('모든 경로의 오류 응답을 Problem Details로 적는다', async () => {
+    const document = await createOpenApiDocument();
+
+    expect(document.paths['/shows']?.get?.responses.default).toMatchObject({
+      content: {
+        'application/problem+json': {
+          schema: { $ref: '#/components/schemas/ProblemDetailsDto' },
+        },
+      },
+    });
+    expect(document.components?.schemas?.ProblemDetailsDto).toMatchObject({
+      required: ['type', 'title', 'status', 'detail', 'code'],
+      properties: {
+        errors: {
+          type: 'array',
+          items: { $ref: '#/components/schemas/FieldErrorDto' },
+        },
+      },
+    });
+  });
 });
