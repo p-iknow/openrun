@@ -834,6 +834,63 @@ curl -s -L -D - -H "RSC: 1" http://127.0.0.1:3100/probe-b</code></pre>
               </tbody>
             </table>
           </div>
+          <h3>브라우저는 받은 payload로 어떻게 그리나</h3>
+          <p>SSR을 건너뛰었으니 HTML이 없다. 브라우저에 이미 있는 React가 RSC payload만 읽고 화면을 바꾼다.</p>
+          <ol class="steps green">
+            <li>
+              <strong>Server Component 부분은 그대로 반영</strong>
+              Badge처럼 서버에서 실행이 끝난 부분은 payload에 <code>["$","span",…,"서버용 배지 B"]</code> 같은 결과로 들어 있다.
+              React는 이 결과를 그대로 화면에 반영한다. Badge 코드는 받지 않는다.
+            </li>
+            <li>
+              <strong>Client Component 부분은 브라우저에서 실행</strong>
+              Button처럼 이름표(<code>a:I[86223,[…],"Button"]</code>)로 온 부분은, 이름표에 적힌 JS 파일을 받아(이미 받아 둔 파일이면
+              다시 받지 않는다) <strong>브라우저가 직접 실행</strong>해 <code>&lt;button&gt;</code>을 만든다. 처음 열 때는 서버의
+              2단계가 하던 일을 이번에는 브라우저가 한다.
+            </li>
+            <li>
+              <strong>하이드레이션은 없다</strong>
+              하이드레이션은 "서버가 만든 HTML에 이벤트를 붙이는 일"이다. 이번에는 서버가 만든 HTML이 없고 브라우저가 처음부터
+              그리므로, 이벤트도 그리면서 바로 붙는다.
+            </li>
+          </ol>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>처음 열기 (주소창, 새로고침)</th>
+                  <th>링크로 이동</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>서버가 하는 일</td>
+                  <td>1단계 + 2단계</td>
+                  <td>1단계만 (정적 페이지면 저장해 둔 <code>.rsc</code>를 보냄)</td>
+                </tr>
+                <tr>
+                  <td>브라우저가 받는 것</td>
+                  <td>HTML + 그 안에 실린 RSC payload</td>
+                  <td>RSC payload만</td>
+                </tr>
+                <tr>
+                  <td>Client Component를 그리는 곳</td>
+                  <td>서버(2단계, HTML로) → 브라우저(하이드레이션으로 이벤트 연결)</td>
+                  <td>브라우저만 (실행하면서 이벤트도 바로 붙음)</td>
+                </tr>
+                <tr>
+                  <td>하이드레이션</td>
+                  <td><span class="badge blue">있음</span></td>
+                  <td><span class="badge green">없음</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            Next 공식 문서에 따르면, 이동할 때 레이아웃처럼 두 페이지가 함께 쓰는 부분은 다시 그리지 않고 바뀐 부분만 바꾼다. 이
+            부분은 이번 실험에서 따로 확인하지 않았다.
+          </p>
           <div class="callout">
             <p>
               2단계(SSR)는 <strong>첫 화면을 빨리 보여 주기 위한 단계</strong>라서 처음 열 때만 한다. 1단계(Server
@@ -1435,6 +1492,13 @@ export default async function ProbeDyn() {
             <p>
               먼저 보내는 조각에 fallback과 함께 아직 없는 줄을 가리키는 "$L15" 같은 표시만 적는다. 데이터가 준비되면 15번 줄만
               따로 보내고, React가 fallback 자리를 그 내용으로 바꾼다. 실험에서는 0초에 4,288바이트, 2초 뒤에 185바이트가 왔다.
+            </p>
+          </details>
+          <details>
+            <summary>12. 링크로 이동할 때 Client Component는 어디서 그려지고, 하이드레이션은 있나?</summary>
+            <p>
+              브라우저에서 그려진다. 서버는 RSC payload만 보내고 2단계(SSR)를 하지 않으니 HTML이 없다. 브라우저가 이름표에 적힌 JS를
+              받아 직접 실행해 그리고, 그러면서 이벤트도 바로 붙는다. 서버가 만든 HTML이 없으므로 하이드레이션은 없다.
             </p>
           </details>
         </section>
