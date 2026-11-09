@@ -198,8 +198,8 @@
           </ol>
           <h3 id="build-real">실제로 바뀐 모습: button.tsx 하나가 세 곳으로</h3>
           <p>
-            스토어 앱의 <code>next build</code> 결과물에서 store-ui의 Button이 어떻게 나뉘었는지 직접 꺼냈다. 압축된 코드라
-            읽기 쉽게 줄바꿈을 넣고, 길거나 상관없는 부분은 <code>…</code>로 줄였다.
+            스토어 앱의 <code>next build</code> 결과물에서 store-ui의 Button이 어떻게 나뉘었는지 꺼내, 알아보기 쉽게 풀어 썼다.
+            실제 결과물은 한 줄로 붙어 있고 변수 이름이 <code>e</code>, <code>$</code>처럼 난수 같은 짧은 이름으로 바뀌어 있다.
           </p>
 
           <p><strong>① 원본</strong>: <code>packages/store-ui/src/button.tsx</code> (줄임)</p>
@@ -246,11 +246,9 @@ export function Button({
           <p>
             <strong>② 서버용 코드</strong>: <code>.next/server/chunks/ssr/…js</code>. 1단계(설계도 만들기)가 실행하는 쪽이다.
           </p>
-          <pre><code class="language-js">let c = (0, b.registerClientReference)(
+          <pre><code class="language-js">export const Button = registerClientReference(
   function () {
-    throw Error(
-      "Attempted to call Button() from the server …",
-    );
+    throw Error("Attempted to call Button() from the server …");
   },
   "[project]/packages/store-ui/dist/button.js", // 파일 경로
   "Button", // export 이름
@@ -264,58 +262,47 @@ export function Button({
             <strong>③ 브라우저용 JS</strong>: <code>.next/static/chunks/16f11qb2p8waj.js</code> 안의 <code>86223</code>번 모듈.
             3단계(하이드레이션)에서 브라우저가 받는 진짜 코드다.
           </p>
-          <pre><code class="language-js">86223, (e) =&gt; {
-  "use strict";
-  // … Base UI Button 코드가 함께 들어 있다 …
+          <pre><code class="language-js">// 86223번 모듈 (Base UI Button 코드도 함께 들어 있다)
 
-  // const buttonVariants = cva(…) 가 바뀐 것
-  $ = (
-    (r = [
-      "group relative inline-flex h-[52px] items-center justify-center …",
-      "outline-primary focus-visible:outline-2 focus-visible:outline-offset-2",
-      // …
-    ]),
-    (t = {
-      variants: {
-        variant: {
-          primary: "bg-primary text-on-primary …",
-          secondary: "bg-surface-muted text-text …",
-        },
+const buttonVariants = cva(
+  [
+    "group relative inline-flex h-[52px] items-center justify-center …",
+    "outline-primary focus-visible:outline-2 focus-visible:outline-offset-2",
+    // …
+  ],
+  {
+    variants: {
+      variant: {
+        primary: "bg-primary text-on-primary …",
+        secondary: "bg-surface-muted text-text …",
       },
-      defaultVariants: { variant: "primary" },
-    }),
-    (e) =&gt; { /* cva 함수가 펼쳐져 들어 있다 */ }
-  );
+    },
+    defaultVariants: { variant: "primary" },
+  },
+);
 
-  // export function Button(…) 이 바뀐 것
-  e.s(["Button", 0, function ({
-    variant: e,
-    type: r = "button",
-    disabled: t = !1,
-    loading: n = !1,
-    onClick: l,
-    children: a,
-  }) {
-    let s = n &amp;&amp; !t;
-    return (0, o.jsxs)(K, {
-      type: r,
-      disabled: t || s,
-      onClick: l,
-      className: $({ variant: e }),
-      // …
-    });
-  }]);
-}</code></pre>
+function Button({
+  variant,
+  type = "button",
+  disabled = false,
+  loading = false,
+  onClick,
+  children,
+}) {
+  const isLoading = loading &amp;&amp; !disabled;
+  return jsxs(BaseButton, {
+    type,
+    disabled: disabled || isLoading,
+    onClick,
+    className: buttonVariants({ variant }),
+    // …
+  });
+}
+
+export { Button }; // 이름표의 "Button"으로 여기서 꺼낸다</code></pre>
           <ul>
-            <li>원본의 클래스 문자열과 <code>variants</code>가 그대로 있다. 진짜 코드는 여기로 왔다.</li>
-            <li>
-              이름이 짧게 바뀌었다(<code>buttonVariants</code> → <code>$</code>, <code>variant</code> → <code>e</code>). JSX는
-              <code>jsxs(…)</code> 호출로, <code>false</code>는 <code>!1</code>로 압축됐다.
-            </li>
-            <li>
-              <code>e.s(["Button", …])</code>가 이 모듈의 export 목록이다. 이름표에 적힌 export 이름 <code>"Button"</code>으로
-              여기서 꺼낸다.
-            </li>
+            <li>원본의 <code>cva</code>, 클래스 문자열, <code>Button</code> 함수가 모두 있다. 진짜 코드는 여기로 왔다.</li>
+            <li>JSX(<code>&lt;BaseButton …&gt;</code>)는 브라우저가 바로 실행할 수 있는 <code>jsxs(BaseButton, {…})</code> 호출로 바뀌었다.</li>
             <li>
               이 파일에는 <code>'use client'</code>가 없다. 지시어는 "여기서부터 클라이언트"라는 경계 표시라서, 이미 브라우저용인
               파일에는 필요 없다.
@@ -357,7 +344,7 @@ export function Button({
                 <tr>
                   <td><code>export function Button</code></td>
                   <td>이름표의 export 이름 <code>"Button"</code> (가짜 함수)</td>
-                  <td><code>e.s(["Button", …])</code> (진짜 함수)</td>
+                  <td><code>export { Button }</code> (진짜 함수)</td>
                   <td></td>
                 </tr>
                 <tr>
