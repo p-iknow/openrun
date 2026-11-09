@@ -3,10 +3,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>018 예외 필터와 APP_FILTER</title>
-    <link rel="stylesheet" href="learn.css" />
-    <script src="vendor/highlightjs/highlight.min.js" defer></script>
-    <script src="learn.js" defer></script>
+    <title>04 예외 필터와 APP_FILTER</title>
+    <link rel="stylesheet" href="../learn.css" />
+    <script src="../vendor/highlightjs/highlight.min.js" defer></script>
+    <script src="../learn.js" defer></script>
   </head>
   <body>
     <div class="layout">
@@ -98,7 +98,7 @@
           <h2>오류가 나면 누가 응답을 만드나</h2>
           <p>
             요청이 정상으로 처리되면 컨트롤러 메서드의 반환값이 그대로 JSON 응답이 된다. 컨트롤러와 서비스의
-            관계는 <a href="001-nestjs-기초.html">001 문서</a>에 있다.
+            관계는 <a href="00-nestjs-기초.html">nest 00 문서</a>에 있다.
           </p>
           <div class="flow">
             <div class="lane blue">
@@ -270,7 +270,7 @@ export class ProblemDetailsFilter implements ExceptionFilter {
               "이 클래스는 예외 필터이고, 이런 예외를 맡는다"는 표시다. <code>@Catch(HttpException)</code>처럼 쓰면
               그 종류만 맡고, 괄호를 비우면 <strong>모든 예외</strong>를 맡는다. 우리 목표가 "어디서 난 오류든"이라
               비워 뒀다. 데코레이터가 클래스에 표시를 붙이는 원리는
-              <a href="002-데코레이터와-메타데이터.html">002 문서</a>에 있다.
+              <a href="01-데코레이터와-메타데이터.html">nest 01 문서</a>에 있다.
             </li>
             <li>
               <strong><code>implements ExceptionFilter</code></strong>
@@ -776,7 +776,7 @@ export class AppModule {}</code></pre>
             <code>providers</code>는 "앱이 시작할 때 Nest가 만들어 둘 물건 목록"이다.
             <code>ShowsModule</code>의 <code>providers: [ShowsService]</code>도 같은 목록이다. 보통은 클래스 이름만
             적지만, 객체로 적으면 이름표와 실제 물건을 따로 정할 수 있다. 이 문법은
-            <a href="003-의존성-주입.html#nest">003 문서</a>에서 <code>DATABASE</code> 토큰으로 이미 봤다.
+            <a href="02-의존성-주입.html#nest">nest 02 문서</a>에서 <code>DATABASE</code> 토큰으로 이미 봤다.
           </p>
           <ol class="steps green">
             <li>
@@ -845,7 +845,7 @@ const app = await NestFactory.create(AppModule, { abortOnError: false });
 await app.listen(3000);</code></pre>
           <p>
             통합 테스트는 <code>main.ts</code>를 거치지 않고 <code>AppModule</code>로 앱을 직접 조립한다. 테스트 구성은
-            <a href="005-통합-테스트-구성.html">005 문서</a>에 있다.
+            <a href="03-통합-테스트-구성.html">nest 03 문서</a>에 있다.
           </p>
           <pre><code class="language-ts">// apps/api/test/problem-details.int.spec.ts (요약)
 const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
@@ -947,7 +947,7 @@ await app.init();</code></pre>
               <a href="https://docs.nestjs.com/exception-filters#binding-filters">NestJS: Binding filters (APP_FILTER)</a>
             </li>
             <li><a href="https://www.rfc-editor.org/rfc/rfc9457">RFC 9457: Problem Details for HTTP APIs</a></li>
-            <li><a href="../adr/0007-problem-details-error-response.md">ADR 0007: Problem Details로 통일</a></li>
+            <li><a href="../../adr/0007-problem-details-error-response.md">ADR 0007: Problem Details로 통일</a></li>
           </ol>
         </section>
       </main>

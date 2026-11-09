@@ -3,10 +3,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>021 공연장·공연·회차 스키마</title>
-    <link rel="stylesheet" href="learn.css" />
-    <script src="vendor/highlightjs/highlight.min.js" defer></script>
-    <script src="learn.js" defer></script>
+    <title>03 공연장·공연·회차 스키마</title>
+    <link rel="stylesheet" href="../learn.css" />
+    <script src="../vendor/highlightjs/highlight.min.js" defer></script>
+    <script src="../learn.js" defer></script>
   </head>
   <body>
     <div class="layout">
@@ -28,18 +28,18 @@
       </nav>
 
       <main>
-        <h1>021 공연장·공연·회차 스키마</h1>
+        <h1>03 공연장·공연·회차 스키마</h1>
         <p class="lead">
           1.3(#39)에서 만든 공연장, 공연, 회차 테이블(<code>apps/api/src/db/schema/</code>)을 읽고, 문법마다 왜 그 선택을
-          했는지 설명한다. 문법이 하는 일은 <a href="020-drizzle-스키마-문법.html">020 문서</a>, 테이블·외래 키·인덱스 같은 DB
-          개념은 <a href="019-프론트엔드-개발자를-위한-DB-개념.html">019 문서</a>에 있으니, 낯선 말이 나오면 링크를 따라가서
+          했는지 설명한다. 문법이 하는 일은 <a href="02-drizzle-스키마-문법.html">db-and-drizzle 02 문서</a>, 테이블·외래 키·인덱스 같은 DB
+          개념은 <a href="01-프론트엔드-개발자를-위한-DB-개념.html">db-and-drizzle 01 문서</a>에 있으니, 낯선 말이 나오면 링크를 따라가서
           읽는다.
         </p>
 
         <section id="overview">
           <h2>한눈에 보기</h2>
           <p>
-            세 테이블은 <a href="019-프론트엔드-개발자를-위한-DB-개념.html#fk">외래 키</a>로 이어진다. 공연은 공연장 하나에서
+            세 테이블은 <a href="01-프론트엔드-개발자를-위한-DB-개념.html#fk">외래 키</a>로 이어진다. 공연은 공연장 하나에서
             열리고, 회차는 공연 하나에 속한다(<code>GLOSSARY.md</code>). 화살표(→)는 "이 컬럼이 저 테이블의 id를 가리킨다"는
             뜻이다.
           </p>
@@ -73,7 +73,7 @@
           </ul>
           <p>
             공연장 하나에 공연이 여러 개, 공연 하나에 회차가 여러 개 달린다(<a
-              href="019-프론트엔드-개발자를-위한-DB-개념.html#one-to-many"
+              href="01-프론트엔드-개발자를-위한-DB-개념.html#one-to-many"
               >일대다</a
             >). 파일은 모듈 단위로 나눴다(ADR 0003). 공연장은 <code>venues</code> 모듈, 공연과 회차는 <code>shows</code> 모듈이
             소유하므로 <code>performances</code>도 <code>shows.ts</code>에 있다.
@@ -132,8 +132,8 @@ export const performances = pgTable(
           <h2>컬럼 이름을 직접 적은 이유</h2>
           <p>
             두 단어 이상인 컬럼은 <code>integer('venue_id')</code>처럼 이름을 직접 적었다. 적지 않으면 컬럼이
-            <code>"venueId"</code>가 되어 SQL에서 매번 따옴표를 쳐야 한다(<a href="020-drizzle-스키마-문법.html#column-name"
-              >020 문서</a
+            <code>"venueId"</code>가 되어 SQL에서 매번 따옴표를 쳐야 한다(<a href="02-drizzle-스키마-문법.html#column-name"
+              >db-and-drizzle 02 문서</a
             >).
           </p>
           <p>
@@ -157,7 +157,7 @@ export const performances = pgTable(
           <h2>일시는 timestamptz</h2>
           <p>
             시작 일시, 판매 오픈 일시, 등록 일시는 모두 <code>{ withTimezone: true }</code>로
-            <a href="019-프론트엔드-개발자를-위한-DB-개념.html#timestamptz">timestamptz</a>(절대 시점)로 저장한다.
+            <a href="01-프론트엔드-개발자를-위한-DB-개념.html#timestamptz">timestamptz</a>(절대 시점)로 저장한다.
           </p>
           <p>
             판매 상태는 "회차 시작 일시가 지금보다 지났는가", "판매 오픈 일시 전인가"로 계산한다. 시간대 없는
@@ -166,7 +166,7 @@ export const performances = pgTable(
             보여 줄 때만 스토어가 <code>Asia/Seoul</code>로 바꾼다(<code>apps/store/src/shows/select-show-cards.ts</code>).
           </p>
           <p>
-            <code>mode</code>는 기본값 <code>'date'</code>로 두었다(<a href="020-drizzle-스키마-문법.html#timestamp">020 문서</a
+            <code>mode</code>는 기본값 <code>'date'</code>로 두었다(<a href="02-drizzle-스키마-문법.html#timestamp">db-and-drizzle 02 문서</a
             >). 서비스는 받은 <code>Date</code>를 <code>toISOString()</code>으로 바꿔 응답에 담는다.
           </p>
         </section>
@@ -174,7 +174,7 @@ export const performances = pgTable(
         <section id="defaults">
           <h2>기본값을 둔 컬럼</h2>
           <p>
-            기본값(<a href="020-drizzle-스키마-문법.html#default">.default()</a>)은 두 컬럼에만 두었다.
+            기본값(<a href="02-drizzle-스키마-문법.html#default">.default()</a>)은 두 컬럼에만 두었다.
           </p>
           <ul>
             <li>
@@ -202,7 +202,7 @@ export const performances = pgTable(
           <h2>외래 키는 기본 동작으로</h2>
           <p>
             <code>shows.venue_id</code>와 <code>performances.show_id</code>에
-            <a href="020-drizzle-스키마-문법.html#references">.references()</a>와 <code>.notNull()</code>을 함께 붙였다. 그래서
+            <a href="02-drizzle-스키마-문법.html#references">.references()</a>와 <code>.notNull()</code>을 함께 붙였다. 그래서
             "공연은 반드시 실제로 있는 공연장 하나에 속한다", "회차는 반드시 실제로 있는 공연 하나에 속한다"는 규칙을 DB가
             지킨다. API 코드에 버그가 있어도 없는 공연장을 가리키는 공연이 저장되지 않는다.
           </p>
@@ -215,7 +215,7 @@ export const performances = pgTable(
             <p>
               외래 키 때문에 시드는 <code>TRUNCATE performances, shows, venues RESTART IDENTITY</code>처럼 세 테이블을 한
               문장에서 비운다. <code>shows</code>만 비우면 그 행을 가리키는 <code>performances</code>가 남아 있어서 PostgreSQL이
-              거부한다. <code>RESTART IDENTITY</code>로 <a href="020-drizzle-스키마-문법.html#identity">번호</a>를 1로 되돌려,
+              거부한다. <code>RESTART IDENTITY</code>로 <a href="02-drizzle-스키마-문법.html#identity">번호</a>를 1로 되돌려,
               통합 테스트가 <code>id: 1</code>을 기대할 수 있다.
             </p>
           </div>
@@ -225,7 +225,7 @@ export const performances = pgTable(
           <h2>외래 키 컬럼에 인덱스</h2>
           <p>
             <code>shows.venue_id</code>와 <code>performances.show_id</code>에
-            <a href="020-drizzle-스키마-문법.html#index">index()</a>를 두었다. PostgreSQL은 외래 키 컬럼에 인덱스를 자동으로
+            <a href="02-drizzle-스키마-문법.html#index">index()</a>를 두었다. PostgreSQL은 외래 키 컬럼에 인덱스를 자동으로
             만들지 않기 때문이다. <code>show_id</code> 인덱스가 쓰일 곳은 다음과 같다.
           </p>
           <ul>
@@ -235,7 +235,7 @@ export const performances = pgTable(
           </ul>
           <p>
             지금은 회차가 200개쯤이라 PostgreSQL이 인덱스 대신 테이블 전체를 읽는
-            <a href="019-프론트엔드-개발자를-위한-DB-개념.html#index">실행 계획</a>을 고를 때가 많다. 인덱스가 실제로 효과가
+            <a href="01-프론트엔드-개발자를-위한-DB-개념.html#index">실행 계획</a>을 고를 때가 많다. 인덱스가 실제로 효과가
             있는지는 데이터를 늘려 측정하는 9단계에서 확인한다.
           </p>
         </section>
@@ -243,7 +243,7 @@ export const performances = pgTable(
         <section id="enum">
           <h2>장르는 enum</h2>
           <p>
-            장르는 <a href="020-drizzle-스키마-문법.html#pg-enum">pgEnum</a>으로 만들었다. GLOSSARY에서 장르를 "고정된
+            장르는 <a href="02-drizzle-스키마-문법.html#pg-enum">pgEnum</a>으로 만들었다. GLOSSARY에서 장르를 "고정된
             분류"(뮤지컬, 연극, 콘서트, 클래식·무용, 아동·가족)로 정했기 때문이다. 운영자가 자주 추가하거나 이름을 바꿀
             분류였다면 <code>genres</code> 테이블을 따로 만들고 공연이 외래 키로 가리키게 했을 것이다. 그러면 장르 추가가
             마이그레이션이 아니라 행 하나를 넣는 일이 된다.
@@ -270,7 +270,7 @@ export const performances = pgTable(
         <section id="types">
           <h2>행 타입과 응답 타입</h2>
           <p>
-            스키마에서 행 타입(<a href="020-drizzle-스키마-문법.html#infer">$inferSelect</a>)을 꺼낼 수 있지만, API 응답 타입은
+            스키마에서 행 타입(<a href="02-drizzle-스키마-문법.html#infer">$inferSelect</a>)을 꺼낼 수 있지만, API 응답 타입은
             DTO(<code>ShowSummaryDto</code>)로 따로 정했다. 그래서 DB 컬럼을 하나 더해도 API 응답이 저절로 바뀌지 않고,
             스토어가 받는 모양은 DTO를 고칠 때만 바뀐다. 예를 들어 <code>description</code>은 테이블에 있지만 목록 응답에는
             없다.
@@ -325,9 +325,9 @@ TRUNCATE "shows" RESTART IDENTITY;--&gt; statement-breakpoint</code></pre>
         <section id="relations">
           <h2>relations() 대신 JOIN</h2>
           <p>
-            Drizzle의 <a href="020-drizzle-스키마-문법.html#relations">relations()</a>를 쓰면 "공연과 그 회차들"을 중첩 객체로
+            Drizzle의 <a href="02-drizzle-스키마-문법.html#relations">relations()</a>를 쓰면 "공연과 그 회차들"을 중첩 객체로
             한 번에 받을 수 있지만, 이 저장소는 쓰지 않고 서비스에서
-            <a href="019-프론트엔드-개발자를-위한-DB-개념.html#join">JOIN</a>을 직접 적는다.
+            <a href="01-프론트엔드-개발자를-위한-DB-개념.html#join">JOIN</a>을 직접 적는다.
           </p>
           <pre><code class="language-ts">this.db
   .select({ id: shows.id, venueName: venues.name, start: period.start, end: period.end })

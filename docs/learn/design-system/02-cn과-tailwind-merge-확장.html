@@ -4,9 +4,9 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>cn과 tailwind-merge 확장: clsx, twMerge, extendTailwindMerge</title>
-    <link rel="stylesheet" href="learn.css" />
-    <script src="vendor/highlightjs/highlight.min.js" defer></script>
-    <script src="learn.js" defer></script>
+    <link rel="stylesheet" href="../learn.css" />
+    <script src="../vendor/highlightjs/highlight.min.js" defer></script>
+    <script src="../learn.js" defer></script>
   </head>
   <body>
     <div class="layout">
@@ -640,7 +640,7 @@ twMerge('p-2', 'p-4');     // → "p-2 p-4"  Tailwind 기본 클래스는 전혀
           </div>
           <p>
             토큰을 <code>tokens.css</code>에만 추가하고 <code>cn.ts</code>에 빠뜨리면 <a href="#why-extend">조용히 사라지는
-            버그</a>가 생긴다. 그래서 <code>cn.spec.ts</code>는 <a href="008-토큰-CSS를-읽는-파서.html#output">008 문서</a>의
+            버그</a>가 생긴다. 그래서 <code>cn.spec.ts</code>는 <a href="00-토큰-CSS를-읽는-파서.html#output">design-system 00 문서</a>의
             파서로 <code>tokens.css</code>를 직접 읽고, 모든 글자 크기, 간격, 모서리 토큰마다 확인한다.
           </p>
           <pre><code class="language-ts">it.each(tokens.textSizes.map((t) =&gt; t.name))(
