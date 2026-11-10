@@ -26,6 +26,7 @@
           <li><a href="#timestamptz">timestamptz</a></li>
           <li><a href="#order-limit">ORDER BY, LIMIT, OFFSET</a></li>
           <li><a href="#aggregate">집계 함수와 GROUP BY</a></li>
+          <li><a href="#query-order">쓰는 순서와 실행 순서</a></li>
           <li><a href="#case">CASE</a></li>
           <li><a href="#filter">집계의 FILTER</a></li>
           <li><a href="#subquery">서브쿼리</a></li>
@@ -540,6 +541,69 @@ Object.entries(Object.groupBy(performances, (p) =&gt; p.show_id)).map(([showId, 
             <code>min</code>, <code>max</code>는 집계할 행이 하나도 없으면 <code>NULL</code>을 돌려준다. 빈 배열에서 최솟값이
             없는 것과 같다. <code>count(*)</code>는 행이 없으면 <code>0</code>이다.
           </p>
+        </section>
+
+        <section id="query-order">
+          <h2>쓰는 순서와 실행 순서</h2>
+          <p>
+            SQL은 <strong>쓰는 순서와 DB가 실행하는 순서가 다르다</strong>. <code>SELECT</code>를 맨 앞에 쓰지만 DB는 행을
+            가져오고 거르고 묶은 <strong>뒤에</strong> <code>SELECT</code>를 계산한다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>쓰는 순서</th>
+                  <th>실행 순서</th>
+                  <th>하는 일</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>1 <code>SELECT</code></td>
+                  <td>1 <code>FROM</code> / <code>JOIN</code></td>
+                  <td>테이블에서 행을 가져와 잇는다</td>
+                </tr>
+                <tr>
+                  <td>2 <code>FROM</code> / <code>JOIN</code></td>
+                  <td>2 <code>WHERE</code></td>
+                  <td>행을 거른다</td>
+                </tr>
+                <tr>
+                  <td>3 <code>WHERE</code></td>
+                  <td>3 <code>GROUP BY</code></td>
+                  <td>행을 키별로 묶는다</td>
+                </tr>
+                <tr>
+                  <td>4 <code>GROUP BY</code></td>
+                  <td>4 <code>SELECT</code></td>
+                  <td>남은 행(또는 묶음)마다 결과 컬럼을 계산한다. 집계 함수도 여기서</td>
+                </tr>
+                <tr>
+                  <td>5 <code>ORDER BY</code></td>
+                  <td>5 <code>ORDER BY</code></td>
+                  <td>결과를 정렬한다</td>
+                </tr>
+                <tr>
+                  <td>6 <code>LIMIT</code> / <code>OFFSET</code></td>
+                  <td>6 <code>LIMIT</code> / <code>OFFSET</code></td>
+                  <td>일부만 자른다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            그래서 <code>GROUP BY</code>를 맨 아래에 써도 <code>SELECT</code> 안의 <code>min()</code>이 계산될 때는 이미 묶음이
+            만들어져 있다. 쓰는 순서는 읽기 좋으라고 정한 문법일 뿐이다.
+          </p>
+          <p>
+            Drizzle 체인도 같다. <code>db.select(...).from(...).groupBy(...)</code>는 메서드를 부를 때마다 실행되지 않는다.
+            주문서에 칸을 하나씩 채울 뿐이고, 다 채운 뒤 SQL 문장 하나로 만들어 DB에 한꺼번에 보낸다. 메서드 순서는 SQL의
+            쓰는 순서를 따른 것이고, 실행 순서는 DB가 문장 전체를 받은 뒤 위 표대로 정한다. 자바스크립트로는 설정 객체의
+            키를 어떤 순서로 적든 받는 함수가 정해진 순서로 처리하는 것과 같다.
+          </p>
+          <pre><code class="language-js">// 키 순서와 상관없이 runQuery는 from → where → groupBy → select 순서로 처리한다
+runQuery({ select: ['show_id', 'min(...)'], from: 'performances', groupBy: 'show_id' });</code></pre>
         </section>
 
         <section id="case">
