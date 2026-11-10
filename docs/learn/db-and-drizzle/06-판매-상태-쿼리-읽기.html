@@ -850,7 +850,8 @@ for (const [showId, rows] of Object.entries(groups)) {
             "취소됐다"를 보여 주는 것이 맞다. 우선순위에서 회차 취소가 판매 종료보다 앞선 이유다.
           </p>
           <h3>③ 순번을 이름으로 바꾸기</h3>
-          <pre><code class="language-ts">const showPriority = sql`min(${priority})`; // ②에서 구한 공연별 가장 작은 순번
+          <pre><code class="language-ts">const priority = performancePriority(now);   // 회차 한 줄의 순번 (행마다)
+const showPriority = sql`min(${priority})`; // 공연의 가장 작은 순번 (묶음마다, ②)
 
 const toStatus = sql.join(
   SHOW_SALES_STATUSES.map(
@@ -953,9 +954,13 @@ end as "sales_open_at"</code></pre>
 
         <section id="sales-open-at">
           <h2>판매 오픈 일시</h2>
-          <pre><code class="language-ts">salesOpenAt: sql&lt;Date | null&gt;`case
+          <pre><code class="language-ts">const priority = performancePriority(now);   // 회차 한 줄의 순번 (행마다)
+const showPriority = sql`min(${priority})`; // 공연의 가장 작은 순번 (묶음마다)
+
+salesOpenAt: sql&lt;Date | null&gt;`case
   when ${showPriority} = ${priorityOf('upcoming')}
-  then min(${performances.salesOpenAt}) filter (where ${priority} = ${priorityOf('upcoming')})
+  then min(${performances.salesOpenAt})
+       filter (where ${priority} = ${priorityOf('upcoming')})
 end`
   .mapWith(performances.salesOpenAt)
   .as('sales_open_at'),</code></pre>
