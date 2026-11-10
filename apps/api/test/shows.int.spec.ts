@@ -574,6 +574,24 @@ describe('GET /shows', () => {
         });
       },
     );
+
+    it('끝난 회차는 남은 좌석이 적어도 매진 임박이 아니다', async () => {
+      const venueId = await insertVenue('예술의전당');
+      await insertShow({
+        venueId,
+        title: '달빛 정원',
+        performances: [
+          { startsAt: '2026-01-20T10:00:00Z', soldSeats: 19 },
+          // 공연이 판매 종료로 목록에서 빠지지 않게 판매 중 회차를 둔다.
+          { startsAt: '2026-03-10T10:00:00Z' },
+        ],
+      });
+
+      expect(await fetchFirstItem()).toMatchObject({
+        salesStatus: 'on_sale',
+        isAlmostSoldOut: false,
+      });
+    });
   });
 
   it('판매 종료 공연은 목록과 전체 개수에서 뺀다', async () => {

@@ -29,33 +29,38 @@ interface SectionLayout {
   seatsPerRow: number;
 }
 
+// 구역 이름은 A구역부터 붙이고, 구역마다 같은 열 수와 열당 좌석 수를 쓴다.
+function sectionsOf({
+  count,
+  rows,
+  seatsPerRow,
+}: {
+  count: number;
+  rows: number;
+  seatsPerRow: number;
+}): SectionLayout[] {
+  return Array.from({ length: count }, (_, index) => ({
+    name: `${String.fromCharCode('A'.charCodeAt(0) + index)}구역`,
+    rows,
+    seatsPerRow,
+  }));
+}
+
 const VENUE_LAYOUTS: { name: string; sections: SectionLayout[] }[] = [
   // 100석
   {
     name: '낙산 소극장',
-    sections: ['A', 'B'].map((letter) => ({
-      name: `${letter}구역`,
-      rows: 5,
-      seatsPerRow: 10,
-    })),
+    sections: sectionsOf({ count: 2, rows: 5, seatsPerRow: 10 }),
   },
   // 300석
   {
     name: '한강 아트홀',
-    sections: ['A', 'B', 'C'].map((letter) => ({
-      name: `${letter}구역`,
-      rows: 10,
-      seatsPerRow: 10,
-    })),
+    sections: sectionsOf({ count: 3, rows: 10, seatsPerRow: 10 }),
   },
   // 600석
   {
     name: '서울 그랜드 씨어터',
-    sections: ['A', 'B', 'C', 'D'].map((letter) => ({
-      name: `${letter}구역`,
-      rows: 10,
-      seatsPerRow: 15,
-    })),
+    sections: sectionsOf({ count: 4, rows: 10, seatsPerRow: 15 }),
   },
 ];
 
