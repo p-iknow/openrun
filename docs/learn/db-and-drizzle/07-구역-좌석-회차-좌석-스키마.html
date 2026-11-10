@@ -19,7 +19,7 @@
           <li><a href="#seats">좌석: 같은 자리가 두 번 생기지 않게</a></li>
           <li><a href="#sections">구역: 이름이 겹치면 생기는 일</a></li>
           <li><a href="#fk-index">외래 키마다 인덱스가 있나</a></li>
-          <li><a href="#migration">0002를 고치지 않고 0003을 만든 이유</a></li>
+          <li><a href="#migration">적용한 마이그레이션은 고치지 않는다</a></li>
           <li><a href="#check">스스로 확인하기</a></li>
         </ol>
       </nav>
@@ -28,8 +28,7 @@
         <h1>07 구역·좌석·회차 좌석 스키마</h1>
         <p class="lead">
           1.4(#41)에서 만든 구역(<code>sections</code>), 좌석(<code>seats</code>), 회차 좌석(<code>performance_seats</code>)
-          테이블을 왜 이런 구조로 나눴는지 보고, 각 테이블에 어떤 유니크 제약과 인덱스를 걸었고 어떤 문제를 막는지 따라간다. 리뷰에서 실행 계획을 확인하고 주석을
-          고친 일, 구역 이름 유니크 제약을 더한 결정도 함께 적는다. 유니크 제약, 여러 컬럼 인덱스, 실행 계획 같은 개념은
+          테이블을 왜 이런 구조로 나눴는지 보고, 각 테이블에 어떤 유니크 제약과 인덱스를 걸었고 어떤 문제를 막는지 따라간다. 유니크 제약, 여러 컬럼 인덱스, 실행 계획 같은 개념은
           <a href="01-프론트엔드-개발자를-위한-DB-개념.html#unique">db-and-drizzle 01 문서</a>, <code>unique()</code>와
           <code>index()</code> 문법은 <a href="02-drizzle-스키마-문법.html#unique">db-and-drizzle 02 문서</a>에 있다.
         </p>
@@ -607,8 +606,7 @@ export const sections = pgTable(
   (table) =&gt; [unique().on(table.venueId, table.name)],
 );</code></pre>
           <p>
-            처음에는 이 제약 없이 <code>index().on(table.venueId)</code>만 있었다. 리뷰에서 "좌석 제약이 있는데 구역 이름은 왜 안
-            막나"를 따져 보고 더했다. 핵심은 <strong>DB는 구역을 이름이 아니라 id로 구분한다</strong>는 점이다.
+            좌석 제약이 있어도 구역 이름이 겹치면 같은 이름의 자리가 둘 생긴다. 핵심은 <strong>DB는 구역을 이름이 아니라 id로 구분한다</strong>는 점이다.
           </p>
 
           <h3 id="sections-scenario">이름이 겹치는 과정</h3>
@@ -655,11 +653,11 @@ export const sections = pgTable(
             <code>(2, A구역)</code>은 공연장 id가 달라 둘 다 들어간다. 티켓에 공연장 이름이 함께 나가니 사람도 헷갈리지 않는다.
           </p>
 
-          <h3 id="sections-index">venue_id 인덱스를 지운 이유</h3>
+          <h3 id="sections-index">venue_id 인덱스를 따로 두지 않는 이유</h3>
           <p>
-            유니크 제약의 인덱스가 <code>(venue_id, name)</code> 순서라 <code>venue_id</code>만으로 찾을 때도 쓰인다. 기존
-            <code>venue_id</code> 인덱스가 하던 일을 그대로 대신하므로 지웠다. 인덱스가 둘이면 구역을 넣을 때마다 둘 다 고쳐야
-            하고 얻는 것은 없다. 결과적으로 인덱스 수는 그대로 하나이고, 막는 문제가 하나 늘었다.
+            유니크 제약의 인덱스가 <code>(venue_id, name)</code> 순서라 <code>venue_id</code>만으로 찾을 때도 쓰인다. 그래서
+            <code>venue_id</code> 인덱스를 따로 만들지 않는다. 같은 일을 하는 인덱스가 둘이면 구역을 넣을 때마다 둘 다 고쳐야
+            하고 얻는 것은 없다. 인덱스 하나로 중복을 막고 공연장의 구역도 찾는다.
           </p>
         </section>
 
@@ -690,18 +688,18 @@ export const sections = pgTable(
         </section>
 
         <section id="migration">
-          <h2>0002를 고치지 않고 0003을 만든 이유</h2>
+          <h2>적용한 마이그레이션은 고치지 않는다</h2>
           <p>
-            구역 유니크 제약을 더할 때 PR은 병합 전이었다. 그래서 <code>0002</code> 마이그레이션을 다시 생성해 처음부터 제약이
-            있던 것처럼 만들 수도 있었다. 하지만 개발자의 로컬 DB에는 이미 <code>0002</code>가 적용되어 있다. drizzle-kit은
-            적용한 마이그레이션을 다시 실행하지 않으므로, 내용을 바꿔도 로컬 DB에는 반영되지 않고 코드와 DB가 조용히 어긋난다.
+            구역 테이블은 <code>0002</code>에서 만들고, 구역 이름 유니크 제약은 <code>0003</code>에서 더한다. drizzle-kit은 이미
+            적용한 마이그레이션을 다시 실행하지 않는다. 그래서 어느 DB에든 한 번 적용된 마이그레이션의 내용을 바꾸면 그 DB에는
+            반영되지 않고 코드와 DB가 조용히 어긋난다. 스키마를 바꿀 때는 새 마이그레이션을 더한다.
           </p>
           <pre><code class="language-sql">-- apps/api/drizzle/0003_unique_section_name_per_venue.sql
 DROP INDEX "sections_venue_id_index";
 ALTER TABLE "sections" ADD CONSTRAINT "sections_venue_id_name_unique" UNIQUE("venue_id","name");</code></pre>
           <p>
-            새 파일로 두면 <code>pnpm db:migrate</code>만 다시 돌리면 된다. 이미 있는 구역 이름은 A구역, B구역…으로 공연장 안에서
-            겹치지 않아 제약을 더할 때 실패하지 않는다. 겹치는 데이터가 이미 있었다면 <code>ADD CONSTRAINT</code>가 실패하므로,
+            새 파일이면 <code>pnpm db:migrate</code>가 아직 적용하지 않은 것만 실행한다. 시드의 구역 이름은 A구역, B구역…으로 공연장 안에서
+            겹치지 않아 제약을 더할 때 실패하지 않는다. 겹치는 데이터가 이미 있다면 <code>ADD CONSTRAINT</code>가 실패하므로,
             먼저 데이터를 정리해야 한다.
           </p>
         </section>
@@ -752,8 +750,8 @@ ALTER TABLE "sections" ADD CONSTRAINT "sections_venue_id_name_unique" UNIQUE("ve
             </details>
           </div>
           <div class="quiz">
-            <p class="quiz-q">4. 공연장 하나의 구역 목록을 찾는 쿼리를 쓴다. 구역 테이블에 <code>venue_id</code> 인덱스를 다시 만들어야 하나?</p>
-            <p class="quiz-context"><a href="#sections-index">venue_id 인덱스를 지운 이유</a>를 떠올린다.</p>
+            <p class="quiz-q">4. 공연장 하나의 구역 목록을 찾는 쿼리를 쓴다. 구역 테이블에 <code>venue_id</code> 인덱스를 따로 만들어야 하나?</p>
+            <p class="quiz-context"><a href="#sections-index">venue_id 인덱스를 따로 두지 않는 이유</a>를 떠올린다.</p>
             <pre><code class="language-sql">select * from sections where venue_id = 1;</code></pre>
             <details class="quiz-answer">
               <summary>답 보기</summary>
