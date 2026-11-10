@@ -20,6 +20,7 @@
           <li><a href="#number">상태를 숫자로 계산하는 이유</a></li>
           <li><a href="#show">공연 판매 상태로 모으기</a></li>
           <li><a href="#sales-open-at">판매 오픈 일시</a></li>
+          <li><a href="#sold-out">남은 좌석과 매진 임박</a></li>
           <li><a href="#service">목록과 개수에 붙이기</a></li>
           <li><a href="#subquery">서브쿼리를 함수로 둔 이유</a></li>
           <li><a href="#clock">현재 시각은 Clock에서</a></li>
@@ -124,7 +125,7 @@ export function showSalesStatusSubquery(db: Database, { now }: { now: Date }) {
             <li>
               <strong>공연 판매 상태</strong>
               회차들의 판매 상태 중 우선순위가 가장 높은 것이다. 판매 중 &gt; 판매 예정 &gt; 매진 &gt; 회차 취소 &gt; 판매
-              종료. 매진은 회차 좌석이 생기는 뒤 티켓에서 더한다.
+              종료. 매진은 회차 좌석으로 남은 좌석을 세야 해서 <a href="#sold-out">남은 좌석과 매진 임박</a>에서 따로 본다.
             </li>
             <li>
               <strong>목록</strong>
@@ -448,8 +449,9 @@ const priority = performancePriority(now);</code></pre>
             순서는 아무 상관이 없다.
           </p>
           <p>
-            매진(<code>sold_out</code>)을 더할 때는 배열의 <code>'upcoming'</code>과 <code>'cancelled'</code> 사이에 한 줄만
-            넣으면 된다. 뒤쪽 순번이 하나씩 밀리고, 아래에서 볼 SQL의 숫자와 이름 매핑도 배열에서 다시 만들어진다.
+            상태를 하나 더할 때는 배열의 알맞은 자리에 한 줄만 넣으면 된다. 뒤쪽 순번이 하나씩 밀리고, 아래에서 볼 SQL의 숫자와
+            이름 매핑도 배열에서 다시 만들어진다. 매진(<code>sold_out</code>)이 그렇게 <code>'upcoming'</code>과
+            <code>'cancelled'</code> 사이에 들어간다(<a href="#sold-out">남은 좌석과 매진 임박</a>).
           </p>
         </section>
 
@@ -820,6 +822,138 @@ end`
           </div>
           <p>
             이 표가 서브쿼리 <code>show_sales_status</code>의 결과다. 공연당 한 줄이고, 회차가 없는 공연은 줄이 없다.
+          </p>
+        </section>
+
+        <section id="sold-out">
+          <h2>남은 좌석과 매진 임박</h2>
+          <p>
+            1.4(#41)에서 회차 좌석(<code>performance_seats</code>)이 생기면서 두 가지가 더해졌다. 남은 좌석이 0인 회차는
+            <strong>매진</strong>이고, 판매 중인 회차 중 남은 좌석이 전체의 10% 이하인 회차가 하나라도 있으면 공연은
+            <strong>매진 임박</strong>이다. 이 절에서는 순번을 숫자 대신 상태 이름으로 적는다.
+          </p>
+          <pre><code class="language-ts">// apps/api/src/shows/show-sales-status.ts
+// ① 회차마다 남은 좌석과 전체 좌석을 센다
+function seatCountSubquery(db: Database) {
+  return db
+    .select({
+      performanceId: performanceSeats.performanceId,
+      remaining: sql&lt;number&gt;`count(*) filter (where not ${performanceSeats.isSold})`.mapWith(Number).as('remaining'),
+      total: count().as('total'),
+    })
+    .from(performanceSeats)
+    .groupBy(performanceSeats.performanceId)
+    .as('seat_count');
+}
+
+// ② 회차 좌석이 없는 회차는 0석으로 본다
+const remaining = sql&lt;number&gt;`coalesce(${seatCount.remaining}, 0)`;
+
+// ③ 회차 판매 상태에 매진 갈래가 더해진다 (performancePriority 안)
+    when ${remaining} = 0 then ${priorityOf('sold_out')}
+
+// ④ 회차마다: 판매 중이고 남은 좌석이 10% 이하인가
+const isAlmostSoldOut = sql`${priority} = ${priorityOf('on_sale')} and ${remaining} * 10 &lt;= ${seatCount.total}`;
+
+// ⑤ 공연마다: 그런 회차가 하나라도 있나
+isAlmostSoldOut: sql&lt;boolean&gt;`bool_or(${isAlmostSoldOut})`.as('is_almost_sold_out'),
+
+// 회차에 ①을 붙인다
+.from(performances)
+.leftJoin(seatCount, eq(seatCount.performanceId, performances.id))</code></pre>
+
+          <h3 id="sold-out-example">예시: 공연 5의 회차 넷</h3>
+          <p>
+            공연 5에 회차가 넷 있다. 회차 20~22는 판매 오픈 후이고 아직 시작 전이다. 회차 23은 판매 오픈 전이다. 회차 22는 회차
+            좌석을 아직 만들지 않았다.
+          </p>
+          <ol class="steps blue">
+            <li>
+              <strong>① 회차 좌석을 회차별로 센다.</strong> <code>count(*) filter (where not is_sold)</code>는 팔리지 않은 좌석만,
+              <code>count()</code>는 모든 좌석을 센다(<a href="01-프론트엔드-개발자를-위한-DB-개념.html#filter">FILTER</a>). 회차 22는
+              회차 좌석이 없어 결과 행이 생기지 않는다.
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th colspan="3">seat_count</th></tr><tr><th>performance_id</th><th>remaining</th><th>total</th></tr></thead>
+                  <tbody>
+                    <tr><td>20</td><td>1</td><td>20</td></tr>
+                    <tr><td>21</td><td>0</td><td>20</td></tr>
+                    <tr><td>23</td><td>1</td><td>20</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </li>
+            <li>
+              <strong>② 회차에 LEFT JOIN하고 NULL을 0으로 메운다.</strong> 회차 22는 짝이 없어 <code>remaining</code>,
+              <code>total</code>이 NULL이다. <code>coalesce</code>가 <code>remaining</code>만 0으로 바꾼다
+              (<a href="01-프론트엔드-개발자를-위한-DB-개념.html#coalesce">COALESCE</a>). 메우지 않으면
+              <code>remaining = 0</code>이 NULL이 되어 매진 갈래를 지나쳐 판매 중이 된다
+              (<a href="01-프론트엔드-개발자를-위한-DB-개념.html#null-as-false">조건 자리에서 NULL은 false처럼 지나간다</a>).
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>회차</th><th>seat_count.remaining</th><th>remaining (coalesce 후)</th><th>seat_count.total</th></tr></thead>
+                  <tbody>
+                    <tr><td>20</td><td>1</td><td>1</td><td>20</td></tr>
+                    <tr><td>21</td><td>0</td><td>0</td><td>20</td></tr>
+                    <tr><td>22</td><td>NULL</td><td><strong>0</strong></td><td>NULL</td></tr>
+                    <tr><td>23</td><td>1</td><td>1</td><td>20</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </li>
+            <li>
+              <strong>③ 회차 판매 상태를 고른다.</strong> 매진 갈래는 판매 예정 다음, 판매 중 앞에 있다. 회차 23은 남은 좌석과 상관없이
+              판매 예정 갈래에서 먼저 걸린다.
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>회차</th><th>먼저 맞는 갈래</th><th>회차 판매 상태</th></tr></thead>
+                  <tbody>
+                    <tr><td>20</td><td>어느 갈래에도 안 맞는다</td><td>판매 중</td></tr>
+                    <tr><td>21</td><td><code>remaining = 0</code></td><td>매진</td></tr>
+                    <tr><td>22</td><td><code>remaining = 0</code> (coalesce로 0)</td><td>매진</td></tr>
+                    <tr><td>23</td><td><code>now &lt; sales_open_at</code></td><td>판매 예정</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </li>
+            <li>
+              <strong>④ 회차마다 매진 임박인지 계산한다.</strong> 조건식이 회차마다 true/false 값이 된다
+              (<a href="01-프론트엔드-개발자를-위한-DB-개념.html#condition-value">조건식도 값이다</a>). 10%는 나누지 않고 곱해서
+              비교한다(<a href="01-프론트엔드-개발자를-위한-DB-개념.html#integer-division">정수 나눗셈</a>).
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>회차</th><th>판매 중인가</th><th><code>remaining * 10 &lt;= total</code></th><th>AND 결과</th></tr></thead>
+                  <tbody>
+                    <tr><td>20</td><td>true</td><td><code>10 &lt;= 20</code> → true</td><td><strong>true</strong></td></tr>
+                    <tr><td>21</td><td>false (매진)</td><td><code>0 &lt;= 20</code> → true</td><td>false</td></tr>
+                    <tr><td>22</td><td>false (매진)</td><td><code>0 &lt;= NULL</code> → NULL</td><td>false</td></tr>
+                    <tr><td>23</td><td>false (판매 예정)</td><td><code>10 &lt;= 20</code> → true</td><td>false</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              회차 22는 <code>total</code>이 NULL이지만 앞쪽이 false라 결과가 false로 정해진다
+              (<a href="01-프론트엔드-개발자를-위한-DB-개념.html#null-and-or">AND, OR에 NULL이 섞이면</a>). 판매 중인 회차는 남은
+              좌석이 0보다 커서 회차 좌석 행이 있으므로 <code>total</code>이 NULL일 수 없다. 그래서 이 값은 NULL이 되지 않는다.
+            </li>
+            <li>
+              <strong>⑤ 공연마다 모은다.</strong> <code>bool_or</code>는 회차 넷 중 하나라도 true면 true다
+              (<a href="01-프론트엔드-개발자를-위한-DB-개념.html#bool-or">bool_or</a>). 회차 20 덕분에 공연 5는 매진 임박이다. 공연
+              판매 상태는 회차 판매 상태 중 가장 앞선 판매 중이다.
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>show_id</th><th>sales_status</th><th>is_almost_sold_out</th></tr></thead>
+                  <tbody>
+                    <tr><td>5</td><td>on_sale</td><td>true</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </li>
+          </ol>
+          <p>
+            매진 임박은 판매 중인 회차만 보므로, 매진 임박이 true인 공연은 공연 판매 상태도 늘 판매 중이다. 스토어 카드는 판매 중 배지
+            옆에 "매진 임박" 글자를 붙인다. Drizzle 쪽에서 <code>count()</code> 헬퍼 대신 <code>sql</code>을 쓴 이유와
+            <code>.mapWith</code>를 붙인 값, 붙이지 않은 값의 차이는 <a href="03-drizzle-쿼리-문법.html#aggregate-sql">db-and-drizzle 03
+            문서</a>, 서브쿼리를 leftJoin할 때 챙길 것은 <a href="03-drizzle-쿼리-문법.html#subquery-left-join">같은 문서의 다른 절</a>에 있다.
           </p>
         </section>
 
@@ -1289,7 +1423,7 @@ when ${performances.isCancelled} then ${priorityOf('cancelled')}</code></pre>
           <ul>
             <li>
               <strong>숫자를 배열에서 꺼낸다.</strong> <code>priorityOf('cancelled')</code>는 배열에서
-              <code>'cancelled'</code>의 위치(2)를 찾아 <code>sql.raw('2')</code>를 만든다. 매진을 배열에 끼워 넣으면 숫자가
+              <code>'cancelled'</code>의 위치(2)를 찾아 <code>sql.raw('2')</code>를 만든다. 상태를 배열에 끼워 넣으면 숫자가
               저절로 밀리므로 <code>CASE</code>를 고칠 필요가 없다. 코드도 숫자 대신 상태 이름으로 읽힌다.
             </li>
             <li>

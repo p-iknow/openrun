@@ -303,6 +303,46 @@ this.db
             <code>count()</code>는 인자 없이 쓰면 <code>count(*)</code>(행 수)이고, <code>count(col)</code>이면 그 컬럼이
             <code>NULL</code>이 아닌 행 수다.
           </p>
+
+          <h3 id="aggregate-sql">헬퍼가 없는 집계는 sql로 쓴다</h3>
+          <p>
+            <code>count()</code> 헬퍼에는 <a href="01-프론트엔드-개발자를-위한-DB-개념.html#filter"><code>FILTER</code></a>를 붙일
+            방법이 없고, <a href="01-프론트엔드-개발자를-위한-DB-개념.html#bool-or"><code>bool_or</code></a>는 헬퍼가 아예 없다. 이럴
+            때는 <a href="#sql-fragment"><code>sql</code> 템플릿</a>으로 직접 쓴다.
+          </p>
+          <pre><code class="language-ts">// apps/api/src/shows/show-sales-status.ts
+remaining: sql&lt;number&gt;`count(*) filter (where not ${performanceSeats.isSold})`
+  .mapWith(Number)
+  .as('remaining'),
+total: count().as('total'),
+
+isAlmostSoldOut: sql&lt;boolean&gt;`bool_or(${isAlmostSoldOut})`.as('is_almost_sold_out'),</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>값</th><th>쓴 방법</th><th><code>.mapWith</code></th></tr></thead>
+              <tbody>
+                <tr>
+                  <td><code>total</code></td>
+                  <td><code>count()</code> 헬퍼</td>
+                  <td>필요 없다. 헬퍼가 안에서 숫자로 바꿔 준다</td>
+                </tr>
+                <tr>
+                  <td><code>remaining</code></td>
+                  <td><code>sql</code>로 쓴 <code>count(*) filter (...)</code></td>
+                  <td><code>.mapWith(Number)</code>. <code>count(*)</code>는 <code>bigint</code>이고, 드라이버가 <code>bigint</code>를 문자열(<code>'3'</code>)로 준다(<a href="#map-with">.mapWith</a>)</td>
+                </tr>
+                <tr>
+                  <td><code>isAlmostSoldOut</code></td>
+                  <td><code>sql</code>로 쓴 <code>bool_or(...)</code></td>
+                  <td>필요 없다. 드라이버가 boolean은 처음부터 JS <code>true</code>/<code>false</code>로 준다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            헬퍼로 만든 값이든 <code>sql</code> 조각이든, 서브쿼리 안에서 계산한 값이면 바깥에서 꺼내 쓸 수 있게 <code>.as()</code>로
+            이름을 붙인다(<a href="#subquery">서브쿼리와 .as()</a>).
+          </p>
         </section>
 
         <section id="subquery">
@@ -367,6 +407,35 @@ this.db.select({ status: salesStatus.salesStatus }).from(shows).innerJoin(salesS
             공연 상세가 같은 공연 판매 상태를 써야 할 때) 계산을 한 곳에 둘 수 있다. 계산에 필요한 값(<code>now</code>)은
             인자로 받는다. 함수를 부를 때마다 새 서브쿼리 객체가 생기므로, 한 쿼리 안에서는 한 번 만든 객체를 같이 쓴다.
           </p>
+
+          <h3 id="subquery-left-join">서브쿼리를 leftJoin할 때</h3>
+          <pre><code class="language-ts">// apps/api/src/shows/show-sales-status.ts
+const seatCount = seatCountSubquery(db); // 회차별 남은 좌석, 전체 좌석
+const remaining = sql&lt;number&gt;`coalesce(${seatCount.remaining}, 0)`;
+
+db.select({ /* remaining을 쓰는 계산 */ })
+  .from(performances)
+  .leftJoin(seatCount, eq(seatCount.performanceId, performances.id))
+  .groupBy(performances.showId)
+  .as('show_sales_status'); // 이 쿼리도 다시 서브쿼리가 된다</code></pre>
+          <ul>
+            <li>
+              <strong>서브쿼리 안에서 서브쿼리를 JOIN할 수 있다.</strong> <code>seat_count</code>를 JOIN한 쿼리가 다시
+              <code>.as()</code>로 서브쿼리가 되어, SQL에서는 괄호가 두 겹이 된다.
+            </li>
+            <li>
+              <strong>짝이 없는 행에서는 서브쿼리 컬럼이 NULL이다.</strong> 회차 좌석이 없는 회차는 <code>seat_count</code>에 행이 없어
+              <code>seatCount.remaining</code>이 NULL이다. <code>select</code>에서 그대로 고르면 Drizzle이 결과 타입을
+              <code>number | null</code>로 알려 주지만, 위처럼 <code>sql</code> 조각 안에 넣으면 타입은 <code>sql&lt;number&gt;</code>에
+              적은 대로만 믿는다. NULL을 직접 챙겨야 한다.
+            </li>
+            <li>
+              <strong>그래서 <code>coalesce</code>로 감싼 조각을 한 번 만들어 같이 쓴다.</strong> NULL이 조건에 들어가면 엉뚱한 갈래로
+              빠지므로(<a href="01-프론트엔드-개발자를-위한-DB-개념.html#null-as-false">조건 자리에서 NULL은 false처럼 지나간다</a>),
+              <a href="01-프론트엔드-개발자를-위한-DB-개념.html#coalesce"><code>coalesce(…, 0)</code></a>으로 0을 채운
+              <code>remaining</code>을 만들어 판매 상태와 매진 임박 계산에 모두 넘긴다.
+            </li>
+          </ul>
 
         <section id="parallel">
           <h2>쿼리 두 개를 함께 보내기</h2>

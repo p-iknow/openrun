@@ -30,6 +30,10 @@
           <li><a href="#query-order">쓰는 순서와 실행 순서</a></li>
           <li><a href="#case">CASE</a></li>
           <li><a href="#filter">집계의 FILTER</a></li>
+          <li><a href="#null-logic">NULL이 섞인 조건</a></li>
+          <li><a href="#coalesce">COALESCE</a></li>
+          <li><a href="#bool-or">bool_or, bool_and</a></li>
+          <li><a href="#integer-division">정수 나눗셈</a></li>
           <li><a href="#subquery">서브쿼리</a></li>
           <li><a href="#parameter">파라미터</a></li>
           <li><a href="#transaction">트랜잭션</a></li>
@@ -897,6 +901,238 @@ Math.min(...list.filter((p) =&gt; !p.isCancelled).map((p) =&gt; p.salesOpenAt));
           </p>
           <p>
             고른 행이 하나도 없으면 빈 배열의 최솟값처럼 <code>NULL</code>이 된다.
+          </p>
+        </section>
+
+        <section id="null-logic">
+          <h2>NULL이 섞인 조건: 참도 거짓도 아닌 "모름"</h2>
+
+          <h3 id="condition-value">조건식도 값이다</h3>
+          <p>
+            <code>remaining * 10 &lt;= total</code> 같은 조건식은 <code>WHERE</code>에서만 쓰는 것이 아니다. 행마다 계산되는
+            true/false <strong>값</strong>이라 <code>select</code>에 그대로 놓을 수도 있다. 자바스크립트에서
+            <code>const isLow = remaining * 10 &lt;= total</code>로 boolean 변수를 만드는 것과 같다.
+          </p>
+          <pre><code class="language-sql">select performance_id, remaining * 10 &lt;= total as is_low
+from seat_count</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>performance_id</th><th>remaining</th><th>total</th><th>is_low</th></tr></thead>
+              <tbody>
+                <tr><td>20</td><td>1</td><td>20</td><td>true</td></tr>
+                <tr><td>21</td><td>5</td><td>20</td><td>false</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            그래서 조건식에 이름을 붙여 두고 여러 곳(<code>select</code>, <a href="#case"><code>CASE</code></a>,
+            <a href="#filter"><code>FILTER</code></a>, 아래의 <a href="#bool-or"><code>bool_or</code></a>)에 넣어 쓸 수 있다.
+          </p>
+
+          <h3 id="null-compare">NULL과 비교하면 NULL이 나온다</h3>
+          <p>
+            <a href="#null">NULL</a>은 "값이 없음", 더 정확히는 "모름"이다. 모르는 값과 0을 비교하면 같은지 다른지도 모른다. 그래서
+            SQL은 비교 결과를 true도 false도 아닌 <strong>NULL</strong>로 낸다. 자바스크립트와 다른 점이다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>식</th><th>자바스크립트</th><th>SQL</th></tr></thead>
+              <tbody>
+                <tr><td><code>null = 0</code></td><td><code>null === 0</code> → <code>false</code></td><td><code>NULL</code></td></tr>
+                <tr><td><code>null = null</code></td><td><code>null === null</code> → <code>true</code></td><td><code>NULL</code></td></tr>
+                <tr><td><code>null * 10 &lt;= 5</code></td><td><code>0 &lt;= 5</code>로 계산되어 <code>true</code></td><td><code>NULL</code></td></tr>
+                <tr><td><code>null is null</code></td><td>없음</td><td><code>true</code>. NULL인지 확인할 때는 <code>=</code>가 아니라 <code>IS NULL</code>을 쓴다</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3 id="null-as-false">조건 자리에서 NULL은 false처럼 지나간다</h3>
+          <p>
+            <code>WHERE</code>, <code>CASE WHEN</code>, <code>FILTER (WHERE …)</code>는 조건이 <strong>true인 경우만</strong> 받아
+            준다. NULL은 true가 아니므로 false와 똑같이 지나친다. 이 때문에 NULL이 섞이면 생각지 못한 갈래로 빠진다.
+          </p>
+          <pre><code class="language-sql">case when remaining = 0 then 'sold_out' else 'on_sale' end</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>remaining</th><th><code>remaining = 0</code></th><th>결과</th></tr></thead>
+              <tbody>
+                <tr><td>0</td><td>true</td><td><code>sold_out</code></td></tr>
+                <tr><td>5</td><td>false</td><td><code>on_sale</code></td></tr>
+                <tr><td><strong>NULL</strong></td><td><strong>NULL</strong></td><td><strong><code>on_sale</code></strong>. 남은 좌석을 모르는데 판매 중이 된다</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>NULL이 들어올 수 있는 값은 조건에 쓰기 전에 <a href="#coalesce"><code>COALESCE</code></a>로 알맞은 값으로 바꿔 둔다.</p>
+
+          <h3 id="null-and-or">AND, OR에 NULL이 섞이면</h3>
+          <p>
+            규칙은 하나다. <strong>모르는 쪽이 무엇이든 답이 정해지면 그 답, 아니면 NULL</strong>이다. <code>false AND ?</code>는
+            ?가 무엇이든 false이고, <code>true OR ?</code>는 ?가 무엇이든 true다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>식</th><th>결과</th><th>이유</th></tr></thead>
+              <tbody>
+                <tr><td><code>false AND NULL</code></td><td><code>false</code></td><td>한쪽이 false면 AND는 무조건 false</td></tr>
+                <tr><td><code>true AND NULL</code></td><td><code>NULL</code></td><td>NULL 쪽이 true인지 false인지에 따라 답이 갈린다</td></tr>
+                <tr><td><code>true OR NULL</code></td><td><code>true</code></td><td>한쪽이 true면 OR는 무조건 true</td></tr>
+                <tr><td><code>false OR NULL</code></td><td><code>NULL</code></td><td>NULL 쪽에 따라 답이 갈린다</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            예를 들어 "판매 중 AND 남은 좌석 10% 이하"에서 <code>total</code>이 NULL이어도, 회차가 판매 중이 아니면(false) 결과는
+            false로 정해진다.
+          </p>
+        </section>
+
+        <section id="coalesce">
+          <h2>COALESCE: NULL을 다른 값으로 바꾸기</h2>
+          <p>
+            <code>coalesce(a, b, …)</code>는 괄호 안에서 NULL이 아닌 첫 값을 고른다. 자바스크립트의 <code>a ?? b</code>와 같다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>SQL</th><th>결과</th><th>자바스크립트</th></tr></thead>
+              <tbody>
+                <tr><td><code>coalesce(5, 0)</code></td><td><code>5</code></td><td><code>5 ?? 0</code></td></tr>
+                <tr><td><code>coalesce(null, 0)</code></td><td><code>0</code></td><td><code>null ?? 0</code></td></tr>
+                <tr><td><code>coalesce(null, null, 3)</code></td><td><code>3</code></td><td><code>null ?? null ?? 3</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3 id="coalesce-left-join">LEFT JOIN이 만든 NULL 메우기</h3>
+          <p>
+            NULL은 테이블에 저장된 값에서만 오지 않는다. <a href="#join">LEFT JOIN</a>에서 짝이 없는 행은 붙인 쪽 컬럼이 모두 NULL이
+            된다. 회차별로 남은 좌석을 센 결과(<code>seat_count</code>)를 회차에 붙이는 경우를 보자. 회차 22는 회차 좌석을 아직 만들지
+            않아 <code>seat_count</code>에 행이 없다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th colspan="2">performances</th><th colspan="2">seat_count</th></tr><tr><th>id</th><th>show_id</th><th>performance_id</th><th>remaining</th></tr></thead>
+              <tbody>
+                <tr><td>20</td><td>5</td><td>20</td><td>1</td></tr>
+                <tr><td>21</td><td>5</td><td>21</td><td>0</td></tr>
+                <tr><td>22</td><td>5</td><td>(행 없음)</td><td>(행 없음)</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <pre><code class="language-sql">select performances.id, seat_count.remaining, coalesce(seat_count.remaining, 0) as remaining_or_zero
+from performances
+left join seat_count on seat_count.performance_id = performances.id</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>id</th><th>seat_count.remaining</th><th>remaining_or_zero</th></tr></thead>
+              <tbody>
+                <tr><td>20</td><td>1</td><td>1</td></tr>
+                <tr><td>21</td><td>0</td><td>0</td></tr>
+                <tr><td>22</td><td><strong>NULL</strong></td><td><strong>0</strong></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            <code>coalesce</code> 없이 <code>remaining = 0</code>을 조건에 쓰면, 회차 22는 <a href="#null-as-false">조건 자리에서
+            NULL이 false처럼 지나가</a> 매진이 아닌 쪽으로 빠진다.
+          </p>
+          <div class="callout">
+            <p>
+              <strong>바꿀 값은 의미로 고른다.</strong> 여기서 0을 고른 것은 "회차 좌석이 없으면 팔 좌석도 없다"가 이 서비스의
+              규칙이기 때문이다. 아무 생각 없이 0이나 빈 문자열을 넣으면 "모름"이 엉뚱한 값으로 둔갑한다.
+            </p>
+          </div>
+          <p>
+            <a href="#aggregate"><code>count(*)</code></a>는 셀 행이 없으면 0을 주는데, 왜 여기서는 NULL이 나올까?
+            <code>seat_count</code> 안에서 <code>count(*)</code>는 회차 좌석이 있는 회차만 묶어서 센다. 회차 22는 묶을 행이 없어
+            <strong>결과 행 자체가 생기지 않고</strong>, 그 빈자리를 LEFT JOIN이 NULL로 채운다.
+          </p>
+        </section>
+
+        <section id="bool-or">
+          <h2>bool_or, bool_and: true/false 모으기</h2>
+          <p>
+            <a href="#aggregate">집계 함수</a> 중 boolean 값을 모으는 것이다. 묶음 안의 값들을 하나의 true/false로 줄인다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>SQL</th><th>뜻</th><th>자바스크립트</th></tr></thead>
+              <tbody>
+                <tr><td><code>bool_or(조건)</code></td><td>하나라도 true면 true</td><td><code>list.some((x) =&gt; 조건)</code></td></tr>
+                <tr><td><code>bool_and(조건)</code></td><td>모두 true여야 true</td><td><code>list.every((x) =&gt; 조건)</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>공연 5의 회차 중 매진 임박인 회차가 하나라도 있는지 구한다.</p>
+          <pre><code class="language-sql">select show_id, bool_or(is_almost_sold_out)
+from performance_status
+group by show_id</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>회차</th><th>show_id</th><th>is_almost_sold_out</th></tr></thead>
+              <tbody>
+                <tr><td>20 (판매 중, 20석 중 1석)</td><td>5</td><td>true</td></tr>
+                <tr><td>21 (매진)</td><td>5</td><td>false</td></tr>
+                <tr><td>23 (판매 예정)</td><td>5</td><td>false</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>결과는 공연 5 한 행, <code>true</code>다.</p>
+
+          <h3 id="bool-or-null">NULL과 빈 묶음</h3>
+          <p>다른 집계 함수처럼 NULL은 건너뛰고 나머지만 본다. 볼 값이 하나도 없으면 NULL이다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>묶음의 값</th><th><code>bool_or</code> 결과</th></tr></thead>
+              <tbody>
+                <tr><td>false, NULL, true</td><td><code>true</code></td></tr>
+                <tr><td>false, false</td><td><code>false</code></td></tr>
+                <tr><td>NULL, NULL</td><td><code>NULL</code></td></tr>
+                <tr><td>(행 없음)</td><td><code>NULL</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            그래서 결과를 true/false로만 받고 싶다면, 넣는 조건이 NULL이 되지 않게 하거나(<a href="#null-and-or">AND, OR에 NULL이
+            섞이면</a>) <code>coalesce(bool_or(...), false)</code>로 감싼다. 같은 뜻을 <code>count(*) filter (where 조건) &gt; 0</code>으로도
+            쓸 수 있는데, 이쪽은 빈 묶음에서 NULL이 아니라 false가 나온다.
+          </p>
+        </section>
+
+        <section id="integer-division">
+          <h2>정수 나눗셈: 3 / 20은 0이다</h2>
+          <p>
+            PostgreSQL에서 정수끼리 나누면 결과도 정수이고, 소수점 아래는 버린다. 자바스크립트는 숫자가 모두 실수라 이런 일이 없다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>식</th><th>PostgreSQL</th><th>자바스크립트</th></tr></thead>
+              <tbody>
+                <tr><td><code>3 / 20</code></td><td><code>0</code></td><td><code>0.15</code></td></tr>
+                <tr><td><code>3::numeric / 20</code></td><td><code>0.15000000000000000000</code></td><td>없음</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            <a href="#aggregate"><code>count(*)</code></a>는 정수(<code>bigint</code>)를 돌려준다. "남은 좌석이 전체의 10% 이하"를
+            <code>remaining / total &lt;= 0.1</code>로 쓰면, 20석 중 3석이 남은 회차는 <code>3 / 20</code>이 0이 되어 10% 이하로
+            잘못 판단된다.
+          </p>
+          <p>
+            나누지 말고 양쪽에 <code>total</code>을 곱해 <strong>곱셈으로 바꾸면</strong> 정수끼리 정확히 비교된다.
+            <code>remaining / total &lt;= 1/10</code>은 <code>remaining * 10 &lt;= total</code>과 같은 뜻이다(<code>total</code>은 0보다
+            크다).
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>남은 좌석 / 전체</th><th><code>remaining * 10 &lt;= total</code></th><th>결과</th></tr></thead>
+              <tbody>
+                <tr><td>3 / 20</td><td><code>30 &lt;= 20</code></td><td>false (15%)</td></tr>
+                <tr><td>2 / 20</td><td><code>20 &lt;= 20</code></td><td>true (10%)</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            <code>::numeric</code>으로 바꿔 나누는 방법도 있지만, 곱셈은 소수를 만들지 않아 반올림을 걱정할 일이 없다.
           </p>
         </section>
 
