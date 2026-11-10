@@ -19,7 +19,7 @@
           <li><a href="#seats">좌석: 같은 자리가 두 번 생기지 않게</a></li>
           <li><a href="#sections">구역: 이름이 겹치면 생기는 일</a></li>
           <li><a href="#fk-index">외래 키마다 인덱스가 있나</a></li>
-          <li><a href="#migration">적용한 마이그레이션은 고치지 않는다</a></li>
+          <li><a href="#migration">구역 이름 유니크 제약을 넣은 마이그레이션</a></li>
           <li><a href="#check">스스로 확인하기</a></li>
         </ol>
       </nav>
@@ -688,20 +688,15 @@ export const sections = pgTable(
         </section>
 
         <section id="migration">
-          <h2>적용한 마이그레이션은 고치지 않는다</h2>
+          <h2>구역 이름 유니크 제약을 넣은 마이그레이션</h2>
           <p>
-            구역 테이블은 <code>0002</code>에서 만들고, 구역 이름 유니크 제약은 <code>0003</code>에서 더한다. drizzle-kit은 이미
-            적용한 마이그레이션을 다시 실행하지 않는다. 그래서 어느 DB에든 한 번 적용된 마이그레이션의 내용을 바꾸면 그 DB에는
-            반영되지 않고 코드와 DB가 조용히 어긋난다. 스키마를 바꿀 때는 새 마이그레이션을 더한다.
+            구역 테이블은 <code>0002</code>에서 만들고, 구역 이름 유니크 제약은 <code>0003</code>에서 더한다. 이미 실행한
+            <code>0002</code>를 고치지 않고 새 파일을 더하는 이유, 이 SQL이 데이터가 있는 DB에서 어떻게 되는지는
+            <a href="08-마이그레이션.html#case-0003">db-and-drizzle 08 문서의 0003 사례</a>에 있다.
           </p>
           <pre><code class="language-sql">-- apps/api/drizzle/0003_unique_section_name_per_venue.sql
 DROP INDEX "sections_venue_id_index";
 ALTER TABLE "sections" ADD CONSTRAINT "sections_venue_id_name_unique" UNIQUE("venue_id","name");</code></pre>
-          <p>
-            새 파일이면 <code>pnpm db:migrate</code>가 아직 적용하지 않은 것만 실행한다. 시드의 구역 이름은 A구역, B구역…으로 공연장 안에서
-            겹치지 않아 제약을 더할 때 실패하지 않는다. 겹치는 데이터가 이미 있다면 <code>ADD CONSTRAINT</code>가 실패하므로,
-            먼저 데이터를 정리해야 한다.
-          </p>
         </section>
 
         <section id="check">
