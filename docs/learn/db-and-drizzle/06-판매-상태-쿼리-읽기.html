@@ -929,14 +929,14 @@ end as "sales_status"</code></pre>
           </ol>
           <p>
             <code>sales_open_at</code>은 괄호 안팎이 한 번 더 섞인다(<a href="#sales-open-at">다음 절</a>). 같은 회차 순번 식
-            ①이 한 번은 <code>min( )</code> 안에서 공연 단위 결과로, 한 번은 <code>filter</code> 안에서 회차 단위 조건으로
+            <code>priority</code>가 한 번은 <code>min( )</code> 안에서 공연 단위 결과로, 한 번은 <code>filter</code> 안에서 회차 단위 조건으로
             쓰인다.
           </p>
           <pre><code class="language-sql">case
   -- 괄호 밖: 공연이 판매 예정인가 (묶음마다)
-  when min(①) = 1
+  when min(priority) = 1
   -- 괄호 안 + filter: 이 회차가 판매 예정인가 (행마다)
-  then min(sales_open_at) filter (where ① = 1)
+  then min(sales_open_at) filter (where priority = 1)
 end as "sales_open_at"</code></pre>
           <p>
             바깥 <code>CASE</code>에서 회차마다 다른 컬럼(<code>starts_at</code> 등)을 집계 없이 쓰면 공연 1의 어느 회차
