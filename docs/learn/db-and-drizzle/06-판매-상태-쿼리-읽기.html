@@ -708,6 +708,67 @@ return db
               </tbody>
             </table>
           </div>
+          <h3>groupBy는 select 전체에 적용된다</h3>
+          <p>
+            <code>groupBy</code>는 <code>min</code> 하나가 아니라 이 서브쿼리의 <code>select</code> 전체에 적용된다. 결과는
+            묶음마다(공연마다) 한 줄, 모두 4줄이 나오고, 한 줄이니 컬럼마다 값도 하나여야 한다. 그런데 묶음 하나에는 회차가
+            여러 줄 들어 있다. 그래서 <code>select</code>의 컬럼은 묶음마다 값이 하나로 정해져야 한다(<a
+              href="01-프론트엔드-개발자를-위한-DB-개념.html#aggregate"
+              >GROUP BY가 있으면 SELECT에 무엇을 쓸 수 있나</a
+            >).
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>컬럼</th>
+                  <th>묶음마다 값 하나가 되는 방법</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>showId</code></td>
+                  <td>묶는 기준이라 묶음 안의 회차가 모두 같은 값이다</td>
+                </tr>
+                <tr>
+                  <td><code>salesStatus</code></td>
+                  <td><code>case min(회차 순번) ... end</code>: <code>min</code>으로 값 하나를 만든 뒤 이름으로 바꾼다</td>
+                </tr>
+                <tr>
+                  <td><code>salesOpenAt</code></td>
+                  <td>
+                    <code>case when min(회차 순번) = 1 then min(sales_open_at) filter (...) end</code>: 여기도
+                    <code>min</code>으로 줄인다(<a href="#sales-open-at">판매 오픈 일시</a>)
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            회차 순번(<code>priority</code>)을 <code>select</code>에 그대로 넣지 않고 꼭 <code>min( )</code>으로 감싼 이유도
+            이것이다. <code>priority</code>는 회차마다 값이 다른 식이라, 그대로 넣으면 공연 1 묶음에서 3, 0, 2 중 무엇을 줄지
+            정할 수 없어 PostgreSQL이 에러를 낸다.
+          </p>
+          <pre><code class="language-ts">// 이렇게 쓰면 에러
+.select({
+  showId: performances.showId,
+  startsAt: performances.startsAt, // 공연 1 묶음엔 회차가 3개인데, 어느 starts_at?
+})
+.groupBy(performances.showId)
+// ERROR: column "performances.starts_at" must appear in the GROUP BY clause
+//        or be used in an aggregate function</code></pre>
+          <p>
+            집계 함수는 여러 값 중 하나를 고르는 것이 아니라 여러 값을 하나로 <strong>줄이는</strong> 것이다. 이 쿼리의
+            <code>min</code>은 결과적으로 있는 순번 중 하나(공연 1이면 0)가 나오지만, <code>count(*)</code>를 쓰면 3(회차 수)처럼
+            어느 회차의 값도 아닌 새 값이 나온다.
+          </p>
+          <p>
+            이 <code>groupBy</code>는 <code>showSalesStatusSubquery</code> 안에만 적용된다. 서브쿼리 결과(공연당 한 줄)는 바깥
+            공연 목록 쿼리에 <code>innerJoin</code>되고, 바깥 쿼리는 묶이지 않으니 공연 목록은 그대로 공연마다 한 줄이다(<a
+              href="#service"
+              >목록과 개수에 붙이기</a
+            >).
+          </p>
           <h3>② min이 묶음마다 가장 작은 순번을 고른다</h3>
           <p>
             <code>groupBy</code>가 있으면 <code>select</code>의 값은 줄마다가 아니라 <strong>묶음마다</strong> 한 번 계산된다.

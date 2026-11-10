@@ -533,9 +533,49 @@ Object.entries(Object.groupBy(performances, (p) =&gt; p.show_id)).map(([showId, 
   start: Math.min(...list.map((p) =&gt; p.startsAt)),
   end: Math.max(...list.map((p) =&gt; p.startsAt)),
 }));</code></pre>
+          <h3>GROUP BY가 있으면 SELECT에 무엇을 쓸 수 있나</h3>
           <p>
-            <code>GROUP BY</code>가 있으면 <code>SELECT</code>에는 묶는 키(<code>show_id</code>)와 집계 함수만 쓸 수 있다. 묶음
-            안에 행이 여러 개라, 그냥 <code>starts_at</code>을 고르면 어느 행의 값인지 정할 수 없기 때문이다.
+            <code>GROUP BY</code>는 집계 함수 하나가 아니라 <strong><code>SELECT</code> 전체</strong>에 적용된다. 결과는 묶음마다
+            한 줄이 나오고, 한 줄이니 컬럼마다 값도 하나여야 한다. 그런데 묶음 안에는 행이 여러 개 들어 있다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>묶음 (<code>show_id</code>)</th>
+                  <th>들어간 행의 <code>starts_at</code></th>
+                  <th>결과 한 줄에 무엇을 적나</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>1</td>
+                  <td>3월 1일, 3월 2일</td>
+                  <td>값이 둘이라 그대로는 하나를 적을 수 없다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>그래서 <code>SELECT</code>에는 묶음마다 값이 하나로 정해지는 것만 쓸 수 있다.</p>
+          <ol>
+            <li>
+              <strong>묶는 키</strong>(<code>show_id</code>): 묶음 안의 행이 모두 같은 값이라 하나로 정해진다.
+            </li>
+            <li>
+              <strong>집계 함수로 감싼 것</strong>(<code>min(starts_at)</code>, <code>count(*)</code>…), 또는 그것으로 만든 식:
+              여러 값을 값 하나로 줄인다.
+            </li>
+          </ol>
+          <p>묶음 안에서 행마다 값이 다른 컬럼을 그대로 쓰면 어느 행의 값을 줄지 정할 수 없어 PostgreSQL이 거절한다.</p>
+          <pre><code class="language-sql">SELECT show_id, starts_at FROM performances GROUP BY show_id;
+-- ERROR: column "performances.starts_at" must appear in the GROUP BY clause
+--        or be used in an aggregate function</code></pre>
+          <p>
+            집계 함수는 여러 값 중 하나를 <strong>고르는</strong> 것이 아니라 여러 값을 하나로 <strong>줄이는</strong> 것이다.
+            <code>min</code>, <code>max</code>는 결과적으로 있는 값 중 하나가 나오지만, <code>count(*)</code>는 2(행 수)처럼
+            어느 행의 값도 아닌 새 값을 만든다. 자바스크립트로는 <code>Object.groupBy</code> 뒤에 묶음마다
+            <code>Math.min(...arr)</code>, <code>arr.length</code>, <code>arr.reduce(...)</code>처럼 배열을 값 하나로 만드는
+            연산이다.
           </p>
           <p>
             <code>min</code>, <code>max</code>는 집계할 행이 하나도 없으면 <code>NULL</code>을 돌려준다. 빈 배열에서 최솟값이
