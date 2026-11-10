@@ -74,12 +74,13 @@
 | 배지 | `badge` | 표나 문장 안의 짧은 분류 |
 | 강조 상자 | `callout`, `callout warn` | 핵심 정의, 주의할 점 |
 | 접는 본문 | `details.fold`, `fold-body` | 코드나 표가 든 선택 읽기 내용 |
+| 문제 | `quiz`, `quiz-q`, `quiz-context`, `quiz-answer` | 맥락(관련 절, 바꾸는 코드, 데이터)이 필요한 자가 점검 문제. 질문과 맥락은 펼쳐 두고 답만 접는다 |
 
 `lane`, `steps`, `badge`에는 색을 정하는 클래스를 함께 붙인다. `blue`와 `green`이 있다.
 
 코드 블록에 `<pre><code class="language-ts">`처럼 언어를 지정하면 highlight.js가 구문을 강조한다. 오류 메시지처럼 코드가 아닌 블록에는 붙이지 않는다. 코드 블록의 긴 줄은 가로 스크롤 없이 줄바꿈되므로, 읽기 좋게 하려고 일부러 짧게 자르지 않아도 된다.
 
-자가 점검 질문처럼 문단만 접어 둘 때는 클래스 없이 `<details>`를 쓴다. 코드나 표가 든 선택 읽기 내용을 접을 때는 `<details class="fold">` 안에 `<div class="fold-body">`를 두고, 접어도 흐름이 이어지도록 결론은 접기 밖에 적는다.
+자가 점검 문제는 `quiz`로 쓴다. `quiz-q`에 질문을, `quiz-context`에 어느 절의 무엇을 묻는지를 적고, 바꾸는 코드는 `language-diff` 코드 블록으로, 필요한 데이터는 표로 질문 아래에 둔다. 답만 `<details class="quiz-answer">` 안의 `fold-body`에 접는다. 질문 한 줄만으로 무엇을 묻는지 분명할 때만 클래스 없는 `<details>`를 쓴다. 그 밖에 문단만 접어 둘 때도 클래스 없이 `<details>`를 쓴다. 코드나 표가 든 선택 읽기 내용을 접을 때는 `<details class="fold">` 안에 `<div class="fold-body">`를 두고, 접어도 흐름이 이어지도록 결론은 접기 밖에 적는다.
 
 ## 외부 라이브러리
 

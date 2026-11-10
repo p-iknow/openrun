@@ -156,6 +156,18 @@
             <summary>1. 질문을 적는다.</summary>
             <p>답을 적는다.</p>
           </details>
+          <p>맥락이 필요한 문제는 <code>quiz</code>로 쓴다. 질문과 맥락은 펼쳐 두고 답만 접는다.</p>
+          <div class="quiz">
+            <p class="quiz-q">2. 질문을 적는다.</p>
+            <p class="quiz-context">어느 절의 어떤 코드를 바꾸는지, 어떤 데이터로 생각하는지 적는다.</p>
+            <pre><code class="language-diff"> const value = await load();
+-if (value) render(value);
++render(value);</code></pre>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body"><p>답을 적는다.</p></div>
+            </details>
+          </div>
           <p>코드나 표가 든 선택 읽기 내용은 <code>fold</code>로 접는다. 결론은 접기 밖에 적는다.</p>
           <details class="fold">
             <summary>선택 읽기: 접어 둘 내용의 제목</summary>

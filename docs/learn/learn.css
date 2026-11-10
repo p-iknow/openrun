@@ -21,6 +21,8 @@
   --token-type: #1f6391;
   --token-function: #7d5a00;
   --token-number: #b5322f;
+  --diff-add-bg: #e6f4ea;
+  --diff-del-bg: #fbe9e7;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -44,6 +46,8 @@
     --token-type: #86c3ee;
     --token-function: #e7cf84;
     --token-number: #f59b96;
+    --diff-add-bg: #1d3a2b;
+    --diff-del-bg: #43211f;
   }
 }
 * {
@@ -522,6 +526,41 @@ details.fold {
   padding: 0;
 }
 
+/* 문제: 질문과 맥락은 펼쳐 두고 답만 접는다 */
+.quiz {
+  margin: 1.25rem 0;
+  padding: 0.9rem 1.1rem 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.quiz-q {
+  margin: 0 0 0.5rem;
+  font-weight: 600;
+}
+.quiz-context {
+  margin: 0.5rem 0;
+  color: var(--muted);
+  font-size: 0.92em;
+}
+.quiz .table-wrap,
+.quiz pre {
+  margin: 0.6rem 0;
+}
+.quiz details.quiz-answer {
+  margin: 0.8rem -1.1rem 0;
+  border: 0;
+  border-top: 1px dashed var(--border);
+  border-radius: 0 0 8px 8px;
+}
+.quiz-answer summary {
+  font-weight: 500;
+  color: var(--muted);
+}
+.quiz-answer .fold-body {
+  border-top: 0;
+}
+
 @media (max-width: 900px) {
   .layout {
     display: block;
@@ -574,4 +613,18 @@ details.fold {
 }
 .hljs-attr {
   color: var(--token-decorator);
+}
+/* diff: 더한 줄과 지운 줄을 줄 전체 배경으로 */
+.hljs-addition,
+.hljs-deletion {
+  display: inline-block;
+  width: 100%;
+}
+.hljs-addition {
+  background: var(--diff-add-bg);
+  color: var(--green);
+}
+.hljs-deletion {
+  background: var(--diff-del-bg);
+  color: var(--accent);
 }
