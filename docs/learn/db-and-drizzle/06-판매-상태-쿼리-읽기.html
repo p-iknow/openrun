@@ -889,6 +889,66 @@ end as "sales_status"</code></pre>
               >.as()가 두 번 나오는 이유</a
             >).
           </p>
+          <h3>CASE가 겹쳐 있을 때 groupBy는 어떻게 동작하나</h3>
+          <p>
+            <code>sales_status</code>는 안쪽 <code>CASE</code>를 <code>min</code>이 감싸고, 그것을 다시 바깥
+            <code>CASE</code>가 감싼 세 겹이다. <code>groupBy</code>는 <code>CASE</code>가 겹친 모양을 신경 쓰지 않는다. 각
+            부분이 <strong><code>min</code> 괄호 안에 있느냐, 밖에 있느냐</strong>만 본다(<a
+              href="01-프론트엔드-개발자를-위한-DB-개념.html#aggregate"
+              >집계 괄호 안은 행마다, 밖은 묶음마다</a
+            >).
+          </p>
+          <pre><code class="language-sql">case                                   -- 괄호 밖 → 묶음(공연)마다: 4번
+  min(                                 -- ── 경계: 여러 행 → 값 하나
+    case                               -- 괄호 안 → 행(회차)마다: 10번
+      when is_cancelled then 2
+      when starts_at &lt;= $1 then 3
+      when $2 &lt; sales_open_at then 1
+      else 0
+    end
+  )
+  when 0 then 'on_sale'
+  when 1 then 'upcoming'
+  when 2 then 'cancelled'
+  when 3 then 'ended'
+end as "sales_status"</code></pre>
+          <p>DB는 이 순서로 계산한다.</p>
+          <ol class="steps green">
+            <li><strong>FROM</strong> 회차 10줄을 가져온다.</li>
+            <li><strong>GROUP BY</strong> <code>show_id</code>로 4묶음을 만든다.</li>
+            <li>
+              <strong>괄호 안</strong> 묶음마다 그 묶음의 회차 하나하나에 안쪽 <code>CASE</code>를 계산한다. 공연 1이면 3,
+              0, 2.
+            </li>
+            <li><strong>min</strong> 그 값들을 하나로 줄인다. 공연 1이면 0.</li>
+            <li>
+              <strong>괄호 밖</strong> 바깥 <code>CASE</code>가 그 값 하나로 이름을 정한다. 공연 1이면
+              <code>'on_sale'</code>.
+            </li>
+          </ol>
+          <p>
+            <code>sales_open_at</code>은 괄호 안팎이 한 번 더 섞인다(<a href="#sales-open-at">다음 절</a>). 같은 회차 순번 식
+            ①이 한 번은 <code>min( )</code> 안에서 공연 단위 결과로, 한 번은 <code>filter</code> 안에서 회차 단위 조건으로
+            쓰인다.
+          </p>
+          <pre><code class="language-sql">case
+  -- 괄호 밖: 공연이 판매 예정인가 (묶음마다)
+  when min(①) = 1
+  -- 괄호 안 + filter: 이 회차가 판매 예정인가 (행마다)
+  then min(sales_open_at) filter (where ① = 1)
+end as "sales_open_at"</code></pre>
+          <p>
+            바깥 <code>CASE</code>에서 회차마다 다른 컬럼(<code>starts_at</code> 등)을 집계 없이 쓰면 공연 1의 어느 회차
+            값인지 정할 수 없어 에러가 난다. JS로는 <code>rows.map</code> 콜백 안에서만 <code>row</code>를 쓸 수 있고, 바깥에서는
+            <code>Math.min</code> 결과와 <code>showId</code>만 쓸 수 있는 것과 같다.
+          </p>
+          <pre><code class="language-js">for (const [showId, rows] of Object.entries(groups)) {
+  // 콜백 안: row를 쓸 수 있다 (행마다)
+  const m = Math.min(...rows.map((row) =&gt; 안쪽CASE(row)));
+
+  // 밖: row가 없다. m과 showId만 (묶음마다)
+  const status = 바깥CASE(m);
+}</code></pre>
         </section>
 
         <section id="sales-open-at">

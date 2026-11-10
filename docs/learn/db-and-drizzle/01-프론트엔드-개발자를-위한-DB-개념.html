@@ -581,6 +581,68 @@ Object.entries(Object.groupBy(performances, (p) =&gt; p.show_id)).map(([showId, 
             <code>min</code>, <code>max</code>는 집계할 행이 하나도 없으면 <code>NULL</code>을 돌려준다. 빈 배열에서 최솟값이
             없는 것과 같다. <code>count(*)</code>는 행이 없으면 <code>0</code>이다.
           </p>
+          <h3>식이 겹쳐 있을 때: 집계 괄호 안은 행마다, 밖은 묶음마다</h3>
+          <p>
+            <code>SELECT</code>에는 집계 함수 안팎으로 식이 겹쳐 있을 수 있다(<a href="#case"><code>CASE</code></a> 안에 집계,
+            집계 안에 <code>CASE</code>). 이때 각 부분이 언제 계산되는지는 겹친 모양이 아니라 <strong>집계 함수 괄호 안에
+            있느냐, 밖에 있느냐</strong>로 정해진다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>위치</th>
+                  <th>계산 단위</th>
+                  <th>쓸 수 있는 것</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>집계 함수 괄호 안 (<code>FILTER</code> 조건 포함)</td>
+                  <td>묶음 안의 <strong>행마다</strong></td>
+                  <td>그 행의 모든 컬럼</td>
+                </tr>
+                <tr>
+                  <td>집계 함수 괄호 밖</td>
+                  <td><strong>묶음마다</strong> 한 번</td>
+                  <td>묶는 키와 집계 결과만</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <pre><code class="language-sql">SELECT show_id,
+       case when count(*) &gt;= 2 then '여러 회차' else '한 회차' end,  -- 괄호 밖: 묶음마다
+       sum(case when starts_at &lt; '2026-03-02' then 1 else 0 end)    -- 괄호 안: 행마다
+FROM performances
+GROUP BY show_id;</code></pre>
+          <ul>
+            <li>
+              두 번째 줄의 <code>CASE</code>는 <code>count(*)</code> 밖에 있다. 묶음마다 회차 수를 센 <strong>뒤</strong> 그 값
+              하나로 판단한다. 위 예시 데이터에서 공연 1은 회차가 2개라 <code>'여러 회차'</code>, 공연 2는 1개라
+              <code>'한 회차'</code>다.
+            </li>
+            <li>
+              세 번째 줄의 <code>CASE</code>는 <code>sum( )</code> 안에 있다. 회차마다 1 또는 0을 만든 뒤 <code>sum</code>이
+              묶음마다 더한다. 공연 1은 3월 1일(1)과 3월 2일(0)이라 1, 공연 2는 3월 5일(0)이라 0이다.
+            </li>
+          </ul>
+          <p>
+            괄호 밖에서 행마다 다른 컬럼을 집계 없이 쓰면 위의 규칙에 걸려 에러가 난다. 예를 들어
+            <code>case when count(*) &gt;= 2 then starts_at end</code>는 <code>starts_at</code>이 괄호 밖이라, 묶음 안 어느
+            행의 값인지 정할 수 없다.
+          </p>
+          <p>자바스크립트로는 <code>map</code> 콜백 안에서만 <code>row</code>를 쓸 수 있는 것과 같다.</p>
+          <pre><code class="language-js">const groups = Object.groupBy(performances, (p) =&gt; p.show_id);
+
+for (const [showId, rows] of Object.entries(groups)) {
+  // 콜백 안: row를 쓸 수 있다 (행마다)
+  const early = rows
+    .map((row) =&gt; (row.startsAt &lt; '2026-03-02' ? 1 : 0))
+    .reduce((a, b) =&gt; a + b, 0);
+
+  // 밖: row가 없다. rows.length 같은 묶음 단위 값만 (묶음마다)
+  const label = rows.length &gt;= 2 ? '여러 회차' : '한 회차';
+}</code></pre>
         </section>
 
         <section id="query-order">
