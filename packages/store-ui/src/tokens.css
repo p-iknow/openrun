@@ -149,6 +149,9 @@
   /* 주황은 어느 단계도 orange50 위에서 4.5:1이 안 되므로 글자는 `text`를 쓴다. */
   --color-warning: var(--orange-500);
   --color-warning-subtle: var(--orange-50);
+  /* 흰 바탕 위의 주황 글자(예: 매진 임박). 팔레트에서 가장 진한 orange900도 흰 바탕과 3.7:1이라,
+     팔레트 밖 값으로 대비 4.5:1 이상(WCAG AA, 4.9:1)을 맞춘다. */
+  --color-warning-strong: #c24a00;
 
   --color-danger: var(--red-500);
   --color-danger-subtle: var(--red-50);
