@@ -276,6 +276,13 @@ export function showSalesStatusSubquery(db: Database, { now }: { now: Date }) {
 // 쓰는 곳 (showSalesStatusSubquery 안): 이 CASE 조각이 priority가 된다
 const priority = performancePriority(now);</code></pre>
           <p>
+            <code>priority</code>는 행도 숫자도 아니고 <strong>식</strong>(SQL로 쓴 계산식)이다. JS에서
+            <code>performancePriority(now)</code>를 부르면 계산은 일어나지 않고 <code>case when ... end</code>라는 SQL
+            글자만 만들어진다. 엑셀에서 열 맨 위에 수식을 한 번 써 두면 행마다 값이 채워지듯, DB가 쿼리를 실행할 때 이 식을
+            회차 테이블의 <strong>행마다</strong> 계산해 행 하나에 순번 하나를 만든다. 이 순번들은 JS로 돌아오지 않고
+            <code>min(${priority})</code> 안에서만 쓰인다.
+          </p>
+          <p>
             규칙 1번을 <a href="01-프론트엔드-개발자를-위한-DB-개념.html#case"><code>CASE</code></a>로 그대로 옮겼다.
             <code>CASE</code>는 위에서부터 먼저 맞는 것 하나만 고르므로 <code>when</code>의 순서가 규칙의 순서다. 회차 한 줄마다
             계산하면 이렇게 된다.
