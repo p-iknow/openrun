@@ -72,6 +72,7 @@ export const performanceSeats = pgTable(
     // 판매 여부. false가 판매 가능, true가 판매됨이다.
     isSold: boolean('is_sold').notNull().default(false),
   },
-  // 유니크 제약의 인덱스가 performance_id로 시작하므로 회차별 남은 좌석 집계에도 쓰인다.
+  // 같은 회차에 같은 좌석이 두 번 들어가지 않게 막는다.
+  // 이 제약이 만드는 인덱스가 performance_id로 시작하므로, 회차 하나의 좌석을 찾을 때도 쓰인다.
   (table) => [unique().on(table.performanceId, table.seatId)],
 );

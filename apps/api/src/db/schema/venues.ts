@@ -31,6 +31,7 @@ export const seats = pgTable(
     row: text().notNull(),
     number: integer().notNull(),
   },
-  // 유니크 제약의 인덱스가 section_id로 시작하므로 구역별 조회에도 쓰인다.
+  // 같은 구역에 같은 열·번호 좌석이 두 번 들어가지 않게 막는다.
+  // 이 제약이 만드는 인덱스가 section_id로 시작하므로, 구역 하나의 좌석을 찾을 때도 쓰인다.
   (table) => [unique().on(table.sectionId, table.row, table.number)],
 );
