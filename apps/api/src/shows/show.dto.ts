@@ -41,7 +41,7 @@ export class ShowSummaryDto {
     enum: SHOW_SALES_STATUSES,
     enumName: 'ShowSalesStatus',
     description:
-      '공연 판매 상태. 회차들의 판매 상태 중 우선순위가 가장 높은 것이다.',
+      '공연 판매 상태. 회차마다 판매 중, 판매 예정, 판매 종료 중 하나로 센 뒤 가장 앞선 것을 고른다. 매진인 회차는 판매 중, 취소된 회차는 판매 종료로 센다.',
   })
   salesStatus: ShowSalesStatus;
 

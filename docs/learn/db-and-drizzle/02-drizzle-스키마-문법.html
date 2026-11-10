@@ -23,6 +23,7 @@
           <li><a href="#timestamp">timestamp 옵션</a></li>
           <li><a href="#references">.references()</a></li>
           <li><a href="#index">index()</a></li>
+          <li><a href="#unique">unique()</a></li>
           <li><a href="#pg-enum">pgEnum</a></li>
           <li><a href="#infer">$inferSelect와 $inferInsert</a></li>
           <li><a href="#relations">relations()</a></li>
@@ -495,6 +496,60 @@ startsAt: timestamp('starts_at', { withTimezone: true, mode: 'string' }),</code>
             </table>
           </div>
           <p>방식을 정하지 않으면 PostgreSQL 기본값인 B-tree다.</p>
+        </section>
+
+        <section id="unique">
+          <h2>unique()</h2>
+          <pre><code class="language-ts">import { unique } from 'drizzle-orm/pg-core';
+
+export const performanceSeats = pgTable(
+  'performance_seats',
+  { /* ... */ performanceId: integer('performance_id').notNull(), seatId: integer('seat_id').notNull() },
+  (table) =&gt; [unique().on(table.performanceId, table.seatId)],
+);</code></pre>
+          <pre><code class="language-sql">CONSTRAINT "performance_seats_performance_id_seat_id_unique" UNIQUE("performance_id","seat_id")</code></pre>
+          <p>
+            <a href="#pg-table">pgTable</a>의 세 번째 인자에서 <a href="01-프론트엔드-개발자를-위한-DB-개념.html#unique"
+              >유니크 제약</a
+            >을 만든다. <code>CREATE TABLE</code> 안에 <code>CONSTRAINT ... UNIQUE(...)</code>로 들어가고, 이미 있는 테이블이면
+            <code>ALTER TABLE ... ADD CONSTRAINT</code>가 된다. 인덱스는 PostgreSQL이 제약을 만들며 같이 만들기 때문에 SQL에
+            <code>CREATE INDEX</code>가 따로 나오지 않는다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>쓰는 법</th>
+                  <th>뜻</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>unique().on(table.a, table.b)</code></td>
+                  <td>여러 컬럼 조합의 유니크 제약. 이름은 drizzle-kit이 <code>테이블_컬럼_unique</code>로 짓는다</td>
+                </tr>
+                <tr>
+                  <td><code>unique('my_unique').on(table.a)</code></td>
+                  <td>이름을 직접 정한다</td>
+                </tr>
+                <tr>
+                  <td><code>text().unique()</code></td>
+                  <td>컬럼 하나짜리 유니크 제약을 컬럼 수식어로 붙인다</td>
+                </tr>
+                <tr>
+                  <td><code>unique().on(table.a).nullsNotDistinct()</code></td>
+                  <td><code>NULL</code>끼리도 같은 값으로 보고 막는다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <h3 id="unique-vs-unique-index">unique()와 uniqueIndex()</h3>
+          <p>
+            둘 다 겹치는 값을 막고 B-tree 인덱스를 남긴다. <code>unique()</code>는 <strong>제약</strong>을 만들고 PostgreSQL이 그
+            제약용 인덱스를 만든다. <code>uniqueIndex()</code>는 <code>CREATE UNIQUE INDEX</code>로 <strong>인덱스</strong>를 직접
+            만든다. 중복을 막는 효과는 같다. 차이는 다른 테이블의 외래 키가 이 컬럼들을 가리킬 수 있는지(제약 쪽이 표준적인 방법),
+            그리고 <code>where</code>를 붙인 부분 인덱스처럼 인덱스에만 있는 옵션을 쓸 수 있는지다.
+          </p>
         </section>
 
         <section id="pg-enum">

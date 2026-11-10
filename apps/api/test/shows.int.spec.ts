@@ -16,18 +16,27 @@ import {
 } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import { Clock } from '../src/clock/clock.module.js';
-import { performances, shows } from '../src/db/schema/shows.js';
-import { venues } from '../src/db/schema/venues.js';
+import { eq } from 'drizzle-orm';
+import {
+  performanceSeats,
+  performances,
+  shows,
+} from '../src/db/schema/shows.js';
+import { seats, sections, venues } from '../src/db/schema/venues.js';
 
 // 테스트의 기본 현재 시각. 회차를 시작 일시만으로 넣으면 판매 오픈 일시가 DEFAULT_SALES_OPEN_AT이라,
 // 이 시각 뒤에 시작하는 회차는 판매 중이다.
 const DEFAULT_NOW = '2026-02-01T00:00:00Z';
 const DEFAULT_SALES_OPEN_AT = '2026-01-01T01:00:00Z';
+// 공연장 하나의 좌석 수.
+const VENUE_SEAT_COUNT = 20;
 
 interface PerformanceInput {
   startsAt: string;
   salesOpenAt?: string;
   isCancelled?: boolean;
+  // 판매됨으로 둘 회차 좌석 수. 회차 좌석은 공연장의 좌석 수(VENUE_SEAT_COUNT)만큼 만든다.
+  soldSeats?: number;
 }
 
 describe('GET /shows', () => {
@@ -67,21 +76,42 @@ describe('GET /shows', () => {
       ...performanceStarts.map((startsAt) => ({ startsAt })),
       ...performanceInputs,
     ];
-    if (rows.length > 0) {
-      await db.insert(performances).values(
-        rows.map(
-          ({ startsAt, salesOpenAt = DEFAULT_SALES_OPEN_AT, isCancelled }) => ({
-            showId: show.id,
-            startsAt: new Date(startsAt),
-            salesOpenAt: new Date(salesOpenAt),
-            isCancelled,
-          }),
-        ),
+    const venueSeats = await db
+      .select({ id: seats.id })
+      .from(seats)
+      .innerJoin(sections, eq(sections.id, seats.sectionId))
+      .where(eq(sections.venueId, venueId))
+      .orderBy(seats.id);
+    for (const {
+      startsAt,
+      salesOpenAt = DEFAULT_SALES_OPEN_AT,
+      isCancelled,
+      soldSeats = 0,
+    } of rows) {
+      const [performance] = await db
+        .insert(performances)
+        .values({
+          showId: show.id,
+          startsAt: new Date(startsAt),
+          salesOpenAt: new Date(salesOpenAt),
+          isCancelled,
+        })
+        .returning({ id: performances.id });
+      if (!performance) {
+        throw new Error('회차를 넣지 못했습니다.');
+      }
+      await db.insert(performanceSeats).values(
+        venueSeats.map((seat, index) => ({
+          performanceId: performance.id,
+          seatId: seat.id,
+          isSold: index < soldSeats,
+        })),
       );
     }
     return show.id;
   }
 
+  // 공연장과 구역 하나, 좌석 VENUE_SEAT_COUNT개를 넣고 공연장 id를 돌려준다.
   async function insertVenue(name: string): Promise<number> {
     const [venue] = await db
       .insert(venues)
@@ -90,6 +120,20 @@ describe('GET /shows', () => {
     if (!venue) {
       throw new Error('공연장을 넣지 못했습니다.');
     }
+    const [section] = await db
+      .insert(sections)
+      .values({ venueId: venue.id, name: 'A구역' })
+      .returning({ id: sections.id });
+    if (!section) {
+      throw new Error('구역을 넣지 못했습니다.');
+    }
+    await db.insert(seats).values(
+      Array.from({ length: VENUE_SEAT_COUNT }, (_, index) => ({
+        sectionId: section.id,
+        row: 'A',
+        number: index + 1,
+      })),
+    );
     return venue.id;
   }
 
@@ -104,7 +148,7 @@ describe('GET /shows', () => {
 
   beforeEach(async () => {
     await db.execute(
-      'TRUNCATE performances, shows, venues RESTART IDENTITY CASCADE',
+      'TRUNCATE performance_seats, performances, shows, seats, sections, venues RESTART IDENTITY CASCADE',
     );
 
     now = new Date(DEFAULT_NOW);
@@ -274,7 +318,7 @@ describe('GET /shows', () => {
       expect(await fetchSalesStatus()).toBe(expected);
     });
 
-    // 판매 종료 공연은 목록에서 빠지므로, 취소된 회차를 함께 두어 회차가 판매 종료가 되면 공연이 회차 취소로 보이게 한다.
+    // 판매 종료 공연은 목록에서 빠지므로, 판매 예정 회차를 함께 두어 회차가 판매 종료가 되면 공연이 판매 예정으로 보이게 한다.
     it.each([
       {
         moment: '회차 시작 직전',
@@ -284,7 +328,7 @@ describe('GET /shows', () => {
       {
         moment: '회차 시작 정각',
         at: new Date(startsAt),
-        expected: 'cancelled',
+        expected: 'upcoming',
       },
     ])('$moment: $expected', async ({ at, expected }) => {
       const venueId = await insertVenue('예술의전당');
@@ -294,9 +338,8 @@ describe('GET /shows', () => {
         performances: [
           { startsAt, salesOpenAt },
           {
-            startsAt: '2026-03-20T10:00:00.000Z',
-            salesOpenAt,
-            isCancelled: true,
+            startsAt: '2026-04-10T10:00:00.000Z',
+            salesOpenAt: '2026-03-20T05:00:00.000Z',
           },
         ],
       });
@@ -305,7 +348,7 @@ describe('GET /shows', () => {
       expect(await fetchSalesStatus()).toBe(expected);
     });
 
-    it('취소된 회차는 판매 오픈 전이어도 회차 취소다', async () => {
+    it('취소된 회차는 판매 오픈 전이어도 판매 종료라, 그 회차만 있는 공연은 목록에서 빠진다', async () => {
       const venueId = await insertVenue('예술의전당');
       await insertShow({
         venueId,
@@ -314,7 +357,31 @@ describe('GET /shows', () => {
       });
       now = msBefore(salesOpenAt, { ms: 1 });
 
-      expect(await fetchSalesStatus()).toBe('cancelled');
+      expect(await fetchSalesStatus()).toBeUndefined();
+    });
+
+    it('남은 회차 좌석이 0이어도 판매 중이다', async () => {
+      const venueId = await insertVenue('예술의전당');
+      await insertShow({
+        venueId,
+        title: '달빛 정원',
+        performances: [{ startsAt, salesOpenAt, soldSeats: VENUE_SEAT_COUNT }],
+      });
+      now = new Date(salesOpenAt);
+
+      expect(await fetchSalesStatus()).toBe('on_sale');
+    });
+
+    it('남은 회차 좌석이 0이어도 판매 오픈 전이면 판매 예정이다', async () => {
+      const venueId = await insertVenue('예술의전당');
+      await insertShow({
+        venueId,
+        title: '달빛 정원',
+        performances: [{ startsAt, salesOpenAt, soldSeats: VENUE_SEAT_COUNT }],
+      });
+      now = msBefore(salesOpenAt, { ms: 1 });
+
+      expect(await fetchSalesStatus()).toBe('upcoming');
     });
   });
 
@@ -327,11 +394,15 @@ describe('GET /shows', () => {
     };
     const cancelled = { startsAt: '2026-03-02T10:00:00Z', isCancelled: true };
     const ended = { startsAt: '2026-01-20T10:00:00Z' };
+    const soldOut = {
+      startsAt: '2026-03-03T10:00:00Z',
+      soldSeats: VENUE_SEAT_COUNT,
+    };
 
     it.each([
       {
         name: '판매 중 회차가 하나라도 있으면 판매 중이다',
-        performances: [ended, cancelled, upcoming, onSale],
+        performances: [ended, cancelled, soldOut, upcoming, onSale],
         expected: { salesStatus: 'on_sale', salesOpenAt: null },
       },
       {
@@ -343,9 +414,14 @@ describe('GET /shows', () => {
         },
       },
       {
-        name: '끝나지 않은 회차가 모두 취소됐으면 회차 취소다',
-        performances: [ended, cancelled],
-        expected: { salesStatus: 'cancelled', salesOpenAt: null },
+        name: '매진인 회차도 판매 중이라 판매 예정 회차보다 앞선다',
+        performances: [soldOut, upcoming],
+        expected: { salesStatus: 'on_sale', salesOpenAt: null },
+      },
+      {
+        name: '끝난 회차와 취소된 회차 말고 남은 회차가 모두 매진이어도 판매 중이다',
+        performances: [ended, cancelled, soldOut, soldOut],
+        expected: { salesStatus: 'on_sale', salesOpenAt: null },
       },
     ])('$name', async ({ performances: inputs, expected }) => {
       const venueId = await insertVenue('예술의전당');
@@ -354,6 +430,19 @@ describe('GET /shows', () => {
       const response = await request(app.getHttpServer()).get('/shows');
 
       expect(response.body.items[0]).toMatchObject(expected);
+    });
+
+    it('끝나지 않은 회차가 모두 취소됐으면 판매 종료라 목록과 전체 개수에서 뺀다', async () => {
+      const venueId = await insertVenue('예술의전당');
+      await insertShow({
+        venueId,
+        title: '달빛 정원',
+        performances: [ended, cancelled],
+      });
+
+      const response = await request(app.getHttpServer()).get('/shows');
+
+      expect(response.body).toMatchObject({ items: [], totalCount: 0 });
     });
 
     it('판매 예정이면 판매 예정 회차 중 가장 이른 판매 오픈 일시를 담는다', async () => {

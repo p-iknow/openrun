@@ -84,10 +84,6 @@ describe('selectShowCards', () => {
       salesStatus: 'upcoming',
       expected: { label: '판매 예정', tone: 'success' },
     },
-    {
-      salesStatus: 'cancelled',
-      expected: { label: '회차 취소', tone: 'danger' },
-    },
     { salesStatus: 'ended', expected: { label: '판매 종료', tone: 'neutral' } },
   ] as const)(
     '판매 상태 $salesStatus: 배지 문구와 톤으로 바꾼다',

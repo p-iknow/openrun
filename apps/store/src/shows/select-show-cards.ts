@@ -25,7 +25,6 @@ export interface ShowCardData {
 const SALES_STATUS_BADGES = {
   on_sale: { label: '판매 중', tone: 'primary' },
   upcoming: { label: '판매 예정', tone: 'success' },
-  cancelled: { label: '회차 취소', tone: 'danger' },
   ended: { label: '판매 종료', tone: 'neutral' },
 } satisfies Record<ShowSalesStatus, SalesStatusBadgeData>;
 

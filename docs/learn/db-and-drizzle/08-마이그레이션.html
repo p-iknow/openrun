@@ -1,0 +1,537 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>08 마이그레이션</title>
+    <link rel="stylesheet" href="../learn.css" />
+    <script src="../vendor/highlightjs/highlight.min.js" defer></script>
+    <script src="../learn.js" defer></script>
+  </head>
+  <body>
+    <div class="layout">
+      <nav aria-label="목차">
+        <strong>목차</strong>
+        <ol>
+          <li><a href="#what">마이그레이션이 필요한 이유</a></li>
+          <li><a href="#tools">마이그레이션 도구가 공통으로 하는 일</a></li>
+          <li><a href="#files">이 저장소의 마이그레이션 파일</a></li>
+          <li><a href="#generate">만들기: pnpm db:generate</a></li>
+          <li><a href="#migrate">적용하기: pnpm db:migrate</a></li>
+          <li><a href="#workflow">언제 어떤 명령을 쓰나</a></li>
+          <li><a href="#databases">같은 파일이 적용되는 DB들</a></li>
+          <li><a href="#immutable">적용한 마이그레이션은 고치지 않는다</a></li>
+          <li><a href="#data">데이터가 있는 테이블을 바꿀 때</a></li>
+          <li><a href="#mistakes">실수하기 쉬운 곳</a></li>
+          <li><a href="#cases">이 저장소의 사례</a></li>
+          <li><a href="#check">스스로 확인하기</a></li>
+        </ol>
+      </nav>
+
+      <main>
+        <h1>08 마이그레이션</h1>
+        <p class="lead">
+          마이그레이션이 왜 있고 어떻게 적용되는지를 도구와 상관없는 개념부터 보고, 이 저장소의 drizzle-kit에서 어떤 명령을 언제
+          어떤 순서로 쓰는지, 실수하기 쉬운 곳은 어디인지 따라간다. 이 저장소에서 마이그레이션을 만들 때마다 <a href="#cases">이 저장소의 사례</a>에 하나씩
+          쌓는다. 스키마를 쓰는 법은 <a href="00-drizzle-스키마와-DB-연결.html#schema-uses">db-and-drizzle 00 문서</a>에 있다.
+        </p>
+
+        <section id="what">
+          <h2>마이그레이션이 필요한 이유</h2>
+          <p>
+            프론트엔드 코드는 배포할 때 통째로 갈아 끼운다. 어제 번들을 지우고 오늘 번들을 올리면 끝이다. DB는 그렇게 못 한다.
+            테이블 안에 이미 회원, 주문, 좌석 같은 데이터가 들어 있어서, 테이블을 지우고 새로 만들면 데이터도 사라진다. 그래서 DB는
+            <strong>지금 있는 테이블을 조금씩 고치는 명령</strong>으로 바꾼다.
+          </p>
+          <pre><code class="language-sql">-- "sections에 (venue_id, name) 유니크 제약을 건다"를 DB에게 시키는 명령
+ALTER TABLE "sections" ADD CONSTRAINT "sections_venue_id_name_unique" UNIQUE("venue_id","name");</code></pre>
+          <p>
+            이런 고치는 명령을 파일로 남긴 것이 <strong>마이그레이션</strong>이다. 파일에 번호를 붙여 순서대로 쌓아 두면, 빈 DB에
+            0000부터 차례로 실행해 지금 구조를 만들 수 있고, 어제까지의 DB에는 그 뒤에 생긴 파일만 실행해 따라잡을 수 있다.
+          </p>
+          <div class="callout">
+            <p>
+              <strong>git 커밋과 비슷하다.</strong> 스키마 파일(<code>src/db/schema/*.ts</code>)은 "지금 코드가 어떻게 생겼나"이고,
+              마이그레이션 파일은 커밋처럼 "어디서 어디로 바꿨나"를 하나씩 기록한다. DB는 그 커밋들을 어디까지 받았는지만 기억한다.
+            </p>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>무엇</th><th>담는 것</th><th>예</th></tr></thead>
+              <tbody>
+                <tr><td>스키마 파일</td><td>테이블이 최종적으로 어떻게 생겨야 하는지</td><td><code>unique().on(table.venueId, table.name)</code></td></tr>
+                <tr><td>마이그레이션 파일</td><td>이전 모양에서 다음 모양으로 바꾸는 SQL 명령</td><td><code>ALTER TABLE ... ADD CONSTRAINT ...</code></td></tr>
+                <tr><td>DB</td><td>실제 테이블과 데이터, 그리고 어느 마이그레이션까지 실행했는지의 기록</td><td><code>drizzle.__drizzle_migrations</code> 테이블</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="tools">
+          <h2>마이그레이션 도구가 공통으로 하는 일</h2>
+          <p>
+            Drizzle뿐 아니라 Prisma, Rails, Flyway 같은 마이그레이션 도구는 모두 같은 세 가지로 움직인다.
+          </p>
+          <ol class="steps blue">
+            <li><strong>번호(또는 시각)가 붙은 마이그레이션 파일을 쌓는다.</strong> 파일 하나가 "이전 모양 → 다음 모양"의 한 걸음이다.</li>
+            <li><strong>DB 안에 기록 테이블을 둔다.</strong> 이 DB에서 어느 파일까지 실행했는지 적는다.</li>
+            <li><strong>적용 명령은 기록에 없는 파일만 순서대로 실행하고 기록에 더한다.</strong> 같은 파일을 두 번 실행하지 않는다.</li>
+          </ol>
+          <p>
+            도구마다 다른 점은 "실행했는지"를 무엇으로 판단하느냐와, 이미 실행한 파일이 바뀌었을 때 알아채느냐다. 이 차이가
+            <a href="#mistakes">실수하기 쉬운 곳</a>을 가른다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>도구</th><th>기록 테이블</th><th>실행했는지 판단하는 기준</th><th>실행한 파일을 고치면</th></tr></thead>
+              <tbody>
+                <tr><td>Drizzle (이 저장소)</td><td><code>drizzle.__drizzle_migrations</code></td><td>기록의 가장 최근 시각보다 늦게 만든 파일만 실행</td><td>알아채지 못하고 건너뛴다</td></tr>
+                <tr><td>Prisma</td><td><code>_prisma_migrations</code></td><td>기록에 이름이 없는 파일</td><td>내용 해시가 달라 경고하고, 개발 DB를 초기화하라고 한다</td></tr>
+                <tr><td>Rails</td><td><code>schema_migrations</code></td><td>기록에 버전 번호가 없는 파일</td><td>알아채지 못하고 건너뛴다</td></tr>
+                <tr><td>Flyway</td><td><code>flyway_schema_history</code></td><td>기록에 버전이 없는 파일</td><td>내용 해시가 달라 적용을 멈춘다</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            어느 도구든 규칙은 같다. <strong>실행한 파일은 고치지 않고 새 파일을 더한다.</strong> 알아채 주는 도구는 실수를 막아 줄 뿐이고,
+            Drizzle처럼 알아채지 못하는 도구에서는 사람이 지켜야 한다.
+          </p>
+        </section>
+
+        <section id="files">
+          <h2>이 저장소의 마이그레이션 파일</h2>
+          <p>이 저장소의 마이그레이션은 <code>apps/api/drizzle/</code>에 있다.</p>
+          <ul class="tree" style="--tree-col: 30rem">
+            <li>
+              <div class="tree-row"><span class="tree-node">apps/api/drizzle/</span><span class="tree-note"></span></div>
+              <ul>
+                <li><div class="tree-row"><span class="tree-node">0000_create_shows.sql</span><span class="tree-note">shows 테이블을 만든다</span></div></li>
+                <li><div class="tree-row"><span class="tree-node">0001_create_venues_and_performances.sql</span><span class="tree-note">공연장, 회차, 공연 컬럼을 더한다</span></div></li>
+                <li><div class="tree-row"><span class="tree-node">0002_create_sections_seats_performance_seats.sql</span><span class="tree-note">구역, 좌석, 회차 좌석을 만든다</span></div></li>
+                <li><div class="tree-row"><span class="tree-node">0003_unique_section_name_per_venue.sql</span><span class="tree-note">구역 이름 유니크 제약을 건다</span></div></li>
+                <li>
+                  <div class="tree-row"><span class="tree-node">meta/</span><span class="tree-note">drizzle-kit이 쓰는 기록. 손으로 고치지 않는다</span></div>
+                  <ul>
+                    <li><div class="tree-row"><span class="tree-node">_journal.json</span><span class="tree-note">마이그레이션 목록과 각각 만든 시각</span></div></li>
+                    <li><div class="tree-row"><span class="tree-node">0000_snapshot.json … 0003_snapshot.json</span><span class="tree-note">각 마이그레이션 직후의 스키마 전체 모양</span></div></li>
+                  </ul>
+                </li>
+              </ul>
+            </li>
+          </ul>
+          <p>
+            <code>_journal.json</code>은 마이그레이션마다 이름(<code>tag</code>)과 만든 시각(<code>when</code>, 밀리초)을 적는다.
+            <code>when</code>은 뒤에서 DB가 "어디까지 실행했나"를 판단하는 기준이 된다.
+          </p>
+          <pre><code class="language-json">{ "idx": 2, "when": 1794293949719, "tag": "0002_create_sections_seats_performance_seats" },
+{ "idx": 3, "when": 1794295473473, "tag": "0003_unique_section_name_per_venue" }</code></pre>
+        </section>
+
+        <section id="generate">
+          <h2>만들기: pnpm db:generate</h2>
+          <p><code>apps/api</code>에서 실행한다. 이름은 <code>--name</code>으로 붙인다.</p>
+          <pre><code>pnpm db:generate --name unique_section_name_per_venue</code></pre>
+          <ol class="steps blue">
+            <li>
+              <strong>마지막 스냅숏을 읽는다.</strong> <code>meta/0002_snapshot.json</code>이 "지난번 마이그레이션 직후의 모양"이다.
+            </li>
+            <li>
+              <strong>지금 스키마 파일과 비교한다.</strong> 스냅숏에는 <code>sections_venue_id_index</code>가 있는데 스키마에는 없고,
+              스키마에는 <code>unique(venue_id, name)</code>이 있는데 스냅숏에는 없다.
+            </li>
+            <li>
+              <strong>차이만큼 SQL과 기록을 만든다.</strong> <code>0003_….sql</code>(인덱스를 지우고 제약을 거는 명령),
+              <code>0003_snapshot.json</code>, <code>_journal.json</code>의 새 항목이 생긴다.
+            </li>
+          </ol>
+          <p>
+            <code>generate</code>는 파일만 만들고 <strong>DB에는 손대지 않는다</strong>. DB를 보지도 않는다. 비교 대상은 DB가 아니라
+            스냅숏이다. 그래서 만든 SQL을 읽고 의도와 같은지 확인한 뒤 적용할 수 있다.
+          </p>
+        </section>
+
+        <section id="migrate">
+          <h2>적용하기: pnpm db:migrate</h2>
+          <p>
+            DB는 실행한 마이그레이션을 <code>drizzle</code> 스키마의 <code>__drizzle_migrations</code> 테이블에 한 행씩 기록한다. 지금
+            로컬 DB를 보면 이렇다.
+          </p>
+          <pre><code class="language-sql">select id, created_at from drizzle.__drizzle_migrations order by id;</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>id</th><th>created_at</th><th>어느 파일인가</th></tr></thead>
+              <tbody>
+                <tr><td>1</td><td>1794049204656</td><td>0000</td></tr>
+                <tr><td>2</td><td>1794225322348</td><td>0001</td></tr>
+                <tr><td>3</td><td>1794293949719</td><td>0002</td></tr>
+                <tr><td>4</td><td>1794295473473</td><td>0003</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            <code>created_at</code>은 실행한 시각이 아니라 <code>_journal.json</code>의 <code>when</code>을 그대로 옮겨 적은 값이다.
+            <code>pnpm db:migrate</code>는 이렇게 동작한다.
+          </p>
+          <ol class="steps green">
+            <li><strong>DB 기록에서 가장 큰 <code>created_at</code>을 하나 읽는다.</strong> 0002까지 실행한 DB라면 1794293949719다.</li>
+            <li>
+              <strong><code>_journal.json</code>의 마이그레이션 중 <code>when</code>이 그보다 큰 것만 실행한다.</strong> 0003(1794295473473)만
+              해당한다. 0000~0002는 건너뛴다.
+            </li>
+            <li><strong>실행한 마이그레이션마다 기록에 한 행을 더한다.</strong> 이 모든 일은 트랜잭션 하나로 묶여, 중간에 실패하면 하나도 적용되지 않는다.</li>
+          </ol>
+          <div class="callout warn">
+            <p>
+              <strong>파일 내용은 보지 않는다.</strong> 이미 실행했는지는 오직 <code>when</code> 숫자로만 판단한다. 기록에는 파일 내용의
+              해시도 남지만, 적용할 때 비교하지 않는다. 이 사실이 <a href="#immutable">다음 절</a>의 문제를 만든다.
+            </p>
+          </div>
+        </section>
+
+        <section id="workflow">
+          <h2>언제 어떤 명령을 쓰나</h2>
+          <p>
+            명령은 셋이다. 루트에서 <code>pnpm db:migrate</code>, <code>pnpm db:seed</code>로 부를 수 있고, <code>db:generate</code>는
+            <code>apps/api</code>에서 실행한다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>명령</th><th>하는 일</th><th>DB를 건드리나</th></tr></thead>
+              <tbody>
+                <tr><td><code>pnpm db:generate --name 이름</code></td><td>스키마 파일과 마지막 스냅숏을 비교해 새 마이그레이션 파일을 만든다</td><td>아니다</td></tr>
+                <tr><td><code>pnpm db:migrate</code></td><td>아직 실행하지 않은 마이그레이션을 DB에 실행한다</td><td>구조를 바꾼다</td></tr>
+                <tr><td><code>pnpm db:seed</code></td><td>개발용 데이터를 비우고 다시 넣는다</td><td>데이터를 바꾼다</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3 id="flow-setup">처음 받았을 때</h3>
+          <pre><code>pnpm infra:up      # PostgreSQL 실행. 빈 DB가 생긴다
+pnpm db:migrate    # 0000부터 전부 실행해 테이블을 만든다
+pnpm db:seed       # 공연, 회차, 좌석 데이터를 넣는다</code></pre>
+          <p>순서가 중요하다. 테이블이 없으면 시드가 넣을 곳이 없다.</p>
+
+          <h3 id="flow-change">스키마를 바꿀 때</h3>
+          <ol class="steps green">
+            <li><strong>스키마 파일을 고친다.</strong> <code>apps/api/src/db/schema/*.ts</code>.</li>
+            <li><strong><code>pnpm db:generate --name 무엇을_하는지</code></strong> 새 SQL과 <code>meta/</code> 파일이 생긴다.</li>
+            <li>
+              <strong>생성된 SQL을 읽는다.</strong> 의도한 변경만 있는지, 생각지 못한 <code>DROP</code>이 없는지, 데이터가 있는 DB에서
+              실패할 명령은 없는지(<a href="#data">데이터가 있는 테이블을 바꿀 때</a>) 본다. 잘못됐으면 아직 실행 전이니 생성된 파일을
+              지우고 스키마를 고쳐 다시 만든다.
+            </li>
+            <li><strong><code>pnpm db:migrate</code></strong> 내 로컬 DB에 적용한다. 이때부터 이 파일은 "실행한 파일"이다.</li>
+            <li><strong>필요하면 <code>pnpm db:seed</code></strong> 새 테이블이나 컬럼에 시드 데이터가 들어가야 하면 시드도 고쳐 다시 넣는다.</li>
+            <li><strong>SQL과 <code>meta/</code>를 함께 커밋한다.</strong> <code>meta/</code>가 빠지면 다음 사람의 <code>db:generate</code>가 지난 모양을 잘못 알아, 이미 있는 변경을 다시 만든다.</li>
+          </ol>
+
+          <h3 id="flow-pull">main이나 다른 사람의 PR을 받았을 때</h3>
+          <pre><code>git pull
+pnpm db:migrate    # 받은 코드에 새 마이그레이션이 있으면 그것만 실행한다. 없으면 아무 일도 하지 않는다</code></pre>
+          <p>
+            새 마이그레이션이 있는데 실행하지 않으면, 코드는 새 컬럼을 쿼리하는데 DB에는 그 컬럼이 없어 API가 에러를 낸다. 받을 때마다
+            돌려도 손해가 없다.
+          </p>
+
+          <h3 id="flow-reset">로컬 DB가 꼬였을 때</h3>
+          <p>
+            다른 브랜치의 마이그레이션을 실행해 버렸거나, 실행한 파일을 고쳐 기록과 실제 구조가 어긋났다면 로컬 DB를 지우고 처음부터
+            만든다. 로컬 DB에는 시드 데이터만 있어서 잃을 것이 없다.
+          </p>
+          <pre><code>docker compose down -v   # 컨테이너와 DB 데이터 볼륨을 지운다 (pnpm infra:down은 볼륨을 남긴다)
+pnpm infra:up
+pnpm db:migrate
+pnpm db:seed</code></pre>
+        </section>
+
+        <section id="databases">
+          <h2>같은 파일이 적용되는 DB들</h2>
+          <p>마이그레이션 파일은 하나지만, 그 파일을 받는 DB는 여럿이고 각자 받은 지점이 다르다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>DB</th><th>언제 적용하나</th><th>실행하는 파일</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td>내 로컬 개발 DB</td>
+                  <td>내가 <code>pnpm db:migrate</code>를 돌릴 때</td>
+                  <td>지난번 이후 새로 생긴 파일만. DB는 계속 살아 있고 데이터가 쌓여 있다</td>
+                </tr>
+                <tr>
+                  <td>다른 개발자의 로컬 DB</td>
+                  <td>그 사람이 PR을 받아 <code>pnpm db:migrate</code>를 돌릴 때</td>
+                  <td>그 사람이 지난번 이후 새로 받은 파일만</td>
+                </tr>
+                <tr>
+                  <td>통합 테스트 DB</td>
+                  <td><code>pnpm test:integration</code>마다 (<code>apps/api/test/setup/postgres.ts</code>)</td>
+                  <td>매번 새 컨테이너를 띄워 0000부터 전부</td>
+                </tr>
+                <tr>
+                  <td>운영 DB (나중)</td>
+                  <td>배포할 때</td>
+                  <td>지난 배포 이후 새로 생긴 파일만. 실제 고객 데이터가 들어 있다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout">
+            <p>
+              <strong>마이그레이션의 약속: 빈 DB에 전부 실행한 결과와, 옛 DB에 새 파일만 실행한 결과가 같아야 한다.</strong> 이 약속이
+              깨지면 테스트 DB와 내 DB, 운영 DB의 구조가 서로 달라진다.
+            </p>
+          </div>
+        </section>
+
+        <section id="immutable">
+          <h2>적용한 마이그레이션은 고치지 않는다</h2>
+          <p>
+            어느 DB에든 한 번 실행된 마이그레이션 파일은 고치지 않는다. 바꿀 것이 생기면 새 파일을 더한다. 구역 이름 유니크 제약을
+            예로, 0002를 고치는 두 방법과 0003을 더하는 방법을 비교한다. 출발점은 같다. 0002까지 실행한 로컬 DB가 있고, 통합 테스트는
+            매번 빈 DB에서 시작한다.
+          </p>
+
+          <h3 id="edit-file">0002 파일 안에 제약을 직접 써 넣으면</h3>
+          <p><code>0002_….sql</code>의 <code>CREATE TABLE "sections"</code>에 <code>UNIQUE("venue_id","name")</code>을 손으로 더한다. <code>_journal.json</code>의 <code>when</code>은 그대로다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>DB</th><th><code>pnpm db:migrate</code>가 하는 일</th><th>결과</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td>로컬 DB</td>
+                  <td>기록의 가장 큰 값이 0002의 <code>when</code>과 같다. 더 큰 것이 없으니 <strong>아무것도 실행하지 않는다</strong></td>
+                  <td>제약이 <strong>없다</strong>. 에러도 나지 않는다</td>
+                </tr>
+                <tr>
+                  <td>테스트 DB</td>
+                  <td>빈 DB라 고친 0002를 포함해 전부 실행한다</td>
+                  <td>제약이 <strong>있다</strong></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            테스트는 통과하는데 내 DB에는 제약이 없다. 아무 에러도 나지 않아서, 로컬에서 같은 이름의 구역을 넣어 봐도 들어가는 걸 보고
+            나서야 "어? 제약 걸었는데?" 하고 알게 된다. 이게 <strong>코드와 DB가 조용히 어긋난다</strong>는 말의 뜻이다.
+          </p>
+
+          <h3 id="regenerate">0002를 지우고 다시 만들면</h3>
+          <p>
+            0002 파일과 스냅숏, <code>_journal.json</code> 항목을 지우고 <code>pnpm db:generate</code>를 다시 돌려 제약까지 들어간 새
+            0002를 만든다. 이번에는 <code>when</code>이 지금 시각으로 새로 붙는다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>DB</th><th><code>pnpm db:migrate</code>가 하는 일</th><th>결과</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td>로컬 DB</td>
+                  <td>새 0002의 <code>when</code>이 기록보다 크니 <strong>새 파일로 보고 다시 실행한다</strong>. 첫 명령 <code>CREATE TABLE "performance_seats"</code>에서 이미 있는 테이블이라 실패한다</td>
+                  <td><code>relation "performance_seats" already exists</code>. 로컬 DB를 지우고 처음부터 다시 만들어야 한다</td>
+                </tr>
+                <tr>
+                  <td>테스트 DB</td>
+                  <td>빈 DB라 전부 실행한다</td>
+                  <td>제약이 있다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            이번에는 조용하지 않고 에러가 난다. 대신 0002를 실행한 <strong>모든 DB</strong>가 같은 에러를 맞는다. 다른 개발자의 로컬
+            DB도, 이미 배포했다면 운영 DB도 그렇다. 운영 DB는 지우고 다시 만들 수 없다.
+          </p>
+
+          <h3 id="new-file">0003을 새로 더하면</h3>
+          <p>0002는 그대로 두고 스키마 파일만 고친 뒤 <code>pnpm db:generate</code>로 0003을 만든다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>DB</th><th><code>pnpm db:migrate</code>가 하는 일</th><th>결과</th></tr></thead>
+              <tbody>
+                <tr><td>로컬 DB</td><td>0003만 새로 실행한다</td><td>제약이 있다</td></tr>
+                <tr><td>테스트 DB</td><td>0000~0003을 전부 실행한다</td><td>제약이 있다</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            어느 DB든 <code>pnpm db:migrate</code>만 돌리면 같은 구조가 된다. <a href="#databases">마이그레이션의 약속</a>이 지켜진다.
+          </p>
+          <div class="callout">
+            <p>
+              <strong>아직 병합 전이고 나만 적용했으면 고쳐도 되지 않나?</strong> 내 로컬 DB를 지우고 다시 만들 생각이면 가능하다. 다만
+              그 파일을 누가 이미 받아 적용했는지 확인하기 어렵고, 새 파일을 더하면 아무도 DB를 지울 필요가 없다. 실제 서비스에서도
+              공유된 마이그레이션은 고치지 않고 새 마이그레이션을 더하는 것이 기본 규칙이다.
+            </p>
+          </div>
+        </section>
+
+        <section id="data">
+          <h2>데이터가 있는 테이블을 바꿀 때</h2>
+          <p>
+            마이그레이션은 빈 테이블이 아니라 <strong>데이터가 이미 들어 있는 테이블</strong>에 실행될 수 있다. 그래서 같은 SQL이 빈 DB에서는
+            성공하고 데이터가 있는 DB에서는 실패할 수 있다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>바꾸는 것</th><th>데이터가 있으면</th><th>미리 할 일</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td>유니크 제약 추가</td>
+                  <td>이미 겹치는 행이 있으면 <code>ADD CONSTRAINT</code>가 실패한다</td>
+                  <td>겹치는 행을 먼저 찾아 정리한다</td>
+                </tr>
+                <tr>
+                  <td><code>NOT NULL</code> 컬럼 추가 (기본값 없음)</td>
+                  <td>기존 행에 넣을 값이 없어 실패한다</td>
+                  <td>기본값을 주거나, NULL 허용으로 더하고 값을 채운 뒤 <code>NOT NULL</code>을 건다</td>
+                </tr>
+                <tr>
+                  <td>컬럼·테이블 삭제</td>
+                  <td>실패하지 않고 데이터가 사라진다</td>
+                  <td>생성된 SQL에 <code>DROP</code>이 있는지 PR에서 반드시 확인한다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            이 저장소의 로컬 DB에는 시드 데이터만 있어서 필요하면 비우고 다시 넣을 수 있다. 운영 DB가 생기면 위의 "미리 할 일"을
+            마이그레이션 안에서 해야 한다.
+          </p>
+        </section>
+
+        <section id="mistakes">
+          <h2>실수하기 쉬운 곳</h2>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>실수</th><th>무슨 일이 생기나</th><th>어떻게 피하나</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td>실행한 마이그레이션 파일을 고친다</td>
+                  <td>이미 실행한 DB는 건너뛰고 새 DB만 바뀐 내용을 받아 구조가 갈린다(<a href="#edit-file">사례</a>)</td>
+                  <td>새 마이그레이션을 더한다</td>
+                </tr>
+                <tr>
+                  <td>코드를 받고 <code>db:migrate</code>를 안 돌린다</td>
+                  <td>코드가 기대하는 컬럼·테이블이 DB에 없어 쿼리가 실패한다</td>
+                  <td>받을 때마다 <code>pnpm db:migrate</code></td>
+                </tr>
+                <tr>
+                  <td>스키마만 고치고 <code>db:generate</code>를 안 한다</td>
+                  <td>타입은 새 컬럼이 있다고 믿어 타입 검사는 통과하는데, DB에는 없어 실행할 때 실패한다. 통합 테스트는 마이그레이션 파일로 DB를 만들므로 여기서 잡힌다</td>
+                  <td>스키마를 고치면 바로 <code>db:generate</code></td>
+                </tr>
+                <tr>
+                  <td><code>meta/</code>를 커밋하지 않는다</td>
+                  <td>다음 <code>db:generate</code>가 지난 스냅숏을 몰라 같은 변경을 또 만든다</td>
+                  <td>SQL과 <code>meta/</code>를 한 커밋에</td>
+                </tr>
+                <tr>
+                  <td>생성된 SQL을 읽지 않는다</td>
+                  <td>
+                    컬럼 이름을 바꿨는데 "지우고 새로 만들기"로 생성되면 데이터가 사라진다. drizzle-kit은 이름이 바뀐 것인지 새로 만든
+                    것인지 물어보는데, 잘못 고르면 <code>DROP COLUMN</code>이 들어간다
+                  </td>
+                  <td>적용 전에 SQL을 읽고 <code>DROP</code>을 찾는다</td>
+                </tr>
+                <tr>
+                  <td>두 브랜치에서 각자 마이그레이션을 만든다</td>
+                  <td>
+                    둘 다 같은 번호(예: 0004)를 받아 <code>_journal.json</code>이 충돌한다. 게다가 Drizzle은 "가장 최근 시각보다 늦은
+                    파일"만 실행하므로, 먼저 만든 쪽이 나중에 병합되면 다른 쪽을 이미 실행한 DB에서는 <strong>조용히 건너뛴다</strong>
+                  </td>
+                  <td>main을 받은 뒤 내 마이그레이션 파일과 <code>meta/</code> 항목을 지우고 <code>db:generate</code>로 다시 만든다(아직 나만 실행한 파일일 때)</td>
+                </tr>
+                <tr>
+                  <td>데이터가 있는 테이블에 실패할 변경을 넣는다</td>
+                  <td>빈 테스트 DB에서는 통과하고, 데이터가 있는 DB에서 실패한다</td>
+                  <td><a href="#data">데이터가 있는 테이블을 바꿀 때</a>를 확인한다</td>
+                </tr>
+                <tr>
+                  <td>스키마 폴더 안에 하위 폴더를 만든다</td>
+                  <td>
+                    <code>drizzle.config.ts</code>가 <code>src/db/schema</code> 한 단계만 읽어, 하위 폴더로 옮긴 테이블이 사라진 것으로 보고
+                    <code>DROP TABLE</code>이 생성된다
+                  </td>
+                  <td>스키마 파일은 <code>src/db/schema/</code> 바로 아래에 둔다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="cases">
+          <h2>이 저장소의 사례</h2>
+          <p>마이그레이션을 만들 때마다 여기에 무엇을 바꿨는지, 데이터가 있는 DB에서 어떻게 되는지를 한 항목씩 더한다.</p>
+
+          <h3 id="case-0001">0001: NOT NULL 컬럼을 더하려고 테이블을 비운다</h3>
+          <pre><code class="language-sql">-- 기존 shows 행은 임시 시드 2개뿐이다. NOT NULL 컬럼을 더하려고 비우며, 시드를 다시 넣으면 채워진다.
+TRUNCATE "shows" RESTART IDENTITY;
+ALTER TABLE "shows" ADD COLUMN "venue_id" integer NOT NULL;</code></pre>
+          <p>
+            <code>shows</code>에 <code>venue_id</code> 같은 <code>NOT NULL</code> 컬럼을 기본값 없이 더한다. 기존 행이 있으면 넣을 값이
+            없어 실패한다. 그때 <code>shows</code>에는 임시 시드 두 행뿐이라, 마이그레이션 첫 줄에서 테이블을 비우고(<code>TRUNCATE</code>)
+            시드를 다시 넣게 했다. 이 <code>TRUNCATE</code>는 <code>db:generate</code>가 만든 것이 아니라 생성된 SQL에 손으로 더한
+            것이다. 지킬 데이터가 있는 테이블이었다면 NULL 허용으로 더하고 값을 채운 뒤 <code>NOT NULL</code>을 거는 순서로 나눠야 한다.
+          </p>
+
+          <h3 id="case-0003">0003: 유니크 제약을 걸고, 겹치는 인덱스를 지운다</h3>
+          <pre><code class="language-sql">DROP INDEX "sections_venue_id_index";
+ALTER TABLE "sections" ADD CONSTRAINT "sections_venue_id_name_unique" UNIQUE("venue_id","name");</code></pre>
+          <ul>
+            <li>
+              <strong>새 파일로 더했다.</strong> 0002는 이미 로컬 DB에 적용되어 있었다. 이유는 <a href="#immutable">적용한 마이그레이션은 고치지 않는다</a>.
+            </li>
+            <li>
+              <strong>인덱스를 지우는 줄이 함께 생겼다.</strong> 유니크 제약이 만드는 인덱스가 <code>venue_id</code>로 시작해 기존
+              <code>venue_id</code> 인덱스를 대신하므로 스키마에서 그 인덱스를 지웠고, <code>db:generate</code>가 그 차이를
+              <code>DROP INDEX</code>로 옮겼다(<a href="07-구역-좌석-회차-좌석-스키마.html#sections-index">db-and-drizzle 07 문서</a>).
+            </li>
+            <li>
+              <strong>데이터가 있는 DB에서도 실패하지 않는다.</strong> 시드의 구역 이름은 공연장마다 A구역, B구역…으로 겹치지 않는다.
+              겹치는 구역이 있는 DB라면 <code>ADD CONSTRAINT</code>가 실패하고, 트랜잭션이라 <code>DROP INDEX</code>도 되돌려진다.
+            </li>
+          </ul>
+        </section>
+
+        <section id="check">
+          <h2>스스로 확인하기</h2>
+          <div class="quiz">
+            <p class="quiz-q">1. 로컬 DB의 기록이 아래와 같다. <code>pnpm db:migrate</code>를 돌리면 어느 파일이 실행되나?</p>
+            <p class="quiz-context"><a href="#migrate">적용하기</a>의 판단 규칙을 쓴다. <code>_journal.json</code>에는 0000~0003이 있다.</p>
+            <div class="table-wrap"><table><thead><tr><th>id</th><th>created_at</th></tr></thead><tbody><tr><td>1</td><td>1794049204656 (0000)</td></tr><tr><td>2</td><td>1794225322348 (0001)</td></tr></tbody></table></div>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body"><p>
+                  0002와 0003이다. 가장 큰 <code>created_at</code>이 0001의 값이고, <code>when</code>이 그보다 큰 것은 0002와 0003뿐이다.
+                  둘은 트랜잭션 하나로 실행되어, 0003이 실패하면 0002도 적용되지 않는다.
+                </p></div>
+            </details>
+          </div>
+          <div class="quiz">
+            <p class="quiz-q">2. 동료가 이미 병합된 0002 파일에서 오타 난 컬럼 이름을 고쳐 PR을 올렸다. 통합 테스트는 통과한다. 무엇이 문제인가?</p>
+            <p class="quiz-context"><a href="#edit-file">0002 파일 안에 제약을 직접 써 넣으면</a>과 같은 상황이다.</p>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body"><p>
+                  통합 테스트는 매번 빈 DB에 0000부터 실행하므로 고친 이름으로 테이블이 생겨 통과한다. 하지만 0002를 이미 실행한 DB(다른
+                  개발자의 로컬 DB, 운영 DB)는 <code>when</code>이 같아 0002를 다시 실행하지 않는다. 그 DB에는 오타 난 이름이 남고, 코드는
+                  고친 이름으로 쿼리해 실패한다. 이름을 바꾸는 새 마이그레이션(<code>ALTER TABLE … RENAME COLUMN</code>)을 더해야 한다.
+                </p></div>
+            </details>
+          </div>
+          <div class="quiz">
+            <p class="quiz-q">3. 공연 테이블에 <code>NOT NULL</code> 컬럼 <code>poster_url</code>을 기본값 없이 더하는 마이그레이션을 만들었다. 테스트는 통과하는데 로컬 <code>pnpm db:migrate</code>는 실패한다. 왜인가?</p>
+            <p class="quiz-context"><a href="#data">데이터가 있는 테이블을 바꿀 때</a>를 떠올린다.</p>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body"><p>
+                  테스트 DB는 마이그레이션을 실행할 때 <code>shows</code>가 비어 있어 성공한다. 로컬 DB에는 시드로 넣은 공연이 있어,
+                  그 행들에 넣을 <code>poster_url</code> 값이 없으니 실패한다. 기본값을 주거나, NULL 허용으로 더하고 값을 채운 뒤
+                  <code>NOT NULL</code>을 거는 순서로 나눈다.
+                </p></div>
+            </details>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

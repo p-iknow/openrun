@@ -238,7 +238,7 @@ this.db.select({ count: count() }).from(shows).innerJoin(salesStatus, ...).where
           <h2>limit, offset</h2>
           <pre><code class="language-ts">.limit(PAGE_SIZE) // 20
 .offset((PAGE - 1) * PAGE_SIZE) // 1페이지면 0</code></pre>
-          <pre><code class="language-sql">limit $1    -- params: [20]</code></pre>
+          <pre><code class="language-sql">limit 20    -- 20은 실제로는 빈칸 $1로 따로 간다</code></pre>
           <p>
             최대 몇 개를 가져올지(<code>limit</code>), 앞에서 몇 개를 건너뛸지(<code>offset</code>) 정한다(<a
               href="01-프론트엔드-개발자를-위한-DB-개념.html#order-limit"
@@ -302,6 +302,45 @@ this.db
           <p>
             <code>count()</code>는 인자 없이 쓰면 <code>count(*)</code>(행 수)이고, <code>count(col)</code>이면 그 컬럼이
             <code>NULL</code>이 아닌 행 수다.
+          </p>
+
+          <h3 id="aggregate-sql">헬퍼가 없는 집계는 sql로 쓴다</h3>
+          <p>
+            <code>count()</code> 헬퍼에는 <a href="01-프론트엔드-개발자를-위한-DB-개념.html#filter"><code>FILTER</code></a>를 붙일
+            방법이 없고, <a href="01-프론트엔드-개발자를-위한-DB-개념.html#bool-or"><code>bool_or</code></a>는 헬퍼가 아예 없다. 이럴
+            때는 <a href="#sql-fragment"><code>sql</code> 템플릿</a>으로 직접 쓴다.
+          </p>
+          <pre><code class="language-ts">// 예: 공연별로 묶은 회차에서 (groupBy(performances.showId))
+total: count().as('total'),                // 전체 회차 수
+active: sql&lt;number&gt;`count(*) filter (where not ${performances.isCancelled})`
+  .mapWith(Number)
+  .as('active'),                           // 취소되지 않은 회차 수
+hasCancelled: sql&lt;boolean&gt;`bool_or(${performances.isCancelled})`.as('has_cancelled'), // 취소된 회차가 있는가</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>값</th><th>쓴 방법</th><th><code>.mapWith</code></th></tr></thead>
+              <tbody>
+                <tr>
+                  <td><code>total</code></td>
+                  <td><code>count()</code> 헬퍼</td>
+                  <td>필요 없다. 헬퍼가 안에서 숫자로 바꿔 준다</td>
+                </tr>
+                <tr>
+                  <td><code>active</code></td>
+                  <td><code>sql</code>로 쓴 <code>count(*) filter (...)</code></td>
+                  <td><code>.mapWith(Number)</code>. <code>count(*)</code>는 <code>bigint</code>이고, 드라이버가 <code>bigint</code>를 문자열(<code>'3'</code>)로 준다(<a href="#map-with">.mapWith</a>)</td>
+                </tr>
+                <tr>
+                  <td><code>hasCancelled</code></td>
+                  <td><code>sql</code>로 쓴 <code>bool_or(...)</code></td>
+                  <td>필요 없다. 드라이버가 boolean은 처음부터 JS <code>true</code>/<code>false</code>로 준다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            헬퍼로 만든 값이든 <code>sql</code> 조각이든, 서브쿼리 안에서 계산한 값이면 바깥에서 꺼내 쓸 수 있게 <code>.as()</code>로
+            이름을 붙인다(<a href="#subquery">서브쿼리와 .as()</a>).
           </p>
         </section>
 
@@ -368,11 +407,13 @@ this.db.select({ status: salesStatus.salesStatus }).from(shows).innerJoin(salesS
             인자로 받는다. 함수를 부를 때마다 새 서브쿼리 객체가 생기므로, 한 쿼리 안에서는 한 번 만든 객체를 같이 쓴다.
           </p>
 
+        </section>
+
         <section id="parallel">
           <h2>쿼리 두 개를 함께 보내기</h2>
           <pre><code class="language-ts">const [rows, [total]] = await Promise.all([
   this.db.select({ ... }).from(shows) /* ... */.limit(20),
-  this.db.select({ count: count() }).from(shows).innerJoin(period, eq(period.showId, shows.id)),
+  this.db.select({ count: count() }).from(shows).innerJoin(salesStatus, eq(salesStatus.showId, shows.id)).where(isListed),
 ]);</code></pre>
           <p>
             쿼리 빌더는 <code>await</code>할 수 있는 객체라 <code>Promise.all</code>에 그대로 넣을 수 있다. 두 쿼리가 서로를
@@ -398,12 +439,19 @@ this.db.select({ status: salesStatus.salesStatus }).from(shows).innerJoin(salesS
 
         <section id="insert">
           <h2>insert, values, returning</h2>
-          <pre><code class="language-ts">const venueRows = await tx
-  .insert(venues)
-  .values(VENUE_NAMES.map((name) =&gt; ({ name })))
-  .returning({ id: venues.id });
+          <p>시드는 구역 하나의 좌석을 문장 하나로 한꺼번에 넣는다(실제 코드에서 줄였다).</p>
+          <pre><code class="language-ts">const sectionSeats = await tx
+  .insert(seats)
+  .values([
+    { sectionId: section.id, row: 'A', number: 1 },
+    { sectionId: section.id, row: 'A', number: 2 },
+    // ... 열 수 × 열당 좌석 수만큼
+  ])
+  .returning({ id: seats.id });
 // 결과 타입: { id: number }[]</code></pre>
-          <pre><code class="language-sql">insert into "venues" ("id", "name") values (default, $1), (default, $2), (default, $3) returning "id"</code></pre>
+          <pre><code class="language-sql">insert into "seats" ("id", "section_id", "row", "number")
+values (default, $1, $2, $3), (default, $4, $5, $6)  -- 값 1, 'A', 1, 1, 'A', 2는 따로 간다
+returning "id"</code></pre>
           <ul>
             <li>
               <strong><code>.insert(테이블)</code></strong>: 어느 테이블에 넣을지 정한다.
@@ -417,13 +465,14 @@ this.db.select({ status: salesStatus.salesStatus }).from(shows).innerJoin(salesS
             </li>
             <li>
               <strong><code>.returning({...})</code></strong>: 넣은 행에서 돌려받을 컬럼을 고른다. DB가 매긴 <code>id</code>처럼
-              넣은 뒤에야 알 수 있는 값을 받을 때 쓴다. 시드는 공연을 넣고 받은 <code>id</code>로 그 공연의 회차를 넣는다.
+              넣은 뒤에야 알 수 있는 값을 받을 때 쓴다. 시드는 좌석을 넣고 받은 <code>id</code>로 회차 좌석을 만든다. 공연장,
+              구역, 공연, 회차는 하나씩 넣고 받은 <code>id</code>로 그 아래 행을 넣는다.
               <code>returning</code>이 없으면 결과에 행이 없다.
             </li>
           </ul>
           <p>
-            <code>(default, $1)</code>의 <code>default</code>는 <code>id</code>를 DB가 정하게 하는 SQL 표기다. 행을 여러 개 넣을 때
-            각 행이 <code>$1</code>, <code>$2</code>…로 값을 따로 받는다.
+            <code>(default, $1, $2, $3)</code>의 <code>default</code>는 <code>id</code>를 DB가 정하게 하는 SQL 표기다. 행을 여러 개
+            넣을 때 각 행의 값이 <code>$1</code>, <code>$2</code>… 빈칸으로 따로 간다.
           </p>
         </section>
 
@@ -431,8 +480,10 @@ this.db.select({ status: salesStatus.salesStatus }).from(shows).innerJoin(salesS
           <h2>execute와 sql 템플릿</h2>
           <pre><code class="language-ts">import { sql } from 'drizzle-orm';
 
-await tx.execute(sql`TRUNCATE ${performances}, ${shows}, ${venues} RESTART IDENTITY`);
-// → TRUNCATE "performances", "shows", "venues" RESTART IDENTITY</code></pre>
+await tx.execute(
+  sql`TRUNCATE ${performanceSeats}, ${performances}, ${shows}, ${seats}, ${sections}, ${venues} RESTART IDENTITY`,
+);
+// → TRUNCATE "performance_seats", "performances", "shows", "seats", "sections", "venues" RESTART IDENTITY</code></pre>
           <p>
             쿼리 빌더에 없는 SQL은 <code>sql</code> 태그드 템플릿으로 직접 쓰고 <code>execute</code>로 보낸다.
             <code>TRUNCATE</code>는 빌더 메서드가 없어서 이렇게 썼다.
@@ -466,7 +517,7 @@ await tx.execute(sql`TRUNCATE ${performances}, ${shows}, ${venues} RESTART IDENT
             테이블 이름을 문자열로 적지 않고 객체로 넣으면, 스키마에서 이름을 바꿨을 때 이 SQL도 함께 바뀐다.
           </p>
           <p>
-            통합 테스트는 <code>db.execute('TRUNCATE performances, shows, venues RESTART IDENTITY CASCADE')</code>처럼 문자열을
+            통합 테스트는 <code>db.execute('TRUNCATE performance_seats, performances, shows, seats, sections, venues RESTART IDENTITY CASCADE')</code>처럼 문자열을
             그대로 넘긴다. 값이 섞이지 않는 고정 문장이라 문제는 없지만, 테이블 이름이 바뀌어도 타입 검사가 잡아 주지 않는다.
           </p>
           <p>
@@ -485,23 +536,21 @@ await tx.execute(sql`TRUNCATE ${performances}, ${shows}, ${venues} RESTART IDENT
           </p>
           <pre><code class="language-ts">import { type SQL, sql } from 'drizzle-orm';
 
-// 조각을 돌려주는 함수
-function performancePriority(now: Date): SQL&lt;number&gt; {
+// 조각을 돌려주는 함수 (실제 코드에서 when 갈래를 줄였다)
+function performancePriority({ now }: { now: Date }): SQL&lt;number&gt; {
   return sql&lt;number&gt;`case
-    when ${performances.isCancelled} then 2
-    when ${performances.startsAt} &lt;= ${now} then 3
+    when ${performances.isCancelled} or ${performances.startsAt} &lt;= ${now} then 2
     else 0
   end`;
 }
 
-const priority = performancePriority(now);
+const priority = performancePriority({ now });
 const showPriority = sql`min(${priority})`; // 조각 안에 조각을 넣는다</code></pre>
           <pre><code class="language-sql">min(case
-    when "performances"."is_cancelled" then 2
-    when "performances"."starts_at" &lt;= $1 then 3
+    when "performances"."is_cancelled" or "performances"."starts_at" &lt;= '2026-11-10 12:00+09' then 2
+    -- '2026-11-10 12:00+09'은 now(한국 시각). 실제로는 빈칸 $1로 따로 간다
     else 0
-  end)
--- params: [2026-11-10T03:00:00.000Z]   ← now가 2026-11-10 12:00(한국 시각)일 때</code></pre>
+  end)</code></pre>
           <h3><code>${...}</code>에 넣을 수 있는 것</h3>
           <p>
             <a href="#execute">execute 절의 표</a>에 하나가 더 있다. <strong>다른 SQL 조각</strong>을 넣으면 그 조각의 SQL이
@@ -576,19 +625,19 @@ min('10', '9') → '10'                              -- '1'이 '9'보다 앞이�
 -- 결과 자리가 숫자 리터럴: integer가 된다
 SELECT pg_typeof(CASE WHEN true THEN 2 ELSE 0 END); -- integer</code></pre>
           <p>
-            그래서 판매 상태 순번(<code>0</code>~<code>3</code>)과 상태 이름(<code>'on_sale'</code>)처럼 코드에 고정된 상수는
+            그래서 판매 상태 순번(<code>0</code>~<code>2</code>)과 상태 이름(<code>'on_sale'</code>)처럼 코드에 고정된 상수는
             <code>sql.raw</code>로 리터럴로 넣었다. SQL을 읽을 때도 <code>then $3</code>보다 <code>then 2</code>가 뜻이 바로
             보인다. 반대로 <code>now</code>처럼 실행할 때마다 달라지는 값은 파라미터로 보낸다.
           </p>
           <pre><code class="language-ts">// apps/api/src/shows/show-sales-status.ts
 function priorityOf(status: ShowSalesStatus): SQL {
-  return sql.raw(String(SHOW_SALES_STATUSES.indexOf(status))); // 'cancelled' → 2
+  return sql.raw(String(SHOW_SALES_STATUSES.indexOf(status))); // 'ended' → 2
 }
 function literalOf(status: ShowSalesStatus): SQL {
   return sql.raw(`'${status}'`); // 'on_sale' → 'on_sale'(작은따옴표 포함)
 }</code></pre>
           <p>
-            인자 타입이 <code>ShowSalesStatus</code>라서 정해진 네 값 말고는 들어올 수 없다. 이렇게 타입으로 입력을 막아 두면
+            인자 타입이 <code>ShowSalesStatus</code>라서 정해진 세 값 말고는 들어올 수 없다. 이렇게 타입으로 입력을 막아 두면
             <code>sql.raw</code>를 써도 안전하다는 것을 코드만 보고 알 수 있다.
           </p>
         </section>
@@ -599,14 +648,14 @@ function literalOf(status: ShowSalesStatus): SQL {
   SHOW_SALES_STATUSES.map((status) =&gt; sql`when ${priorityOf(status)} then ${literalOf(status)}`),
   sql` `, // 조각 사이에 넣을 구분자
 );</code></pre>
-          <pre><code class="language-sql">when 0 then 'on_sale' when 1 then 'upcoming' when 2 then 'cancelled' when 3 then 'ended'</code></pre>
+          <pre><code class="language-sql">when 0 then 'on_sale' when 1 then 'upcoming' when 2 then 'ended'</code></pre>
           <p>
             <code>sql.join(조각 배열, 구분자)</code>는 <code>Array.prototype.join</code>의 SQL 조각 버전이다. 문자열이 아니라
             조각을 잇기 때문에, 각 조각의 파라미터도 순서대로 함께 이어진다. 구분자도 조각으로 넘긴다. 쉼표로 이으려면
             <code>sql`, `</code>를 넘긴다.
           </p>
           <p>
-            배열에서 SQL을 만들면 배열이 바뀔 때 SQL도 따라 바뀐다. 판매 상태에 <code>sold_out</code>을 더하면 배열에 한
+            배열에서 SQL을 만들면 배열이 바뀔 때 SQL도 따라 바뀐다. 판매 상태를 하나 더하면 배열에 한
             줄만 넣으면 되고, 순번과 위 매핑은 다시 손으로 고치지 않는다.
           </p>
         </section>
@@ -653,9 +702,9 @@ function literalOf(status: ShowSalesStatus): SQL {
         <section id="transaction">
           <h2>transaction</h2>
           <pre><code class="language-ts">await db.transaction(async (tx) =&gt; {
-  await tx.execute(sql`TRUNCATE ${performances}, ${shows}, ${venues} RESTART IDENTITY`);
-  const venueRows = await tx.insert(venues).values(/* ... */).returning({ id: venues.id });
-  // ... 공연과 회차를 넣는다
+  await tx.execute(sql`TRUNCATE ${performanceSeats}, ${performances}, ${shows}, ${seats}, ${sections}, ${venues} RESTART IDENTITY`);
+  const [venue] = await tx.insert(venues).values({ name: layout.name }).returning({ id: venues.id });
+  // ... 구역, 좌석, 공연, 회차, 회차 좌석을 넣는다
 });</code></pre>
           <p>
             콜백 안의 쿼리를 <a href="01-프론트엔드-개발자를-위한-DB-개념.html#transaction">트랜잭션</a> 하나로 묶는다.

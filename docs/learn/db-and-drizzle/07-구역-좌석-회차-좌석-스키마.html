@@ -1,0 +1,764 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>07 구역·좌석·회차 좌석 스키마</title>
+    <link rel="stylesheet" href="../learn.css" />
+    <script src="../vendor/highlightjs/highlight.min.js" defer></script>
+    <script src="../learn.js" defer></script>
+  </head>
+  <body>
+    <div class="layout">
+      <nav aria-label="목차">
+        <strong>목차</strong>
+        <ol>
+          <li><a href="#structure">테이블 구조를 정한 이유</a></li>
+          <li><a href="#overview">세 테이블에 건 규칙</a></li>
+          <li><a href="#performance-seats">회차 좌석: 같은 좌석을 두 번 팔지 않게</a></li>
+          <li><a href="#seats">좌석: 같은 자리가 두 번 생기지 않게</a></li>
+          <li><a href="#sections">구역: 이름이 겹치면 생기는 일</a></li>
+          <li><a href="#fk-index">외래 키마다 인덱스가 있나</a></li>
+          <li><a href="#migration">구역 이름 유니크 제약을 넣은 마이그레이션</a></li>
+          <li><a href="#check">스스로 확인하기</a></li>
+        </ol>
+      </nav>
+
+      <main>
+        <h1>07 구역·좌석·회차 좌석 스키마</h1>
+        <p class="lead">
+          1.4(#41)에서 만든 구역(<code>sections</code>), 좌석(<code>seats</code>), 회차 좌석(<code>performance_seats</code>)
+          테이블을 왜 이런 구조로 나눴는지 보고, 각 테이블에 어떤 유니크 제약과 인덱스를 걸었고 어떤 문제를 막는지 따라간다. 유니크 제약, 여러 컬럼 인덱스, 실행 계획 같은 개념은
+          <a href="01-프론트엔드-개발자를-위한-DB-개념.html#unique">db-and-drizzle 01 문서</a>, <code>unique()</code>와
+          <code>index()</code> 문법은 <a href="02-drizzle-스키마-문법.html#unique">db-and-drizzle 02 문서</a>에 있다.
+        </p>
+
+        <section id="structure">
+          <h2>테이블 구조를 정한 이유</h2>
+          <p>
+            공연장은 구역으로, 구역은 좌석으로 나뉜다. 회차를 만들면 공연장의 좌석마다 회차 좌석을 하나씩 만들고, 판매 여부는
+            회차 좌석이 갖는다. 회차 좌석은 좌석(<code>seat_id</code>)과 회차(<code>performance_id</code>)를 함께 가리킨다.
+          </p>
+          <ul class="tree" style="--tree-col: 20rem">
+            <li>
+              <div class="tree-row"><span class="tree-node">venues</span><span class="tree-note">공연장. 낙산 소극장</span></div>
+              <ul>
+                <li>
+                  <div class="tree-row"><span class="tree-node">sections</span><span class="tree-note">구역. A구역</span></div>
+                  <ul>
+                    <li>
+                      <div class="tree-row"><span class="tree-node">seats</span><span class="tree-note">좌석. A구역 C열 5번</span></div>
+                      <ul>
+                        <li>
+                          <div class="tree-row">
+                            <span class="tree-node">performance_seats</span>
+                            <span class="tree-note">회차 좌석. 11-20 19:30 회차의 A구역 C열 5번, 판매됨</span>
+                          </div>
+                        </li>
+                      </ul>
+                    </li>
+                  </ul>
+                </li>
+              </ul>
+            </li>
+          </ul>
+
+          <h3 id="tables">지금 구조의 테이블</h3>
+          <p>
+            이 절의 예시는 모두 아래 데이터를 쓴다. 낙산 소극장에 구역 둘, 좌석 셋만 있고 회차가 둘이다.
+            <strong>11-20 회차에서 좌석 10만 팔렸다.</strong> 굵은 글씨는 다른 테이블의 id를 가리키는 외래 키다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th colspan="2">venues (공연장)</th></tr><tr><th>id</th><th>name</th></tr></thead>
+              <tbody><tr><td>1</td><td>낙산 소극장</td></tr></tbody>
+            </table>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th colspan="3">sections (구역)</th></tr><tr><th>id</th><th>venue_id</th><th>name</th></tr></thead>
+              <tbody>
+                <tr><td>1</td><td><strong>1</strong></td><td>A구역</td></tr>
+                <tr><td>2</td><td><strong>1</strong></td><td>B구역</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th colspan="4">seats (좌석)</th></tr><tr><th>id</th><th>section_id</th><th>row</th><th>number</th></tr></thead>
+              <tbody>
+                <tr><td>10</td><td><strong>1</strong></td><td>C</td><td>5</td></tr>
+                <tr><td>11</td><td><strong>1</strong></td><td>C</td><td>6</td></tr>
+                <tr><td>12</td><td><strong>2</strong></td><td>A</td><td>1</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th colspan="3">performances (회차)</th></tr><tr><th>id</th><th>show_id</th><th>starts_at</th></tr></thead>
+              <tbody>
+                <tr><td>20</td><td><strong>5</strong></td><td>11-20 19:30</td></tr>
+                <tr><td>21</td><td><strong>5</strong></td><td>11-21 19:30</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th colspan="4">performance_seats (회차 좌석)</th></tr><tr><th>id</th><th>performance_id</th><th>seat_id</th><th>is_sold</th></tr></thead>
+              <tbody>
+                <tr><td>1</td><td><strong>20</strong></td><td><strong>10</strong></td><td>true</td></tr>
+                <tr><td>2</td><td><strong>20</strong></td><td><strong>11</strong></td><td>false</td></tr>
+                <tr><td>3</td><td><strong>20</strong></td><td><strong>12</strong></td><td>false</td></tr>
+                <tr><td>4</td><td><strong>21</strong></td><td><strong>10</strong></td><td>false</td></tr>
+                <tr><td>5</td><td><strong>21</strong></td><td><strong>11</strong></td><td>false</td></tr>
+                <tr><td>6</td><td><strong>21</strong></td><td><strong>12</strong></td><td>false</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            공연 5는 낙산 소극장에서 열린다(<code>shows.venue_id = 1</code>). 회차 좌석 1번은 "회차 20의 좌석 10(A구역 C열 5번),
+            판매됨"이라고 읽는다. 정답: 11-20 회차의 남은 좌석은 2석, 11-21 회차는 3석이다.
+          </p>
+          <p>
+            이 모양은 이슈 #41의 스펙과 <code>GLOSSARY.md</code>의 용어 정의에서 나왔다. 아래는 각 테이블을 왜 두었고, 어떤 대안을
+            쓰지 않았는지다. 대안마다 <strong>위 테이블에서 무엇이 바뀌는지</strong>를 테이블 모양으로 보인다.
+          </p>
+
+          <h3 id="why-performance-seat">판매 여부를 회차 좌석에 미리 담아 둔 이유</h3>
+          <p>
+            용어집은 좌석을 "공연장에 물리적으로 존재하는 자리이며, 판매 여부를 갖지 않는다", 회차 좌석을 "특정 회차에서 판매되는
+            좌석 하나이며, 예매의 최소 판매 단위"로 정한다. 좌석 10은 11-20 회차에서는 팔렸고 11-21 회차에서는 비어 있다. 판매 여부는
+            <strong>좌석 + 회차</strong>마다 다르므로, 좌석과 따로 회차별 판매 기록이 있어야 한다는 것까지는 정해져 있다.
+          </p>
+          <p>
+            남은 것은 그 기록을 <strong>어떤 모양으로</strong> 둘지다. 회차마다 모든 좌석의 행을 미리 만들어 판매 여부를 담는 지금
+            구조를 고르기 전에, 대안 두 가지를 따져 봤다.
+          </p>
+
+          <h4 id="alt-sold-only">대안 1: 좌석이 팔릴 때만 행을 추가한다</h4>
+          <p>
+            <strong>문제: 남은 좌석을 구하려면 공연장 좌석 수에서 팔린 수를 빼야 해서 두 테이블을 맞춰 세야 한다.</strong>
+          </p>
+          <p>
+            <code>performance_seats</code> 대신 <code>sold_seats</code>를 둔다. 처음에는 비어 있고, 좌석이 팔리는 순간 "회차 20의 좌석
+            10이 팔렸다"는 <a href="01-프론트엔드-개발자를-위한-DB-개념.html#table">행</a>을 하나 추가(INSERT)한다. 팔리지 않은 좌석은
+            행이 없고, 행이 없으면 판매 가능으로 본다. 그래서 <code>is_sold</code> 컬럼이 필요 없다. 나머지 테이블(<code>venues</code>,
+            <code>sections</code>, <code>seats</code>, <code>performances</code>)은 그대로다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>시점</th><th>대안 1: <code>sold_seats</code></th><th>지금 구조: <code>performance_seats</code></th></tr></thead>
+              <tbody>
+                <tr><td>회차 20을 만들 때</td><td>아무것도 하지 않는다. 0행</td><td>좌석 수만큼 행을 미리 넣는다. 3행, 모두 <code>is_sold = false</code></td></tr>
+                <tr><td>좌석 10이 팔릴 때</td><td>(20, 10) 행을 <strong>추가</strong>한다(INSERT). 1행</td><td>(20, 10) 행의 <code>is_sold</code>를 true로 <strong>바꾼다</strong>(UPDATE). 3행 그대로</td></tr>
+                <tr><td>판매 가능한 좌석</td><td>행이 없는 좌석</td><td><code>is_sold = false</code>인 행</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>지금 예시 데이터를 대안 1로 옮기면 <code>sold_seats</code>는 이 한 행뿐이다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th colspan="2">sold_seats (팔린 좌석)</th></tr><tr><th>performance_id</th><th>seat_id</th></tr></thead>
+              <tbody><tr><td><strong>20</strong></td><td><strong>10</strong></td></tr></tbody>
+            </table>
+          </div>
+          <p>
+            지금 구조의 6행이 1행으로 준다. 판매 여부도 회차마다 맞다. 하지만 남은 좌석을 세는 방법이 달라진다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>방식</th><th>11-20 회차의 남은 좌석 구하기</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td>대안 1</td>
+                  <td>
+                    ① <code>performances</code> → <code>shows</code> → <code>venues</code> → <code>sections</code> →
+                    <code>seats</code>로 JOIN해 공연장 좌석 수(3)를 센다<br />
+                    ② <code>sold_seats</code>에서 <code>performance_id = 20</code>인 행 수(1)를 센다<br />
+                    ③ 3 − 1 = 2
+                  </td>
+                </tr>
+                <tr>
+                  <td>지금 구조</td>
+                  <td><code>performance_seats</code>에서 <code>performance_id = 20</code>이고 <code>is_sold = false</code>인 행 수를 센다 → 2</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            대안 1은 행이 적은 대신, 공연장 좌석 수를 세려고 테이블 다섯 개를 JOIN하고 <code>sold_seats</code>를 따로 세서 빼야 한다. 지금 구조는 회차 좌석
+            테이블 하나만 세면 남은 좌석이 나온다.
+          </p>
+
+          <h4 id="alt-remaining-count">대안 2: 회차에 남은 좌석 수를 숫자로 저장한다</h4>
+          <p>
+            <strong>문제: 좌석이 팔릴 때마다 회차 좌석과 이 숫자를 함께 고쳐야 하고, 둘이 어긋날 수 있다.</strong>
+          </p>
+          <p>
+            <code>performances</code>에 <code>remaining_seats</code> 컬럼을 더한다. 어느 좌석이 팔렸는지는 여전히 알아야 하므로
+            <code>performance_seats</code>도 그대로 둔다. 같은 사실(회차 20에 2석 남음)이 두 테이블에 있게 된다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th colspan="4">performances (회차) — 컬럼 추가</th></tr><tr><th>id</th><th>show_id</th><th>starts_at</th><th>remaining_seats</th></tr></thead>
+              <tbody>
+                <tr><td>20</td><td><strong>5</strong></td><td>11-20 19:30</td><td><strong>2</strong></td></tr>
+                <tr><td>21</td><td><strong>5</strong></td><td>11-21 19:30</td><td><strong>3</strong></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th colspan="4">performance_seats (회차 좌석) — 그대로</th></tr><tr><th>id</th><th>performance_id</th><th>seat_id</th><th>is_sold</th></tr></thead>
+              <tbody>
+                <tr><td>1</td><td>20</td><td>10</td><td>true</td></tr>
+                <tr><td>2</td><td>20</td><td>11</td><td>false</td></tr>
+                <tr><td>3</td><td>20</td><td>12</td><td>false</td></tr>
+                <tr><td colspan="4">… 회차 21의 3줄</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            회차마다 숫자 하나만 읽으면 되니 조회는 가장 빠르다. 대신 좌석 11을 팔 때 두 곳을 고쳐야 한다: 회차 좌석 2번의
+            <code>is_sold</code>를 true로, 회차 20의 <code>remaining_seats</code>를 1로.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>좌석 11 판매 처리</th><th>회차 좌석 2번 is_sold</th><th>회차 20 remaining_seats</th><th>결과</th></tr></thead>
+              <tbody>
+                <tr><td>둘 다 고쳤다</td><td>true</td><td>1</td><td>맞다</td></tr>
+                <tr><td>숫자를 깜빡했다(버그)</td><td>true</td><td><strong>2</strong></td><td>화면은 2석, 실제는 1석</td></tr>
+                <tr><td>좌석 11, 12를 두 사람이 동시에 팔았다. 둘 다 2를 읽고 각자 1을 썼다</td><td>true (12도 true)</td><td><strong>1</strong></td><td>화면은 1석, 실제는 0석인데 매진이 아니다</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            지금 구조는 남은 좌석을 저장하지 않고, 필요할 때마다 회차 좌석을 센다. 사실이 한 곳에만 있어 어긋날 일이 없다. 남은 좌석을 세는
+            조회가 느려지면 그때 저장을 검토한다.
+          </p>
+
+          <h4 id="chosen">고른 방식: 회차마다 좌석 수만큼 회차 좌석을 미리 만든다</h4>
+          <p>
+            <a href="#tables">지금 구조의 테이블</a>의 <code>performance_seats</code>다. 회차 둘 × 좌석 셋 = 6줄이 판매 여부와 함께 모두
+            있다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>하는 일</th><th>방법</th></tr></thead>
+              <tbody>
+                <tr><td>회차의 남은 좌석 세기</td><td><code>performance_seats</code>를 <code>performance_id</code>로 묶어 <code>count(*) filter (where not is_sold)</code>. 회차 20 → 2, 회차 21 → 3</td></tr>
+                <tr><td>좌석 하나 팔기</td><td>회차 좌석 한 줄의 <code>is_sold</code>를 true로 바꾼다. 다른 테이블은 고치지 않는다</td></tr>
+                <tr><td>좌석 선택 화면</td><td><code>performance_id = 20</code>인 3줄을 읽으면 판매 가능과 판매됨이 다 나온다</td></tr>
+                <tr><td>뒤 단계의 좌석 선점, 티켓</td><td>회차 좌석 id(예: 2번)를 가리키면 된다</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            대가는 줄 수다. 회차 좌석은 <strong>회차 수 × 공연장 좌석 수</strong>만큼 생긴다. 예시는 2 × 3 = 6줄이고, 시드는 회차 189개 ×
+            회차당 100~600석으로 57,200줄이다. PostgreSQL에게 이 정도는 작은 테이블이고, 시드는 1만 줄씩 나눠 넣어 약 2초에 끝난다.
+          </p>
+
+          <h4 id="why-boolean">판매 여부를 boolean으로 둔 이유</h4>
+          <p>
+            같은 <code>performance_seats</code>에서 판매 여부 컬럼의 종류만 다르다. 두 모양을 나란히 놓으면 이렇다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th colspan="4">is_sold boolean (고른 방식)</th></tr><tr><th>id</th><th>performance_id</th><th>seat_id</th><th>is_sold</th></tr></thead>
+              <tbody>
+                <tr><td>1</td><td>20</td><td>10</td><td>true</td></tr>
+                <tr><td>2</td><td>20</td><td>11</td><td>false</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th colspan="4">status enum('available', 'sold')</th></tr><tr><th>id</th><th>performance_id</th><th>seat_id</th><th>status</th></tr></thead>
+              <tbody>
+                <tr><td>1</td><td>20</td><td>10</td><td>'sold'</td></tr>
+                <tr><td>2</td><td>20</td><td>11</td><td>'available'</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>항목</th><th><code>is_sold boolean</code></th><th><code>status enum</code></th></tr></thead>
+              <tbody>
+                <tr><td>남은 좌석 세기</td><td><code>where not is_sold</code></td><td><code>where status = 'available'</code></td></tr>
+                <tr><td>값을 더할 때</td><td>컬럼 종류를 바꾸는 마이그레이션이 필요하다</td><td>enum에 값을 더하는 마이그레이션이 필요하다</td></tr>
+                <tr><td>비슷한 컬럼</td><td>회차 취소 <code>performances.is_cancelled</code>와 같은 모양</td><td>없음</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            지금 값은 둘뿐이고, 셋째 값이 정해지지 않았다. 셋째 값 후보로 "선점됨"을 떠올릴 수 있지만, 용어집에서 좌석 선점은 판매
+            여부가 아니라 "결제가 끝나기 전까지 회차 좌석을 한 사용자에게 임시로 묶어 두는 일"로 따로 정의한 개념이다. 누가, 언제까지
+            묶었는지 같은 정보가 따라오므로 판매 여부 값 하나로 담기 어렵고, 어떻게 담을지는 예매 단계에서 정한다. 그때 필요하면
+            바꾼다.
+          </p>
+
+          <h3 id="why-venue">좌석 배치를 공연장이 갖는 이유</h3>
+          <p>
+            용어집은 공연장을 "좌석 배치를 소유한다. 공연과 별개로 존재하며, 시기에 따라 여러 공연이 거쳐 간다"로 정한다. 좌석은
+            건물에 있는 자리라 어떤 공연이 올라와도 그대로다. 그래서 <code>sections</code>는 <code>venue_id</code>로 공연장을
+            가리키고, <code>seats</code>는 구역을 거쳐 공연장에 속한다. 좌석 쪽 테이블 어디에도 공연이나 회차 id가 없다.
+          </p>
+          <p>
+            공연과 좌석은 <strong>회차 좌석을 만들 때</strong> 처음 이어진다. 공연 5에 회차 22(11-22 19:30)를 더하면 이렇게 된다.
+          </p>
+          <ol class="steps blue">
+            <li>
+              <strong>회차를 만든다.</strong> <code>performances</code>에 (22, 공연 5, 11-22 19:30)을 넣는다.
+            </li>
+            <li>
+              <strong>그 공연장의 좌석을 찾는다.</strong> 공연 5의 <code>venue_id</code>는 1이다. <code>sections</code>에서
+              <code>venue_id = 1</code>인 구역 1, 2를 찾고, <code>seats</code>에서 그 구역의 좌석 10, 11, 12를 찾는다.
+            </li>
+            <li>
+              <strong>좌석마다 회차 좌석을 만든다.</strong> <code>performance_seats</code>에 세 줄을 넣는다.
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>id</th><th>performance_id</th><th>seat_id</th><th>is_sold</th></tr></thead>
+                  <tbody>
+                    <tr><td>7</td><td>22</td><td>10</td><td>false</td></tr>
+                    <tr><td>8</td><td>22</td><td>11</td><td>false</td></tr>
+                    <tr><td>9</td><td>22</td><td>12</td><td>false</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </li>
+          </ol>
+          <p>
+            <code>seats</code>는 한 줄도 늘지 않는다. 공연이 몇 개 올라오든 좌석 10은 하나이고, 공연마다 달라지는 것(판매 여부,
+            좌석 등급)은 좌석 테이블이 아니라 회차 좌석과 공연별 좌석 등급 지정 쪽에 둔다. 지금은 회차와 회차 좌석을 시드가 만들고, 좌석 배치 편집기는
+            만들지 않는다.
+          </p>
+
+          <h3 id="why-section">공연장과 좌석 사이에 구역을 둔 이유</h3>
+          <p>
+            용어집은 구역을 "공연장의 좌석을 나눈 묶음이며, 좌석의 위치를 나타낸다"로 정한다. 좌석은 "A구역 C열 5번"처럼 구역, 열,
+            번호로 불린다. 구역은 좌석 위치를 부르는 이름의 첫 단계이고, 화면과 어드민에서 좌석을 묶어 다루는 단위다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>구역을 쓰는 곳</th><th>예</th></tr></thead>
+              <tbody>
+                <tr><td>좌석 표기</td><td>티켓, 주문 내역의 "A구역 C열 5번"</td></tr>
+                <tr><td>좌석 선택 화면(1.5)</td><td>구역별로 좌석을 묶어 보여 준다</td></tr>
+                <tr><td>좌석 등급 지정(1.7 어드민)</td><td>"A구역 전체" 또는 "A구역의 A~C열"을 골라 한 번에 등급을 넣는다</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout">
+            <p>
+              <strong>좌석 등급은 구역이 아니라 좌석마다 지정한다.</strong> 실제 공연장에서는 같은 구역 안에서도 앞 몇 열은 VIP석, 뒤는 R석처럼 열에
+              따라 등급이 갈리고, 그 경계가 공연마다 다르다. 그래서 등급 지정은 #49에서 공연마다 좌석 하나하나를 가리키는 테이블로
+              만든다. 600석이면 공연 하나에 600행이지만, 어드민은 구역·열 단위로 골라 한 번에 넣으므로 운영자가 600번 입력하지는 않는다.
+            </p>
+          </div>
+
+          <h4 id="section-as-text">대안: 구역을 좌석의 글자 컬럼으로 둔다</h4>
+          <p>
+            <strong>문제: 구역 이름이 좌석마다 반복되어, 이름에 오타가 있어도 DB가 막지 못하고(외래 키를 걸 대상이 없다), 구역 이름을
+            바꾸면 그 구역 좌석을 모두 고쳐야 한다.</strong>
+          </p>
+          <p>
+            <code>sections</code> 테이블을 없애고, <code>seats</code>가 공연장 id와 구역 이름 글자를 직접 갖는다. 열 이름(<code>row</code>)을
+            글자로 두는 것과 같은 방식이다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th colspan="5">seats (좌석) — 대안</th></tr><tr><th>id</th><th>venue_id</th><th>section</th><th>row</th><th>number</th></tr></thead>
+              <tbody>
+                <tr><td>10</td><td><strong>1</strong></td><td>A구역</td><td>C</td><td>5</td></tr>
+                <tr><td>11</td><td><strong>1</strong></td><td>A구역</td><td>C</td><td>6</td></tr>
+                <tr><td>12</td><td><strong>1</strong></td><td>B구역</td><td>A</td><td>1</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            지금 구조(<a href="#tables">지금 구조의 테이블</a>의 <code>sections</code>, <code>seats</code>)와 비교하면, 좌석이 구역을
+            가리키는 칸이 숫자 id(외래 키)에서 이름 글자로 바뀌었다. 열은 글자로 둬도 되는데 구역은 왜 안 될까? 열은 좌석 위치를
+            나타내는 글자일 뿐 따로 다룰 일이 없지만, 구역은 위 표처럼 목록으로 보여 주고, 골라서 묶어 다루고, 이름을 바꾸는 대상이기
+            때문이다. 그 차이가 아래 문제로 나타난다.
+          </p>
+
+          <h4 id="section-typo">문제 1: 오타를 막지 못한다</h4>
+          <p>시드나 운영자가 좌석을 넣다가 "A구역"을 "A구억"으로 적었다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>방식</th><th>넣으려는 좌석</th><th>결과</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td>글자 컬럼</td>
+                  <td><code>seats</code>에 venue_id 1, section <strong>A구억</strong>, row C, number 7</td>
+                  <td>
+                    들어간다. 혼자만 "A구억"이라는 구역에 속한 좌석이 생긴다. 어드민에서 "A구역 전체"에 VIP석을 지정해도 이 좌석은
+                    빠져 등급이 없는 채로 남고, 누군가 화면을 보고 알아챌 때까지 모른다
+                  </td>
+                </tr>
+                <tr>
+                  <td>구역 테이블</td>
+                  <td><code>seats</code>에 section_id <strong>3</strong>, row C, number 7 (구역 3은 없다)</td>
+                  <td>
+                    <a href="01-프론트엔드-개발자를-위한-DB-개념.html#fk">외래 키</a>가 거부한다. 넣는 순간 에러가 난다. 구역 이름은
+                    <code>sections</code>에 한 번만 적으니 오타가 나도 그 구역 전체가 같이 틀려 바로 보인다
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h4 id="section-rename">문제 2: 이름을 바꾸면 여러 곳을 고쳐야 한다</h4>
+          <p>"A구역"을 "1층 A구역"으로 바꾼다. 600석 공연장이면 A구역 좌석이 150행이다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>방식</th><th>고칠 곳</th><th>하나라도 빠지면</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td>글자 컬럼</td>
+                  <td>좌석 150행의 <code>section</code></td>
+                  <td>한 구역이 "A구역"과 "1층 A구역" 두 개로 쪼개져 보인다</td>
+                </tr>
+                <tr>
+                  <td>구역 테이블</td>
+                  <td><code>sections</code>의 1행(<code>name</code>)</td>
+                  <td>빠질 곳이 없다. 좌석은 이름이 아니라 구역 id 1을 들고 있어 그대로다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h4 id="section-list">문제 3: 구역 목록과 구역 규칙을 둘 곳이 없다</h4>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>하고 싶은 일</th><th>글자 컬럼</th><th>구역 테이블</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>공연장의 구역 목록 보기(좌석 선택 화면, 등급 지정 화면의 선택지)</td>
+                  <td>좌석 600줄에서 <code>select distinct section</code>으로 매번 뽑는다</td>
+                  <td><code>sections</code>에서 <code>venue_id = 1</code>인 행. 4행이다</td>
+                </tr>
+                <tr>
+                  <td>좌석이 아직 없는 구역 두기</td>
+                  <td>못 한다. 좌석이 있어야 구역 이름이 존재한다</td>
+                  <td>된다. 구역 줄만 먼저 만들 수 있다</td>
+                </tr>
+                <tr>
+                  <td>한 공연장에 구역 이름이 겹치지 않게 막기(<a href="#sections">구역 유니크 제약</a>)</td>
+                  <td>걸 테이블이 없다. 좌석마다 이름이 반복되니 이름 유니크는 걸 수 없다</td>
+                  <td><code>unique(venue_id, name)</code></td>
+                </tr>
+                <tr>
+                  <td>구역에 정보 더하기(층, 표시 순서 등)</td>
+                  <td>좌석마다 같은 값을 반복해 적어야 한다</td>
+                  <td><code>sections</code>에 컬럼 하나를 더한다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            세 문제는 뿌리가 같다. 글자 컬럼은 같은 사실("이 공연장에 A구역이 있다")을 좌석 행마다 반복해서 적는다.
+            반복된 사본끼리 어긋나도 DB가 모른다. 구역 테이블은 그 사실을 한 행에만 적고, 좌석은 id로 그 행을 가리킨다. 이렇게
+            같은 사실을 한 곳에만 두도록 테이블을 나누는 것을 <strong>정규화</strong>라고 한다.
+          </p>
+          <p>
+            그래서 구역은 좌석의 글자 컬럼이 아니라 테이블로 두고, 좌석이 구역 id를 외래 키로 가리키게 했다. 좌석 선택 화면과
+            등급 지정이 아직 없는 지금도 구역 테이블을 먼저 만든 이유다.
+          </p>
+
+          <h3 id="why-module">테이블을 둔 모듈</h3>
+          <p>
+            구역과 좌석은 공연장과 함께 <code>venues</code> 모듈(<code>apps/api/src/db/schema/venues.ts</code>)에, 회차 좌석은 회차와 함께
+            <code>shows</code> 모듈(<code>shows.ts</code>)에 둔다. 회차 좌석은 예매가 가장 많이 다루는 테이블이라, 예매 모듈이 생기는
+            1.5에서 소유 모듈을 다시 정하기로 했다.
+          </p>
+        </section>
+
+        <section id="overview">
+          <h2>세 테이블에 건 규칙</h2>
+          <p>
+            구조를 정했으면, 각 테이블에 잘못된 데이터가 들어가지 않게 DB 규칙을 건다. 이 문서의 나머지는 그 규칙이다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>테이블</th><th>규칙</th><th>막는 문제</th><th>같이 생긴 인덱스가 하는 일</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>sections</code></td>
+                  <td><code>unique(venue_id, name)</code></td>
+                  <td>한 공연장에 같은 이름의 구역이 둘</td>
+                  <td>공연장 하나의 구역 찾기</td>
+                </tr>
+                <tr>
+                  <td><code>seats</code></td>
+                  <td><code>unique(section_id, row, number)</code></td>
+                  <td>한 구역에 같은 열·번호 좌석이 둘</td>
+                  <td>구역 하나의 좌석 찾기</td>
+                </tr>
+                <tr>
+                  <td><code>performance_seats</code></td>
+                  <td><code>unique(performance_id, seat_id)</code></td>
+                  <td>한 회차에 같은 좌석이 둘</td>
+                  <td>회차 하나의 좌석 찾기</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            세 규칙은 모양이 같다. <strong>"부모 id + 그 안에서 구분하는 값"이 한 번만 있게 한다.</strong> 부모 id가 맨 앞이라,
+            제약이 만든 인덱스가 <a href="01-프론트엔드-개발자를-위한-DB-개념.html#composite-index">앞 컬럼 규칙</a>대로 "부모
+            하나의 자식 찾기"에도 쓰인다. 그래서 부모 id(외래 키) 인덱스를 따로 만들지 않았다.
+          </p>
+        </section>
+
+        <section id="performance-seats">
+          <h2>회차 좌석: 같은 좌석을 두 번 팔지 않게</h2>
+          <pre><code class="language-ts">// apps/api/src/db/schema/shows.ts
+export const performanceSeats = pgTable(
+  'performance_seats',
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    performanceId: integer('performance_id').notNull().references(() =&gt; performances.id),
+    seatId: integer('seat_id').notNull().references(() =&gt; seats.id),
+    isSold: boolean('is_sold').notNull().default(false),
+  },
+  // 같은 회차에 같은 좌석이 두 번 들어가지 않게 막는다.
+  // 이 제약이 만드는 인덱스가 performance_id로 시작하므로, 회차 하나의 좌석을 찾을 때도 쓰인다.
+  (table) =&gt; [unique().on(table.performanceId, table.seatId)],
+);</code></pre>
+
+          <h3 id="ps-problem">제약이 없으면</h3>
+          <p>
+            시드를 두 번 돌리거나 회차 좌석을 만드는 코드에 버그가 있으면, "회차 7의 좌석 42"가 두 줄 들어갈 수 있다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>id</th><th>performance_id</th><th>seat_id</th><th>is_sold</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>1</td><td>7</td><td>42</td><td>true</td></tr>
+                <tr><td>2</td><td>7</td><td>42</td><td>false</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <ul>
+            <li><strong>같은 자리가 두 번 팔린다.</strong> 1번 줄은 판매됨인데 2번 줄은 판매 가능이라, 다른 사람이 같은 자리를 또 산다.</li>
+            <li>
+              <strong>좌석 수가 틀린다.</strong> 전체 좌석과 남은 좌석은 회차 좌석 줄 수로 센다. 20석 공연장이
+              21석으로 세어지고, 회차의 매진과 매진 임박 판단이 어긋난다.
+            </li>
+          </ul>
+          <p>제약이 있으면 2번 줄을 넣는 순간 DB가 거부한다.</p>
+          <div class="callout warn">
+            <p>
+              <strong>이 제약은 동시에 같은 좌석을 사는 중복 예매까지 막지는 않는다.</strong> 회차 좌석 줄이 하나뿐이어도, 두 사람이
+              거의 동시에 "판매 가능인가?"를 확인하면 둘 다 판매 가능을 보고 둘 다 산다. ADR 0001은 1단계 예매를 좌석 선점, 락,
+              중복 예매를 막는 제약 없이 "확인 후 저장"으로 두기로 했다. 6단계에서 이 중복 예매를 재현하고 측정하기 위해서다. 이
+              제약은 회차 좌석 <strong>줄 자체</strong>가 두 번 생기는 데이터 오류만 막는다.
+            </p>
+          </div>
+        </section>
+
+        <section id="seats">
+          <h2>좌석: 같은 자리가 두 번 생기지 않게</h2>
+          <pre><code class="language-ts">// apps/api/src/db/schema/venues.ts
+export const seats = pgTable(
+  'seats',
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    sectionId: integer('section_id').notNull().references(() =&gt; sections.id),
+    row: text().notNull(),
+    number: integer().notNull(),
+  },
+  // 같은 구역에 같은 열·번호 좌석이 두 번 들어가지 않게 막는다.
+  // 이 제약이 만드는 인덱스가 section_id로 시작하므로, 구역 하나의 좌석을 찾을 때도 쓰인다.
+  (table) =&gt; [unique().on(table.sectionId, table.row, table.number)],
+);</code></pre>
+          <p>
+            "1번 구역 C열 5번"이 두 줄이면, 회차를 만들 때 공연장의 좌석마다 회차 좌석을 만드므로 그 자리의 회차 좌석도 회차마다
+            두 개가 생긴다. 회차 좌석 테이블의 제약은 <code>seat_id</code>가 다르니 막지 못한다. 문제를 뿌리에서 막으려면 좌석
+            테이블에서 막아야 한다.
+          </p>
+          <p>
+            세 컬럼이 <strong>모두</strong> 같아야 막힌다. 같은 구역의 C열 5번과 C열 6번, 1번 구역 C열 5번과 2번 구역 C열 5번은 모두
+            괜찮다.
+          </p>
+        </section>
+
+        <section id="sections">
+          <h2>구역: 이름이 겹치면 생기는 일</h2>
+          <pre><code class="language-ts">// apps/api/src/db/schema/venues.ts
+export const sections = pgTable(
+  'sections',
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    venueId: integer('venue_id').notNull().references(() =&gt; venues.id),
+    name: text().notNull(),
+  },
+  // 같은 공연장에 같은 이름의 구역이 두 번 들어가지 않게 막는다. 이름이 겹치면 "A구역 C열 5번"이 두 자리가 된다.
+  // 이 제약이 만드는 인덱스가 venue_id로 시작하므로, 공연장 하나의 구역을 찾을 때도 쓰인다.
+  (table) =&gt; [unique().on(table.venueId, table.name)],
+);</code></pre>
+          <p>
+            좌석 제약이 있어도 구역 이름이 겹치면 같은 이름의 자리가 둘 생긴다. 핵심은 <strong>DB는 구역을 이름이 아니라 id로 구분한다</strong>는 점이다.
+          </p>
+
+          <h3 id="sections-scenario">이름이 겹치는 과정</h3>
+          <ol class="steps blue">
+            <li>
+              <strong>구역이 두 번 들어간다.</strong> 시드 버그로 낙산 소극장(공연장 id 1)에 "A구역"이 두 번 들어갔다. DB는 줄마다
+              id를 새로 붙이므로 1번 구역과 2번 구역, 서로 다른 구역이 된다.
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>sections.id</th><th>venue_id</th><th>name</th></tr></thead>
+                  <tbody>
+                    <tr><td>1</td><td>1</td><td>A구역</td></tr>
+                    <tr><td>2</td><td>1</td><td>A구역</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </li>
+            <li>
+              <strong>좌석 제약은 통과한다.</strong> 좌석에는 이름이 아니라 구역 id가 저장된다. <code>(1, 'C', 5)</code>와
+              <code>(2, 'C', 5)</code>는 구역 id가 다르니 좌석 제약이 둘 다 받아 준다.
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>seats.id</th><th>section_id</th><th>row</th><th>number</th></tr></thead>
+                  <tbody>
+                    <tr><td>10</td><td>1</td><td>C</td><td>5</td></tr>
+                    <tr><td>11</td><td>2</td><td>C</td><td>5</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </li>
+            <li>
+              <strong>사람에게는 같은 자리로 보인다.</strong> 화면과 티켓에는 구역 id가 아니라 이름이 나간다. 좌석 10과 11이 모두
+              "A구역 C열 5번"이다. 좌석 선택 화면에 같은 이름의 자리가 둘 보이고, 같은 이름의 티켓을 든 관객 두 명이 모두 정상
+              티켓을 가진 셈이 된다.
+            </li>
+          </ol>
+          <p>
+            <code>unique(venue_id, name)</code>이 있으면 1단계에서 두 번째 <code>(1, A구역)</code>을 넣는 순간 거부된다. 한 공연장 안에서
+            구역 이름이 하나뿐이니, 좌석 제약이 막는 "같은 구역 id + 같은 열 + 같은 번호"가 사람 눈에도 "같은 이름의 자리"와 같아진다.
+            DB가 구분하는 기준(id)과 사람이 구분하는 기준(이름)이 어긋나지 않게 하는 제약이다.
+          </p>
+          <p>
+            다른 공연장끼리는 이름이 같아도 된다. 낙산 소극장 A구역 <code>(1, A구역)</code>과 한강 아트홀 A구역
+            <code>(2, A구역)</code>은 공연장 id가 달라 둘 다 들어간다. 티켓에 공연장 이름이 함께 나가니 사람도 헷갈리지 않는다.
+          </p>
+
+          <h3 id="sections-index">venue_id 인덱스를 따로 두지 않는 이유</h3>
+          <p>
+            유니크 제약의 인덱스가 <code>(venue_id, name)</code> 순서라 <code>venue_id</code>만으로 찾을 때도 쓰인다. 그래서
+            <code>venue_id</code> 인덱스를 따로 만들지 않는다. 같은 일을 하는 인덱스가 둘이면 구역을 넣을 때마다 둘 다 고쳐야
+            하고 얻는 것은 없다. 인덱스 하나로 중복을 막고 공연장의 구역도 찾는다.
+          </p>
+        </section>
+
+        <section id="fk-index">
+          <h2>외래 키마다 인덱스가 있나</h2>
+          <p>
+            PostgreSQL은 외래 키에 인덱스를 만들지 않는다(<a href="02-drizzle-스키마-문법.html#references">db-and-drizzle 02 문서</a>).
+            그 컬럼으로 찾을 일이 있으면 직접 준비해야 한다. 이번 테이블의 외래 키는 이렇다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>테이블</th><th>외래 키</th><th>그 컬럼으로 찾을 때 쓰는 인덱스</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>sections</code></td><td><code>venue_id</code></td><td>유니크 제약의 인덱스. 맨 앞이 <code>venue_id</code></td></tr>
+                <tr><td><code>seats</code></td><td><code>section_id</code></td><td>유니크 제약의 인덱스. 맨 앞이 <code>section_id</code></td></tr>
+                <tr><td><code>performance_seats</code></td><td><code>performance_id</code></td><td>유니크 제약의 인덱스. 맨 앞이 <code>performance_id</code></td></tr>
+                <tr><td><code>performance_seats</code></td><td><code>seat_id</code></td><td>없음</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            <code>seat_id</code>는 유니크 제약에서 뒤 컬럼이라 그 인덱스로는 잘 찾지 못한다. "이 좌석의 모든 회차 좌석"을 찾는
+            쿼리가 아직 없어서 인덱스를 만들지 않았다. 좌석을 지울 때 DB가 남은 회차 좌석이 있는지 확인하는 데도 쓰이겠지만,
+            좌석은 시드로만 만들고 지우지 않는다. 필요한 쿼리가 생기면 그때 더한다.
+          </p>
+        </section>
+
+        <section id="migration">
+          <h2>구역 이름 유니크 제약을 넣은 마이그레이션</h2>
+          <p>
+            구역 테이블은 <code>0002</code>에서 만들고, 구역 이름 유니크 제약은 <code>0003</code>에서 더한다. 이미 실행한
+            <code>0002</code>를 고치지 않고 새 파일을 더하는 이유, 이 SQL이 데이터가 있는 DB에서 어떻게 되는지는
+            <a href="08-마이그레이션.html#case-0003">db-and-drizzle 08 문서의 0003 사례</a>에 있다.
+          </p>
+          <pre><code class="language-sql">-- apps/api/drizzle/0003_unique_section_name_per_venue.sql
+DROP INDEX "sections_venue_id_index";
+ALTER TABLE "sections" ADD CONSTRAINT "sections_venue_id_name_unique" UNIQUE("venue_id","name");</code></pre>
+        </section>
+
+        <section id="check">
+          <h2>스스로 확인하기</h2>
+          <div class="quiz">
+            <p class="quiz-q">1. 이 줄을 넣으면 어떻게 되는가? 각각 답한다.</p>
+            <p class="quiz-context"><a href="#performance-seats">회차 좌석</a>의 <code>unique(performance_id, seat_id)</code>가 걸려 있고, 테이블에는 아래 한 줄만 있다.</p>
+            <div class="table-wrap"><table><thead><tr><th>performance_id</th><th>seat_id</th><th>is_sold</th></tr></thead><tbody><tr><td>7</td><td>42</td><td>true</td></tr></tbody></table></div>
+            <p>(가) <code>(7, 43, false)</code> (나) <code>(8, 42, false)</code> (다) <code>(7, 42, false)</code></p>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body"><p>
+                  (가)와 (나)는 들어간다. 두 컬럼 중 하나만 같기 때문이다. 같은 회차의 다른 좌석, 다른 회차의 같은 좌석은 정상이다.
+                  (다)는 두 컬럼이 모두 같아 <code>duplicate key value violates unique constraint</code>로 실패한다.
+                  <code>is_sold</code>가 달라도 제약은 <code>(performance_id, seat_id)</code>만 본다.
+                </p></div>
+            </details>
+          </div>
+          <div class="quiz">
+            <p class="quiz-q">2. 회차 좌석의 유니크 제약을 이렇게 바꾸면, "회차 하나의 좌석 세기" 쿼리의 실행 계획은 어떻게 될까?</p>
+            <p class="quiz-context"><a href="#performance-seats">회차 좌석</a> 코드의 주석과, 회차 하나의 좌석을 세는 쿼리 <code>select count(*) from performance_seats where performance_id = 5</code>를 떠올린다.</p>
+            <pre><code class="language-diff">-  (table) =&gt; [unique().on(table.performanceId, table.seatId)],
++  (table) =&gt; [unique().on(table.seatId, table.performanceId)],</code></pre>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body"><p>
+                  중복을 막는 효과는 같다. 조합이 같으면 순서와 상관없이 같은 조합이기 때문이다. 하지만 인덱스가
+                  <code>seat_id</code>로 먼저 정렬되어, <code>performance_id = 5</code>인 행이 좌석마다 흩어진다. 앞 컬럼 규칙에 따라
+                  이 인덱스로는 잘 찾지 못해 <code>Seq Scan</code>이 될 가능성이 크다(PostgreSQL 18의 skip scan은 앞 컬럼 값이 적을 때만
+                  이득인데, 좌석은 1,000개다). 회차 하나의 좌석을 빨리 찾으려면 <code>performance_id</code> 인덱스를 따로 만들어야 한다.
+                </p></div>
+            </details>
+          </div>
+          <div class="quiz">
+            <p class="quiz-q">3. 구역 유니크 제약이 없을 때, 아래 데이터에서 좌석 선택 화면에 보이는 자리 이름은?</p>
+            <p class="quiz-context"><a href="#sections-scenario">이름이 겹치는 과정</a>과 같은 상황이다. 공연장은 모두 낙산 소극장(id 1)이다.</p>
+            <div class="table-wrap"><table><thead><tr><th>sections.id</th><th>venue_id</th><th>name</th></tr></thead><tbody><tr><td>1</td><td>1</td><td>A구역</td></tr><tr><td>2</td><td>1</td><td>A구역</td></tr><tr><td>3</td><td>1</td><td>B구역</td></tr></tbody></table></div>
+            <div class="table-wrap"><table><thead><tr><th>seats.id</th><th>section_id</th><th>row</th><th>number</th></tr></thead><tbody><tr><td>10</td><td>1</td><td>A</td><td>1</td></tr><tr><td>11</td><td>2</td><td>A</td><td>1</td></tr><tr><td>12</td><td>3</td><td>A</td><td>1</td></tr></tbody></table></div>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body"><p>
+                  좌석 10과 11은 둘 다 <strong>A구역 A열 1번</strong>, 좌석 12는 B구역 A열 1번이다. 좌석 제약은
+                  <code>(1, 'A', 1)</code>과 <code>(2, 'A', 1)</code>을 다른 값으로 보니 막지 못한다. 구역 제약이 있으면 2번 구역을 넣을 때
+                  <code>(1, A구역)</code>이 겹쳐 실패하므로 이런 데이터가 생기지 않는다.
+                </p></div>
+            </details>
+          </div>
+          <div class="quiz">
+            <p class="quiz-q">4. 공연장 하나의 구역 목록을 찾는 쿼리를 쓴다. 구역 테이블에 <code>venue_id</code> 인덱스를 따로 만들어야 하나?</p>
+            <p class="quiz-context"><a href="#sections-index">venue_id 인덱스를 따로 두지 않는 이유</a>를 떠올린다.</p>
+            <pre><code class="language-sql">select * from sections where venue_id = 1;</code></pre>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body"><p>
+                  만들지 않아도 된다. <code>sections_venue_id_name_unique</code>의 인덱스가 <code>venue_id</code>로 시작해서, 앞 컬럼만으로
+                  찾는 이 쿼리에 쓰일 수 있다. 같은 일을 하는 인덱스를 하나 더 두면 쓰기만 느려진다. 다만 구역이 몇 줄뿐이면 DB가
+                  인덱스 대신 테이블 전체를 읽을 수도 있다. 작은 테이블은 다 읽어도 빠르기 때문이다.
+                </p></div>
+            </details>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

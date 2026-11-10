@@ -16,7 +16,7 @@
           <li><a href="#overview">한눈에 보기</a></li>
           <li><a href="#rules">계산할 규칙</a></li>
           <li><a href="#example">예시 데이터</a></li>
-          <li><a href="#performance">회차 하나의 판매 상태</a></li>
+          <li><a href="#performance">회차 하나의 순번</a></li>
           <li><a href="#number">상태를 숫자로 계산하는 이유</a></li>
           <li><a href="#show">공연 판매 상태로 모으기</a></li>
           <li><a href="#sales-open-at">판매 오픈 일시</a></li>
@@ -31,8 +31,8 @@
       <main>
         <h1>06 판매 상태 쿼리 읽기</h1>
         <p class="lead">
-          1.3(#40)에서 만든 판매 상태 계산(<code>apps/api/src/shows/show-sales-status.ts</code>)과, 그것을 공연 목록에 붙인
-          <code>findPage()</code>의 바뀐 부분을 따라간다. 같은 예시 데이터로 회차 한 줄이 공연 판매 상태 하나가 되기까지를 보고,
+          공연 판매 상태 계산(<code>apps/api/src/shows/show-sales-status.ts</code>)과, 그것을 공연 목록에 붙이는
+          <code>findPage()</code>의 부분을 따라간다. 같은 예시 데이터로 회차 한 줄이 공연 판매 상태 하나가 되기까지를 보고,
           왜 그렇게 썼는지 설명한다. 공연 목록 쿼리의 나머지(공연 기간, 정렬, 페이지)는
           <a href="05-공연-목록-쿼리-읽기.html">db-and-drizzle 05 문서</a>에 있다. 문법은
           <a href="03-drizzle-쿼리-문법.html">db-and-drizzle 03 문서</a>, <code>CASE</code>·<code>FILTER</code> 같은 SQL 개념은
@@ -50,12 +50,11 @@
           <h2>한눈에 보기</h2>
           <p>
             판매 상태는 테이블에 저장하지 않는다. 시간이 지나면 저절로 바뀌는 값이라, 저장하면 누군가 때맞춰 고쳐 줘야 한다.
-            그래서 조회할 때마다 "현재 시각"을 기준으로 쿼리 안에서 계산한다. 저장하는 것은 회차 취소 여부(<code
-              >is_cancelled</code
-            >)뿐이다.
+            그래서 조회할 때마다 "현재 시각"을 기준으로 쿼리 안에서 계산한다. 저장하는 것은 회차 취소 여부(<code>is_cancelled</code>)뿐이다.
+            회차 좌석이 팔렸는지는 판매 상태에 쓰지 않는다.
           </p>
           <pre><code class="language-ts">// apps/api/src/shows/show-sales-status.ts (주석 줄임)
-export const SHOW_SALES_STATUSES = ['on_sale', 'upcoming', 'cancelled', 'ended'] as const;
+export const SHOW_SALES_STATUSES = ['on_sale', 'upcoming', 'ended'] as const;
 export type ShowSalesStatus = (typeof SHOW_SALES_STATUSES)[number];
 
 function priorityOf(status: ShowSalesStatus): SQL {
@@ -65,18 +64,17 @@ function literalOf(status: ShowSalesStatus): SQL {
   return sql.raw(`'${status}'`);
 }
 
-// ① 회차 하나의 판매 상태를 순번으로
-function performancePriority(now: Date): SQL&lt;number&gt; {
+// ① 회차 하나를 공연 판매 상태의 순번으로
+function performancePriority({ now }: { now: Date }): SQL&lt;number&gt; {
   return sql&lt;number&gt;`case
-    when ${performances.isCancelled} then ${priorityOf('cancelled')}
-    when ${performances.startsAt} &lt;= ${now} then ${priorityOf('ended')}
+    when ${performances.isCancelled} or ${performances.startsAt} &lt;= ${now} then ${priorityOf('ended')}
     when ${now} &lt; ${performances.salesOpenAt} then ${priorityOf('upcoming')}
     else ${priorityOf('on_sale')}
   end`;
 }
 
 export function showSalesStatusSubquery(db: Database, { now }: { now: Date }) {
-  const priority = performancePriority(now);
+  const priority = performancePriority({ now });
   const showPriority = sql`min(${priority})`;                         // ② 공연별 가장 작은 순번
   const toStatus = sql.join(                                          // ③ 순번 → 이름
     SHOW_SALES_STATUSES.map((status) =&gt; sql`when ${priorityOf(status)} then ${literalOf(status)}`),
@@ -102,7 +100,7 @@ export function showSalesStatusSubquery(db: Database, { now }: { now: Date }) {
             <div class="lane blue">
               <div class="lane-title">회차 한 줄이 공연 판매 상태가 되기까지</div>
               <ol class="chain">
-                <li><span>회차마다 판매 상태를 순번(0~3)으로 계산한다</span></li>
+                <li><span>회차마다 공연 판매 상태의 순번(0~2)을 계산한다</span></li>
                 <li><span>공연별로 묶어 가장 작은 순번을 고른다</span></li>
                 <li><span>순번을 상태 이름으로 바꾼다</span></li>
                 <li><span>판매 예정이면 판매 오픈 일시를 구한다</span></li>
@@ -114,17 +112,18 @@ export function showSalesStatusSubquery(db: Database, { now }: { now: Date }) {
 
         <section id="rules">
           <h2>계산할 규칙</h2>
-          <p>티켓(#40)과 용어집이 정한 규칙이다. 코드는 이것을 SQL로 옮긴 것뿐이다.</p>
+          <p>스펙과 용어집이 정한 규칙이다. 코드는 이것을 SQL로 옮긴 것뿐이다.</p>
           <ol class="steps green">
             <li>
-              <strong>회차의 판매 상태</strong>
-              위에서부터 먼저 맞는 것을 고른다. 회차 취소 → 판매 종료(회차 시작 일시가 지남) → 판매 예정(판매 오픈 일시 전) →
-              판매 중.
+              <strong>회차를 공연 판매 상태로 세기</strong>
+              회차마다 공연 판매 상태 세 가지 중 하나로 센다. 위에서부터 먼저 맞는 것을 고른다. 판매 종료(취소됐거나 회차 시작
+              일시가 지남) → 판매 예정(판매 오픈 일시 전) → 판매 중. 회차 좌석이 팔렸는지는 보지 않는다. 회차 판매 상태(용어집)가
+              매진인 회차는 판매 기간 안이라 판매 중으로, 회차 취소인 회차는 판매 종료로 센다.
             </li>
             <li>
               <strong>공연 판매 상태</strong>
-              회차들의 판매 상태 중 우선순위가 가장 높은 것이다. 판매 중 &gt; 판매 예정 &gt; 매진 &gt; 회차 취소 &gt; 판매
-              종료. 매진은 회차 좌석이 생기는 뒤 티켓에서 더한다.
+              회차들을 센 값 중 우선순위가 가장 높은 것이다. 판매 중 &gt; 판매 예정 &gt; 판매 종료. 실제 예매 서비스(NOL
+              티켓, YES24 티켓, 멜론티켓)처럼 매진과 회차 취소는 공연 판매 상태로 두지 않는다.
             </li>
             <li>
               <strong>목록</strong>
@@ -245,7 +244,7 @@ export function showSalesStatusSubquery(db: Database, { now }: { now: Date }) {
                 <tr>
                   <td>18</td>
                   <td>4</td>
-                  <td>11-01 19:30</td>
+                  <td>11-21 19:30</td>
                   <td>10-01 14:00</td>
                   <td>false</td>
                 </tr>
@@ -259,24 +258,40 @@ export function showSalesStatusSubquery(db: Database, { now }: { now: Date }) {
               </tbody>
             </table>
           </div>
+          <h3><code>performance_seats</code> (회차별로 센 결과)</h3>
+          <p>
+            회차 좌석은 회차마다 좌석 수만큼 줄이 있어서, 줄 대신 회차별로 센 결과만 적는다. 모든 회차가 20석이다. 회차 18은 남은
+            좌석이 0이라 <strong>매진</strong>이다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>회차</th><th>10</th><th>11</th><th>12</th><th>13</th><th>14</th><th>15</th><th>16</th><th>17</th><th>18</th><th>19</th></tr></thead>
+              <tbody>
+                <tr><th>남은 좌석</th><td>3</td><td>8</td><td>20</td><td>20</td><td>20</td><td>20</td><td>5</td><td>20</td><td><strong>0</strong></td><td>2</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            판매 상태 쿼리는 이 표를 보지 않는다. 그래도 넣은 것은, 매진인 회차 18을 공연 판매 상태로 어떻게 세는지
+            <a href="#performance">회차 하나의 순번</a>에서 확인하기 위해서다.
+          </p>
         </section>
 
         <section id="performance">
-          <h2>회차 하나의 판매 상태</h2>
-          <pre><code class="language-ts">function performancePriority(now: Date): SQL&lt;number&gt; {
+          <h2>회차 하나의 순번</h2>
+          <pre><code class="language-ts">function performancePriority({ now }: { now: Date }): SQL&lt;number&gt; {
   return sql&lt;number&gt;`case
-    when ${performances.isCancelled} then ${priorityOf('cancelled')}             -- 2
-    when ${performances.startsAt} &lt;= ${now} then ${priorityOf('ended')}         -- 3
-    when ${now} &lt; ${performances.salesOpenAt} then ${priorityOf('upcoming')}    -- 1
-    else ${priorityOf('on_sale')}                                                -- 0
+    when ${performances.isCancelled} or ${performances.startsAt} &lt;= ${now} then ${priorityOf('ended')} -- 2
+    when ${now} &lt; ${performances.salesOpenAt} then ${priorityOf('upcoming')} -- 1
+    else ${priorityOf('on_sale')} -- 0
   end`;
 }
 
 // 쓰는 곳 (showSalesStatusSubquery 안): 이 CASE 조각이 priority가 된다
-const priority = performancePriority(now);</code></pre>
+const priority = performancePriority({ now });</code></pre>
           <p>
             <code>priority</code>는 행도 숫자도 아니고 <strong>식</strong>(SQL로 쓴 계산식)이다. JS에서
-            <code>performancePriority(now)</code>를 부르면 계산은 일어나지 않고 <code>case when ... end</code>라는 SQL
+            <code>performancePriority({ now })</code>를 부르면 계산은 일어나지 않고 <code>case when ... end</code>라는 SQL
             글자만 만들어진다. 엑셀에서 열 맨 위에 수식을 한 번 써 두면 행마다 값이 채워지듯, DB가 쿼리를 실행할 때 이 식을
             회차 테이블의 <strong>행마다</strong> 계산해 행 하나에 순번 하나를 만든다. 이 순번들은 JS로 돌아오지 않고
             <code>min(${priority})</code> 안에서만 쓰인다.
@@ -295,10 +310,9 @@ const priority = performancePriority(now);</code></pre>
                 <tr>
                   <th>회차</th>
                   <th>공연</th>
-                  <th>① 취소?</th>
-                  <th>② 시작 &lt;= 현재<br /><small>(이미 시작)</small></th>
-                  <th>③ 현재 &lt; 오픈<br /><small>(판매 오픈 전)</small></th>
-                  <th>판매 상태</th>
+                  <th>① 취소? or 시작 &lt;= 현재<br /><small>(더 팔 수 없음)</small></th>
+                  <th>② 현재 &lt; 오픈<br /><small>(판매 오픈 전)</small></th>
+                  <th>세는 상태</th>
                   <th>순번</th>
                 </tr>
               </thead>
@@ -306,17 +320,15 @@ const priority = performancePriority(now);</code></pre>
                 <tr>
                   <td>10</td>
                   <td>1</td>
-                  <td>false</td>
-                  <td><strong><code>11-08 19:30</code><br />&lt;= <code>11-10 12:00</code><br />참 ✔</strong></td>
+                  <td><strong>false or<br /><code>11-08 19:30</code> &lt;= <code>11-10 12:00</code><br />참 ✔</strong></td>
                   <td class="muted">— 안 봄</td>
                   <td>판매 종료</td>
-                  <td>3</td>
+                  <td>2</td>
                 </tr>
                 <tr>
                   <td>11</td>
                   <td>1</td>
-                  <td>false</td>
-                  <td><code>11-15 19:30</code><br />&lt;= <code>11-10 12:00</code><br />거짓</td>
+                  <td>false or<br /><code>11-15 19:30</code> &lt;= <code>11-10 12:00</code><br />거짓</td>
                   <td><code>11-10 12:00</code><br />&lt; <code>10-20 14:00</code><br />거짓</td>
                   <td>판매 중 (else)</td>
                   <td>0</td>
@@ -326,15 +338,13 @@ const priority = performancePriority(now);</code></pre>
                   <td>1</td>
                   <td><strong>true ✔</strong></td>
                   <td class="muted">— 안 봄</td>
-                  <td class="muted">— 안 봄</td>
-                  <td>회차 취소</td>
+                  <td>판매 종료</td>
                   <td>2</td>
                 </tr>
                 <tr>
                   <td>13</td>
                   <td>2</td>
-                  <td>false</td>
-                  <td><code>11-25 19:30</code><br />&lt;= <code>11-10 12:00</code><br />거짓</td>
+                  <td>false or<br /><code>11-25 19:30</code> &lt;= <code>11-10 12:00</code><br />거짓</td>
                   <td><strong><code>11-10 12:00</code><br />&lt; <code>11-13 14:00</code><br />참 ✔</strong></td>
                   <td>판매 예정</td>
                   <td>1</td>
@@ -342,8 +352,7 @@ const priority = performancePriority(now);</code></pre>
                 <tr>
                   <td>14</td>
                   <td>2</td>
-                  <td>false</td>
-                  <td><code>11-26 19:30</code><br />&lt;= <code>11-10 12:00</code><br />거짓</td>
+                  <td>false or<br /><code>11-26 19:30</code> &lt;= <code>11-10 12:00</code><br />거짓</td>
                   <td><strong><code>11-10 12:00</code><br />&lt; <code>11-12 14:00</code><br />참 ✔</strong></td>
                   <td>판매 예정</td>
                   <td>1</td>
@@ -352,50 +361,54 @@ const priority = performancePriority(now);</code></pre>
                   <td>15</td>
                   <td>2</td>
                   <td><strong>true ✔</strong></td>
-                  <td class="muted">— 안 봄</td>
                   <td class="muted">— 안 봄<br />(오픈 전이어도)</td>
-                  <td>회차 취소</td>
+                  <td>판매 종료</td>
                   <td>2</td>
                 </tr>
                 <tr>
                   <td>16</td>
                   <td>3</td>
-                  <td>false</td>
-                  <td><strong><code>11-05 19:30</code><br />&lt;= <code>11-10 12:00</code><br />참 ✔</strong></td>
+                  <td><strong>false or<br /><code>11-05 19:30</code> &lt;= <code>11-10 12:00</code><br />참 ✔</strong></td>
                   <td class="muted">— 안 봄</td>
                   <td>판매 종료</td>
-                  <td>3</td>
+                  <td>2</td>
                 </tr>
                 <tr>
                   <td>17</td>
                   <td>3</td>
-                  <td><strong>true ✔</strong></td>
+                  <td><strong>true ✔</strong><br /><small>(시작 전이어도)</small></td>
                   <td class="muted">— 안 봄</td>
-                  <td class="muted">— 안 봄</td>
-                  <td>회차 취소</td>
+                  <td>판매 종료</td>
                   <td>2</td>
                 </tr>
                 <tr>
                   <td>18</td>
                   <td>4</td>
-                  <td>false</td>
-                  <td><strong><code>11-01 19:30</code><br />&lt;= <code>11-10 12:00</code><br />참 ✔</strong></td>
-                  <td class="muted">— 안 봄</td>
-                  <td>판매 종료</td>
-                  <td>3</td>
+                  <td>false or<br /><code>11-21 19:30</code> &lt;= <code>11-10 12:00</code><br />거짓</td>
+                  <td><code>11-10 12:00</code><br />&lt; <code>10-01 14:00</code><br />거짓</td>
+                  <td>판매 중 (else)</td>
+                  <td>0</td>
                 </tr>
                 <tr>
                   <td>19</td>
                   <td>4</td>
-                  <td>false</td>
-                  <td><strong><code>11-03 19:30</code><br />&lt;= <code>11-10 12:00</code><br />참 ✔</strong></td>
+                  <td><strong>false or<br /><code>11-03 19:30</code> &lt;= <code>11-10 12:00</code><br />참 ✔</strong></td>
                   <td class="muted">— 안 봄</td>
                   <td>판매 종료</td>
-                  <td>3</td>
+                  <td>2</td>
                 </tr>
               </tbody>
             </table>
           </div>
+          <p>
+            회차 12, 15, 17은 취소돼 시작 전이어도 ①에서 판매 종료로 센다. 취소된 회차는 더 팔 수 없다는 점에서 끝난 회차와
+            같아서 같은 갈래로 묶었다. 회차 15는 판매 오픈 전이지만 ①이 먼저라 판매 예정이 되지 않는다.
+          </p>
+          <p>
+            <code>CASE</code>에는 회차 좌석을 보는 갈래가 없다. 매진인 회차(회차 18)도 판매 기간 안이면 <code>else</code>로
+            판매 중으로 센다. 주문 취소가 생기면 그 좌석은 바로 다시 판매 가능이 되므로, 공연이 시작하기 전까지는 다시 살 수
+            있기 때문이다. 실제 예매 서비스도 목록에서 매진을 공연 판매 상태로 보여 주지 않는다.
+          </p>
           <h3>경계: 정각은 어느 쪽인가</h3>
           <p>
             비교 기호 하나가 "정각"이 어느 쪽에 속하는지 정한다. 통합 테스트는 이 경계를 1ms 전과 정각으로 확인한다.
@@ -435,21 +448,24 @@ const priority = performancePriority(now);</code></pre>
         <section id="number">
           <h2>상태를 숫자로 계산하는 이유</h2>
           <p>
-            <code>CASE</code>가 <code>'cancelled'</code> 같은 이름이 아니라 숫자를 돌려주는 데는 이유가 있다. 공연 판매 상태는
-            "회차 상태 중 <strong>우선순위가 가장 높은 것</strong>"이다. 우선순위가 높을수록 작은 숫자를 주면, 이 정의가 곧
+            <code>CASE</code>가 <code>'ended'</code> 같은 이름이 아니라 숫자를 돌려주는 데는 이유가 있다. 공연 판매 상태는
+            "회차들을 센 값 중 <strong>우선순위가 가장 높은 것</strong>"이다. 우선순위가 높을수록 작은 숫자를 주면, 이 정의가 곧
             <strong>가장 작은 숫자 고르기</strong>, 즉 <code>min()</code>이 된다.
           </p>
-          <pre><code class="language-ts">export const SHOW_SALES_STATUSES = ['on_sale', 'upcoming', 'cancelled', 'ended'] as const;
-//                                    0          1           2            3
-//                                    우선순위 높음  ─────────────────→  낮음</code></pre>
+          <pre><code class="language-ts">export const SHOW_SALES_STATUSES = [
+  'on_sale',   // 0 판매 중    ← 우선순위 가장 높음
+  'upcoming',  // 1 판매 예정
+  'ended',     // 2 판매 종료  ← 우선순위 가장 낮음
+] as const;</code></pre>
           <p>
             배열의 순서가 우선순위이고, 각 상태의 순번은 배열 안의 위치(<code>indexOf</code>)다. 이름으로 계산하면
-            <code>min('cancelled', 'on_sale')</code>이 알파벳 순서로 <code>'cancelled'</code>를 골라 버린다. 우선순위와 알파벳
+            <code>min('ended', 'on_sale')</code>이 알파벳 순서로 <code>'ended'</code>를 골라 버린다. 우선순위와 알파벳
             순서는 아무 상관이 없다.
           </p>
           <p>
-            매진(<code>sold_out</code>)을 더할 때는 배열의 <code>'upcoming'</code>과 <code>'cancelled'</code> 사이에 한 줄만
-            넣으면 된다. 뒤쪽 순번이 하나씩 밀리고, 아래에서 볼 SQL의 숫자와 이름 매핑도 배열에서 다시 만들어진다.
+            상태를 하나 더할 때는 배열의 알맞은 자리에 넣으면 뒤쪽 순번이 하나씩 밀리고, 아래에서 볼 SQL의 숫자와 이름 매핑도
+            배열에서 다시 만들어진다. 기존 순번을 손으로 다시 매길 필요는 없다. 다만 새 상태로 세는 조건은
+            <code>performancePriority</code>의 <code>CASE</code>에 <code>when</code> 갈래로 더해야 한다.
           </p>
         </section>
 
@@ -459,7 +475,7 @@ const priority = performancePriority(now);</code></pre>
             지금까지는 회차 한 줄마다 순번을 구했다. 이제 같은 공연의 회차들을 한데 모아 순번 하나로 줄인다. 이 일은 쿼리
             맨 아래의 <code>.groupBy()</code>와 <code>select</code> 안의 <code>min()</code>이 함께 한다.
           </p>
-          <pre><code class="language-ts">const priority = performancePriority(now);        // 회차 한 줄의 순번 (앞 절의 CASE)
+          <pre><code class="language-ts">const priority = performancePriority({ now });  // 회차 한 줄의 순번 (앞 절의 CASE)
 const showPriority = sql`min(${priority})`;      // 그 순번들 중 가장 작은 값
 const toStatus = sql.join(/* ... */);            // 순번 → 이름 (아래 "순번을 이름으로 바꾸기")
 
@@ -495,7 +511,7 @@ return db
                 <tr>
                   <td>1</td>
                   <td>10, 11, 12</td>
-                  <td>3, 0, 2</td>
+                  <td>2, 0, 2</td>
                 </tr>
                 <tr>
                   <td>2</td>
@@ -505,12 +521,12 @@ return db
                 <tr>
                   <td>3</td>
                   <td>16, 17</td>
-                  <td>3, 2</td>
+                  <td>2, 2</td>
                 </tr>
                 <tr>
                   <td>4</td>
                   <td>18, 19</td>
-                  <td>3, 3</td>
+                  <td>0, 2</td>
                 </tr>
               </tbody>
             </table>
@@ -553,7 +569,7 @@ return db
           </div>
           <p>
             회차 순번(<code>priority</code>)을 <code>select</code>에 그대로 넣지 않고 꼭 <code>min( )</code>으로 감싼 이유도
-            이것이다. <code>priority</code>는 회차마다 값이 다른 식이라, 그대로 넣으면 공연 1 묶음에서 3, 0, 2 중 무엇을 줄지
+            이것이다. <code>priority</code>는 회차마다 값이 다른 식이라, 그대로 넣으면 공연 1 묶음에서 2, 0, 2 중 무엇을 줄지
             정할 수 없어 PostgreSQL이 에러를 낸다.
           </p>
           <pre><code class="language-ts">// 이렇게 쓰면 에러
@@ -569,28 +585,30 @@ return db
             <code>min</code>은 결과적으로 있는 순번 중 하나(공연 1이면 0)가 나오지만, <code>count(*)</code>를 쓰면 3(회차 수)처럼
             어느 회차의 값도 아닌 새 값이 나온다.
           </p>
-          <p>
-            이 <code>groupBy</code>는 <code>showSalesStatusSubquery</code> 안에만 적용된다. 서브쿼리 결과(공연당 한 줄)는 바깥
-            공연 목록 쿼리에 <code>innerJoin</code>되고, 바깥 쿼리는 묶이지 않으니 공연 목록은 그대로 공연마다 한 줄이다(<a
-              href="#service"
-              >목록과 개수에 붙이기</a
-            >).
-          </p>
           <h3>min이 묶음마다 가장 작은 순번을 고른다</h3>
           <p>
             <code>showPriority</code>는 회차 순번 식(<code>priority</code>)을 <code>min()</code>으로 감싼 것이다. 테이블 전체가
             아니라 묶음 안에서 가장 작은 순번을 고른다.
           </p>
-          <p><code>${priority}</code> 자리에는 앞 절의 <code>CASE</code> 글자가 통째로 들어간다. DB가 받는 SQL은 이렇다(줄여 씀).</p>
+          <pre><code class="language-ts">function performancePriority({ now }) {
+  return sql`case
+    when ${performances.isCancelled} or ${performances.startsAt} &lt;= ${now} then ${priorityOf('ended')}
+    when ${now} &lt; ${performances.salesOpenAt} then ${priorityOf('upcoming')}
+    else ${priorityOf('on_sale')}
+  end`;
+}
+
+const priority = performancePriority({ now }); // CASE 식
+const showPriority = sql`min(${priority})`;</code></pre>
+          <p><code>${priority}</code> 자리에는 앞 절의 <code>CASE</code> 글자가 통째로 들어간다. DB가 받는 SQL은 이렇다. 읽기 쉽게 컬럼 이름의 따옴표와 테이블 이름을 빼고, 파라미터(<code>$1</code>)는 값으로 바꿔 적고, 나머지 컬럼은 생략했다.</p>
           <pre><code class="language-sql">select show_id,
-       min(                                  -- showPriority
-         case                                -- ┐
-           when is_cancelled then 2          -- │ priority
-           when starts_at &lt;= $1 then 3       -- │ (CASE 식이 min 괄호 안에 그대로)
-           when $2 &lt; sales_open_at then 1    -- │
-           else 0                            -- │
-         end                                 -- ┘
-       )
+       min(        -- showPriority: sql`min(${priority})`의 min(
+         case      -- ${priority} 자리에 들어간 CASE 식 시작
+           when is_cancelled or starts_at &lt;= '2026-11-10 12:00+09' then 2
+           when '2026-11-10 12:00+09' &lt; sales_open_at then 1
+           else 0
+         end       -- ${priority} 끝
+       )           -- min( 의 닫는 괄호
 from performances
 group by show_id</code></pre>
           <p>DB가 하는 일을 JS로 쓰면 이렇다.</p>
@@ -600,8 +618,7 @@ const groups = Object.groupBy(performances, (row) =&gt; row.showId);
 for (const [showId, rows] of Object.entries(groups)) {
   // case ... end: 묶음 안의 행마다 순번을 계산한다   ← priority
   const priorities = rows.map((row) =&gt; {
-    if (row.isCancelled) return 2;
-    if (row.startsAt &lt;= now) return 3;
+    if (row.isCancelled || row.startsAt &lt;= now) return 2;
     if (now &lt; row.salesOpenAt) return 1;
     return 0;
   });
@@ -625,7 +642,7 @@ for (const [showId, rows] of Object.entries(groups)) {
               <tbody>
                 <tr>
                   <td>1 달빛 정원</td>
-                  <td>3, 0, 2</td>
+                  <td>2, 0, 2</td>
                   <td>0</td>
                   <td>판매 중</td>
                 </tr>
@@ -637,25 +654,34 @@ for (const [showId, rows] of Object.entries(groups)) {
                 </tr>
                 <tr>
                   <td>3 붉은 숲</td>
-                  <td>3, 2</td>
+                  <td>2, 2</td>
                   <td>2</td>
-                  <td>회차 취소</td>
+                  <td>판매 종료</td>
                 </tr>
                 <tr>
                   <td>4 푸른 등대</td>
-                  <td>3, 3</td>
-                  <td>3</td>
-                  <td>판매 종료</td>
+                  <td>0, 2</td>
+                  <td>0</td>
+                  <td>판매 중</td>
                 </tr>
               </tbody>
             </table>
           </div>
           <p>
-            붉은 숲은 끝난 회차와 취소된 회차만 남아 회차 취소다. 남은 회차가 모두 취소됐으니 사용자에게 "끝났다"가 아니라
-            "취소됐다"를 보여 주는 것이 맞다. 우선순위에서 회차 취소가 판매 종료보다 앞선 이유다.
+            붉은 숲은 끝난 회차와 취소된 회차만 남아 판매 종료다. 둘 다 더 팔 수 없는 회차라 공연도 더 팔 것이 없다. 푸른
+            등대는 남은 회차 18이 매진이지만 판매 중이다. 매진인 회차는 판매 기간 안이라 판매 중으로 세고, 취소표가 나오면
+            다시 살 수 있다.
           </p>
           <h3>순번을 이름으로 바꾸기</h3>
-          <pre><code class="language-ts">const priority = performancePriority(now);   // 회차 한 줄의 순번 (행마다)
+          <pre><code class="language-ts">function performancePriority({ now }) {
+  return sql`case
+    when ${performances.isCancelled} or ${performances.startsAt} &lt;= ${now} then ${priorityOf('ended')}
+    when ${now} &lt; ${performances.salesOpenAt} then ${priorityOf('upcoming')}
+    else ${priorityOf('on_sale')}
+  end`;
+}
+
+const priority = performancePriority({ now }); // 회차 한 줄의 순번 (행마다)
 const showPriority = sql`min(${priority})`; // 공연의 가장 작은 순번 (묶음마다)
 
 const toStatus = sql.join(
@@ -674,7 +700,9 @@ salesStatus: sql&lt;ShowSalesStatus&gt;`case ${showPriority} ${toStatus} end`.as
             >가 된다.
           </p>
           <pre><code class="language-sql">case min(...회차 순번...)
-  when 0 then 'on_sale' when 1 then 'upcoming' when 2 then 'cancelled' when 3 then 'ended'
+  when 0 then 'on_sale'
+  when 1 then 'upcoming'
+  when 2 then 'ended'
 end as "sales_status"</code></pre>
           <p>
             <code>min(...)</code>에는 이름(<code>as</code>)이 없다. <code>select</code>에 따로 나오지 않고 <code>CASE</code>의
@@ -695,60 +723,19 @@ end as "sales_status"</code></pre>
               >.as()가 두 번 나오는 이유</a
             >).
           </p>
-          <h3>CASE가 겹쳐 있을 때 groupBy는 어떻게 동작하나</h3>
-          <p>
-            <code>sales_status</code>는 안쪽 <code>CASE</code>를 <code>min</code>이 감싸고, 그것을 다시 바깥
-            <code>CASE</code>가 감싼 세 겹이다. <code>groupBy</code>는 <code>CASE</code>가 겹친 모양을 신경 쓰지 않는다. 각
-            부분이 <strong><code>min</code> 괄호 안에 있느냐, 밖에 있느냐</strong>만 본다(<a
-              href="01-프론트엔드-개발자를-위한-DB-개념.html#aggregate"
-              >집계 괄호 안은 행마다, 밖은 묶음마다</a
-            >).
-          </p>
-          <pre><code class="language-sql">case                                   -- 괄호 밖 → 묶음(공연)마다: 4번
-  min(                                 -- ── 경계: 여러 행 → 값 하나
-    case                               -- 괄호 안 → 행(회차)마다: 10번
-      when is_cancelled then 2
-      when starts_at &lt;= $1 then 3
-      when $2 &lt; sales_open_at then 1
-      else 0
-    end
-  )
-  when 0 then 'on_sale'
-  when 1 then 'upcoming'
-  when 2 then 'cancelled'
-  when 3 then 'ended'
-end as "sales_status"</code></pre>
-          <p>DB는 이 순서로 계산한다.</p>
-          <ol class="steps green">
-            <li><strong>FROM</strong> 회차 10줄을 가져온다.</li>
-            <li><strong>GROUP BY</strong> <code>show_id</code>로 4묶음을 만든다.</li>
-            <li>
-              <strong>괄호 안</strong> 묶음마다 그 묶음의 회차 하나하나에 안쪽 <code>CASE</code>를 계산한다. 공연 1이면 3,
-              0, 2.
-            </li>
-            <li><strong>min</strong> 그 값들을 하나로 줄인다. 공연 1이면 0.</li>
-            <li>
-              <strong>괄호 밖</strong> 바깥 <code>CASE</code>가 그 값 하나로 이름을 정한다. 공연 1이면
-              <code>'on_sale'</code>.
-            </li>
-          </ol>
-          <p>
-            바깥 <code>CASE</code>에서 회차마다 다른 컬럼(<code>starts_at</code> 등)을 집계 없이 쓰면 공연 1의 어느 회차
-            값인지 정할 수 없어 에러가 난다. JS로는 <code>rows.map</code> 콜백 안에서만 <code>row</code>를 쓸 수 있고, 바깥에서는
-            <code>Math.min</code> 결과와 <code>showId</code>만 쓸 수 있는 것과 같다.
-          </p>
-          <pre><code class="language-js">for (const [showId, rows] of Object.entries(groups)) {
-  // 콜백 안: row를 쓸 수 있다 (행마다)
-  const m = Math.min(...rows.map((row) =&gt; 안쪽CASE(row)));
-
-  // 밖: row가 없다. m과 showId만 (묶음마다)
-  const status = 바깥CASE(m);
-}</code></pre>
         </section>
 
         <section id="sales-open-at">
           <h2>판매 오픈 일시</h2>
-          <pre><code class="language-ts">const priority = performancePriority(now);   // 회차 한 줄의 순번 (행마다)
+          <pre><code class="language-ts">function performancePriority({ now }) {
+  return sql`case
+    when ${performances.isCancelled} or ${performances.startsAt} &lt;= ${now} then ${priorityOf('ended')}
+    when ${now} &lt; ${performances.salesOpenAt} then ${priorityOf('upcoming')}
+    else ${priorityOf('on_sale')}
+  end`;
+}
+
+const priority = performancePriority({ now }); // 회차 한 줄의 순번 (행마다)
 const showPriority = sql`min(${priority})`; // 공연의 가장 작은 순번 (묶음마다)
 
 salesOpenAt: sql&lt;Date | null&gt;`case
@@ -769,7 +756,7 @@ end`
                 href="01-프론트엔드-개발자를-위한-DB-개념.html#filter"
                 >집계의 FILTER</a
               >). 겨울 기차라면 회차 13(11-13), 14(11-12) 중 <strong>11-12 14:00</strong>이다. 회차 15는 판매 오픈이 11-11로 더
-              이르지만 취소됐으므로(순번 2) 고르지 않는다. <code>min</code> 괄호 안과 <code>filter</code> 조건은 회차마다
+              이르지만 취소돼 판매 종료(순번 2)이므로 고르지 않는다. <code>min</code> 괄호 안과 <code>filter</code> 조건은 회차마다
               계산된다.
             </li>
             <li>
@@ -807,12 +794,12 @@ end`
                 </tr>
                 <tr>
                   <td>3</td>
-                  <td>cancelled</td>
+                  <td>ended</td>
                   <td>NULL</td>
                 </tr>
                 <tr>
                   <td>4</td>
-                  <td>ended</td>
+                  <td>on_sale</td>
                   <td>NULL</td>
                 </tr>
               </tbody>
@@ -840,7 +827,7 @@ const period = this.db
   .groupBy(performances.showId)
   .as('period');
 
-// 공연 판매 상태: 이 문서에서 본 서브쿼리 (#40)
+// 공연 판매 상태, 판매 오픈 일시: 이 문서에서 본 서브쿼리
 const salesStatus = showSalesStatusSubquery(this.db, { now: this.clock.now() });
 
 // 판매 종료 공연은 목록에서 뺀다. 목록과 전체 개수가 같은 조건을 써야 페이지 수가 맞는다.
@@ -885,9 +872,9 @@ const [rows, [total]] = await Promise.all([
               >에서 본 문제다.
             </li>
             <li>
-              <strong>개수 쿼리는 <code>period</code> 대신 <code>salesStatus</code>를 JOIN한다.</strong> 두 서브쿼리 모두 회차가
-              있는 공연만 줄이 있어서, 회차 없는 공연을 빼는 효과는 같다. 판매 종료를 거르려면 <code>salesStatus</code>가
-              필요하니 이것 하나로 바꿨다.
+              <strong>개수 쿼리는 <code>salesStatus</code>만 JOIN한다.</strong> 판매 종료를 거르려면 <code>salesStatus</code>가
+              필요하다. 두 서브쿼리 모두 회차가 있는 공연만 줄이 있어서, 이 JOIN이 회차 없는 공연도 함께 빼므로
+              <code>period</code>는 붙이지 않는다.
             </li>
           </ul>
           <h3>toSQL로 뽑은 SQL</h3>
@@ -896,7 +883,6 @@ const [rows, [total]] = await Promise.all([
             시각은 2026-11-10 12:00(한국 시각)으로 넣었다. 줄 바꿈과 들여쓰기를 손봤고, 각 줄 위 주석은 대응하는 Drizzle
             코드다. 읽기 쉽도록 빈칸(<code>$1</code>~<code>$8</code>) 자리에 실제 값을 채워 넣었다. 실제로는 이 값들이 SQL
             글자에 들어가지 않고 값 목록(<code>params</code>)으로 따로 간다(<a href="#constants">아래 순번과 이름을 SQL에 넣기</a>).
-          
           </p>
           <pre><code class="language-sql">-- 목록 쿼리 (rows)
 -- .select({ ... })
@@ -916,26 +902,22 @@ inner join (
 inner join (
     select "show_id",
       case min(case
-          when "performances"."is_cancelled" then 2
-          when "performances"."starts_at" &lt;= '2026-11-10 12:00+09' then 3
+          when "performances"."is_cancelled" or "performances"."starts_at" &lt;= '2026-11-10 12:00+09' then 2
           when '2026-11-10 12:00+09' &lt; "performances"."sales_open_at" then 1
           else 0
         end)
         when 0 then 'on_sale'
         when 1 then 'upcoming'
-        when 2 then 'cancelled'
-        when 3 then 'ended'
+        when 2 then 'ended'
       end as "sales_status",
       case
         when min(case
-            when "performances"."is_cancelled" then 2
-            when "performances"."starts_at" &lt;= '2026-11-10 12:00+09' then 3
+            when "performances"."is_cancelled" or "performances"."starts_at" &lt;= '2026-11-10 12:00+09' then 2
             when '2026-11-10 12:00+09' &lt; "performances"."sales_open_at" then 1
             else 0
           end) = 1
         then min("sales_open_at") filter (where case
-            when "performances"."is_cancelled" then 2
-            when "performances"."starts_at" &lt;= '2026-11-10 12:00+09' then 3
+            when "performances"."is_cancelled" or "performances"."starts_at" &lt;= '2026-11-10 12:00+09' then 2
             when '2026-11-10 12:00+09' &lt; "performances"."sales_open_at" then 1
             else 0
           end = 1)
@@ -958,26 +940,22 @@ from "shows"
 inner join (
     select "show_id",
       case min(case
-          when "performances"."is_cancelled" then 2
-          when "performances"."starts_at" &lt;= '2026-11-10 12:00+09' then 3
+          when "performances"."is_cancelled" or "performances"."starts_at" &lt;= '2026-11-10 12:00+09' then 2
           when '2026-11-10 12:00+09' &lt; "performances"."sales_open_at" then 1
           else 0
         end)
         when 0 then 'on_sale'
         when 1 then 'upcoming'
-        when 2 then 'cancelled'
-        when 3 then 'ended'
+        when 2 then 'ended'
       end as "sales_status",
       case
         when min(case
-            when "performances"."is_cancelled" then 2
-            when "performances"."starts_at" &lt;= '2026-11-10 12:00+09' then 3
+            when "performances"."is_cancelled" or "performances"."starts_at" &lt;= '2026-11-10 12:00+09' then 2
             when '2026-11-10 12:00+09' &lt; "performances"."sales_open_at" then 1
             else 0
           end) = 1
         then min("sales_open_at") filter (where case
-            when "performances"."is_cancelled" then 2
-            when "performances"."starts_at" &lt;= '2026-11-10 12:00+09' then 3
+            when "performances"."is_cancelled" or "performances"."starts_at" &lt;= '2026-11-10 12:00+09' then 2
             when '2026-11-10 12:00+09' &lt; "performances"."sales_open_at" then 1
             else 0
           end = 1)
@@ -1013,12 +991,13 @@ where "sales_status" &lt;&gt; 'ended'</code></pre>
               <code>priority</code>는 하나지만, SQL 조각은 넣는 곳마다 펼쳐진다(<a
                 href="03-drizzle-쿼리-문법.html#sql-fragment"
                 >조각은 넣는 곳마다 펼쳐진다</a
-              >). 그래서 같은 현재 시각이 파라미터 여섯 개로 간다. 결과는 맞고 회차 수가 적은 지금은 문제가 없다. 한 번만
+              >). 공연 판매 상태에 한 번, 판매 오픈 일시에 두 번
+              들어가, 같은 현재 시각이 파라미터 여섯 개로 간다. 결과는 맞고 회차 수가 적은 지금은 문제가 없다. 한 번만
               계산하려면 회차 순번을 컬럼으로 만드는 안쪽 서브쿼리를 하나 더 두는 방법이 있는데, 쿼리가 한 단계 깊어진다.
               로드맵의 성능 측정 대상인 "공연 판매 상태 집계"에서 다시 볼 지점이다.
             </p>
           </div>
-          <p>예시 데이터의 결과는 다음과 같다. 푸른 등대는 판매 종료라 빠진다.</p>
+          <p>예시 데이터의 결과는 다음과 같다. 붉은 숲은 판매 종료라 빠진다.</p>
           <div class="table-wrap">
             <table>
               <thead>
@@ -1040,8 +1019,8 @@ where "sales_status" &lt;&gt; 'ended'</code></pre>
                   <td>11-12 14:00 (응답에서는 ISO 문자열)</td>
                 </tr>
                 <tr>
-                  <td>붉은 숲</td>
-                  <td>cancelled</td>
+                  <td>푸른 등대</td>
+                  <td>on_sale</td>
                   <td>null</td>
                 </tr>
               </tbody>
@@ -1124,7 +1103,7 @@ showSalesStatusSubquery(this.db, { now: this.clock.now() });</code></pre>
         <section id="constants">
           <h2>순번과 이름을 SQL에 넣기</h2>
           <p>
-            <a href="#performance">회차 하나의 판매 상태</a>의 <code>CASE</code>는 <code>then</code> 뒤에 순번(숫자)을 돌려준다. 이 숫자를 TS 코드에서 SQL로 넣는 방법이
+            <a href="#performance">회차 하나의 순번</a>의 <code>CASE</code>는 <code>then</code> 뒤에 순번(숫자)을 돌려준다. 이 숫자를 TS 코드에서 SQL로 넣는 방법이
             두 가지 있고, 어느 쪽이냐에 따라 <code>min</code>의 결과가 달라질 수 있다. 같은 <code>CASE</code>를 두 방법으로 써
             보고 실제로 만들어지는 SQL을 비교한다.
           </p>
@@ -1187,29 +1166,27 @@ showSalesStatusSubquery(this.db, { now: this.clock.now() });</code></pre>
             컬럼이 빈칸이 되지 않는 이유는 JS가 그 값을 모르기 때문이다. 회차가 취소됐는지는 DB의 각 행에 저장돼 있고 행마다
             다르다. 그래서 JS는 값을 보낼 수 없고 "각 행에서 이 컬럼을 읽어라"라고 이름만 적어 보낸다. 반대로
             <code>now</code>와 <code>2</code>는 JS가 이미 가진 값이라 빈칸과 값 목록으로 보낸다.
-            <code>when "starts_at" &lt;= $2</code>에서 왼쪽은 DB가 행마다 읽는 컬럼이고, 오른쪽은 JS가 보낸 값이다.
+            <code>when "starts_at" &lt;= $1</code>에서 왼쪽은 DB가 행마다 읽는 컬럼이고, 오른쪽은 JS가 보낸 값이다.
           </p>
 
 
           <h3>방법 1. 숫자를 그냥 넣기: 빈칸이 된다</h3>
           <pre><code class="language-ts">// 쓰지 않은 방법
 sql`case
-  when ${performances.isCancelled} then ${2}
-  when ${performances.startsAt} &lt;= ${now} then ${3}
+  when ${performances.isCancelled} or ${performances.startsAt} &lt;= ${now} then ${2}
   when ${now} &lt; ${performances.salesOpenAt} then ${1}
   else ${0}
 end`</code></pre>
-          <pre><code class="language-sql">-- DB에 가는 SQL 글자
+          <pre><code class="language-sql">-- 빈칸에 값을 채워 쓴 모양. 주석의 $n이 빈칸으로 간 자리다
 case
-  when "is_cancelled" then $1
-  when "starts_at" &lt;= $2 then $3
-  when $4 &lt; "sales_open_at" then $5
-  else $6
-end
--- DB에 가는 값 목록: [2, now, 3, now, 1, 0]</code></pre>
+  when "is_cancelled" or "starts_at" &lt;= '2026-11-10 12:00+09' then '2' -- $1, $2
+  when '2026-11-10 12:00+09' &lt; "sales_open_at" then '1'                 -- $3, $4
+  else '0'                                                                 -- $5
+end</code></pre>
           <p>
-            <code>${2}</code>, <code>${3}</code>도 값이라 빈칸이 됐다. SQL 글자에는 숫자가 하나도 없고 <code>then $1</code>,
-            <code>then $3</code>처럼 빈칸만 남았다.
+            <code>${2}</code>, <code>${1}</code>도 값이라 빈칸이 됐다. SQL 글자에는 숫자가 하나도 없고, <code>then</code> 뒤가
+            모두 빈칸이다. 빈칸에 들어간 순번을 <code>'2'</code>처럼 따옴표로 적은 이유는 바로 아래에서 본다. DB가 이 값들을 글자로
+            읽기 때문이다.
           </p>
           <h3>빈칸의 타입은 누가 정하나</h3>
           <p>
@@ -1228,12 +1205,12 @@ end
               </thead>
               <tbody>
                 <tr>
-                  <td><code>$2</code>, <code>$4</code></td>
+                  <td><code>$1</code>, <code>$3</code></td>
                   <td>시각 컬럼 <code>starts_at</code>, <code>sales_open_at</code>과 비교한다</td>
                   <td>시각(<code>timestamptz</code>). 단서가 있다</td>
                 </tr>
                 <tr>
-                  <td><code>$1</code>, <code>$3</code>, <code>$5</code>, <code>$6</code></td>
+                  <td><code>$2</code>, <code>$4</code>, <code>$5</code></td>
                   <td><code>then</code>/<code>else</code> 뒤. 옆에 다른 빈칸밖에 없다</td>
                   <td>단서가 없어 글자(<code>text</code>)로 정한다</td>
                 </tr>
@@ -1245,7 +1222,7 @@ end
             <code>min</code>은 글자를 사전 순서로 비교한다. 사전에서 <code>'10'</code>은 첫 글자 <code>'1'</code>이
             <code>'9'</code>보다 앞이라 <code>'9'</code>보다 먼저 나온다.
           </p>
-          <pre><code class="language-sql">min('0', '3')   → '0'    -- 지금은 순번이 한 자리라 사전 순서와 숫자 순서가 같아 우연히 맞는다
+          <pre><code class="language-sql">min('0', '2')   → '0'    -- 지금은 순번이 한 자리라 사전 순서와 숫자 순서가 같아 우연히 맞는다
 min('10', '9')  → '10'   -- 순번이 10을 넘으면 틀린다</code></pre>
           <p>
             이 저장소의 로컬 PostgreSQL에 <code>pg</code> 드라이버로 직접 보내 확인했다. 빈칸으로 보낸 10과 9의
@@ -1255,19 +1232,16 @@ min('10', '9')  → '10'   -- 순번이 10을 넘으면 틀린다</code></pre>
           <h3>방법 2. sql.raw로 넣기: SQL 글자가 된다</h3>
           <pre><code class="language-ts">// 실제로 만들어지는 모양 (priorityOf가 sql.raw를 돌려준다)
 sql`case
-  when ${performances.isCancelled} then ${sql.raw('2')}
-  when ${performances.startsAt} &lt;= ${now} then ${sql.raw('3')}
+  when ${performances.isCancelled} or ${performances.startsAt} &lt;= ${now} then ${sql.raw('2')}
   when ${now} &lt; ${performances.salesOpenAt} then ${sql.raw('1')}
   else ${sql.raw('0')}
 end`</code></pre>
-          <pre><code class="language-sql">-- DB에 가는 SQL 글자
+          <pre><code class="language-sql">-- 빈칸에 값을 채워 쓴 모양. 주석의 $n이 빈칸으로 간 자리다
 case
-  when "is_cancelled" then 2
-  when "starts_at" &lt;= $1 then 3
-  when $2 &lt; "sales_open_at" then 1
+  when "is_cancelled" or "starts_at" &lt;= '2026-11-10 12:00+09' then 2 -- $1
+  when '2026-11-10 12:00+09' &lt; "sales_open_at" then 1               -- $2
   else 0
-end
--- DB에 가는 값 목록: [now, now]</code></pre>
+end</code></pre>
           <p>
             <a href="03-drizzle-쿼리-문법.html#sql-raw"><code>sql.raw</code></a>는 값을 빈칸으로 만들지 않고 SQL 글자에
             그대로 써 넣는다. 이제 SQL 글자에 <code>then 2</code>가 보이므로 DB는 짐작할 필요 없이 숫자(<code>integer</code>)로
@@ -1275,7 +1249,7 @@ end
           </p>
 
           <h3>'2'를 직접 쓰지 않고 함수로 만든 이유</h3>
-          <pre><code class="language-ts">// priorityOf('cancelled') → sql.raw('2')
+          <pre><code class="language-ts">// priorityOf('ended') → sql.raw('2')
 function priorityOf(status: ShowSalesStatus): SQL {
   return sql.raw(String(SHOW_SALES_STATUSES.indexOf(status)));
 }
@@ -1285,12 +1259,13 @@ function literalOf(status: ShowSalesStatus): SQL {
 }
 
 // 쓰는 곳
-when ${performances.isCancelled} then ${priorityOf('cancelled')}</code></pre>
+when ${performances.isCancelled} or ${performances.startsAt} &lt;= ${now} then ${priorityOf('ended')}</code></pre>
           <ul>
             <li>
-              <strong>숫자를 배열에서 꺼낸다.</strong> <code>priorityOf('cancelled')</code>는 배열에서
-              <code>'cancelled'</code>의 위치(2)를 찾아 <code>sql.raw('2')</code>를 만든다. 매진을 배열에 끼워 넣으면 숫자가
-              저절로 밀리므로 <code>CASE</code>를 고칠 필요가 없다. 코드도 숫자 대신 상태 이름으로 읽힌다.
+              <strong>숫자를 배열에서 꺼낸다.</strong> <code>priorityOf('ended')</code>는 배열에서
+              <code>'ended'</code>의 위치(2)를 찾아 <code>sql.raw('2')</code>를 만든다. 상태를 배열에 끼워 넣으면 숫자가
+              저절로 밀리므로 기존 <code>when</code> 갈래의 숫자를 다시 매길 필요가 없다. 새 상태로 세는 조건만
+              <code>when</code> 갈래로 더하면 된다. 코드도 숫자 대신 상태 이름으로 읽힌다.
             </li>
             <li>
               <strong><code>literalOf</code>는 이름을 넣는다.</strong> 순번을 이름으로 바꾸는 단계(<a href="#show">공연 판매 상태로 모으기</a>)의
@@ -1308,7 +1283,7 @@ when ${performances.isCancelled} then ${priorityOf('cancelled')}</code></pre>
           </div>
           <p>
             두 함수의 인자 타입은 <code>ShowSalesStatus</code>라서 <code>'on_sale'</code>, <code>'upcoming'</code>,
-            <code>'cancelled'</code>, <code>'ended'</code> 네 값 말고는 컴파일이 되지 않는다. 그래서
+            <code>'ended'</code> 세 값 말고는 컴파일이 되지 않는다. 그래서
             <code>sql.raw</code>에 들어가는 것은 코드에 적힌 상수뿐이고, 사용자 입력이 닿을 길이 없다.
           </p>
         </section>
@@ -1317,13 +1292,13 @@ when ${performances.isCancelled} then ${priorityOf('cancelled')}</code></pre>
           <h2>스스로 확인하기</h2>
           <p>문제마다 바꾸는 코드와 생각할 데이터를 함께 두었다. 먼저 답해 본 뒤 "답 보기"를 눌러 확인한다.</p>
           <div class="quiz">
-            <p class="quiz-q">1. 회차 취소 줄을 <code>CASE</code> 맨 아래(<code>else</code> 바로 위)로 옮기면, 회차 15의 순번과 겨울 기차의 판매 오픈 일시는 어떻게 되는가?</p>
-            <p class="quiz-context"><a href="#performance">회차 하나의 판매 상태</a>의 <code>performancePriority</code>를 이렇게 바꾼다. 현재 시각은 11-10 12:00이다.</p>
+            <p class="quiz-q">1. 취소 조건을 첫 줄에서 떼어 <code>CASE</code> 맨 아래(<code>else</code> 바로 위)에 따로 두면, 회차 15의 순번과 겨울 기차의 판매 오픈 일시는 어떻게 되는가?</p>
+            <p class="quiz-context"><a href="#performance">회차 하나의 순번</a>의 <code>performancePriority</code>를 이렇게 바꾼다. 현재 시각은 11-10 12:00이다.</p>
             <pre><code class="language-diff"> case
--  when ${performances.isCancelled} then ${priorityOf('cancelled')}
-   when ${performances.startsAt} &lt;= ${now} then ${priorityOf('ended')}
+-  when ${performances.isCancelled} or ${performances.startsAt} &lt;= ${now} then ${priorityOf('ended')}
++  when ${performances.startsAt} &lt;= ${now} then ${priorityOf('ended')}
    when ${now} &lt; ${performances.salesOpenAt} then ${priorityOf('upcoming')}
-+  when ${performances.isCancelled} then ${priorityOf('cancelled')}
++  when ${performances.isCancelled} then ${priorityOf('ended')}
    else ${priorityOf('on_sale')}
  end</code></pre>
             <div class="table-wrap"><table><thead><tr><th>회차 (겨울 기차)</th><th>starts_at</th><th>sales_open_at</th><th>is_cancelled</th></tr></thead><tbody><tr><td>13</td><td>11-25 19:30</td><td>11-13 14:00</td><td>false</td></tr><tr><td>14</td><td>11-26 19:30</td><td>11-12 14:00</td><td>false</td></tr><tr><td>15</td><td>11-27 19:30</td><td>11-11 14:00</td><td>true</td></tr></tbody></table></div>
@@ -1338,19 +1313,19 @@ when ${performances.isCancelled} then ${priorityOf('cancelled')}</code></pre>
             </details>
           </div>
           <div class="quiz">
-            <p class="quiz-q">2. <code>CASE</code>가 순번 대신 상태 이름을 돌려주고 그대로 <code>min()</code>을 하면, 달빛 정원의 공연 판매 상태는?</p>
-            <p class="quiz-context"><a href="#number">상태를 숫자로 계산하는 이유</a>에서 숫자를 쓰지 않았다고 가정한다. 달빛 정원의 회차별 판매 상태는 아래와 같다.</p>
+            <p class="quiz-q">2. <code>CASE</code>가 순번 대신 상태 이름을 돌려주고 그대로 <code>min()</code>을 하면, 달빛 정원의 공연 판매 상태와 목록은?</p>
+            <p class="quiz-context"><a href="#number">상태를 숫자로 계산하는 이유</a>에서 숫자를 쓰지 않았다고 가정한다. 달빛 정원의 회차를 센 상태는 아래와 같다.</p>
             <pre><code class="language-diff"> case
--  when ${performances.isCancelled} then 2
-+  when ${performances.isCancelled} then 'cancelled'
+-  when ${performances.isCancelled} or ${performances.startsAt} &lt;= ${now} then 2
++  when ${performances.isCancelled} or ${performances.startsAt} &lt;= ${now} then 'ended'
    ...
  end</code></pre>
-            <div class="table-wrap"><table><thead><tr><th>회차 (달빛 정원)</th><th>회차 판매 상태</th></tr></thead><tbody><tr><td>10</td><td>ended</td></tr><tr><td>11</td><td>on_sale</td></tr><tr><td>12</td><td>cancelled</td></tr></tbody></table></div>
+            <div class="table-wrap"><table><thead><tr><th>회차 (달빛 정원)</th><th>세는 상태</th></tr></thead><tbody><tr><td>10</td><td>ended</td></tr><tr><td>11</td><td>on_sale</td></tr><tr><td>12</td><td>ended</td></tr></tbody></table></div>
             <details class="quiz-answer">
               <summary>답 보기</summary>
               <div class="fold-body"><p>
-                  <code>min('ended', 'on_sale', 'cancelled')</code>은 알파벳 순서로 비교해 <code>'cancelled'</code>다. 판매 중인
-                  공연이 회차 취소로 보인다. 알파벳 순서와 우선순위는 아무 상관이 없어서, <code>min</code>으로 우선순위를 고르려면
+                  <code>min('ended', 'on_sale', 'ended')</code>는 알파벳 순서로 비교해 <code>'ended'</code>다. 판매 중인
+                  공연이 판매 종료가 되어 목록에서 빠진다. 알파벳 순서와 우선순위는 아무 상관이 없어서, <code>min</code>으로 우선순위를 고르려면
                   우선순위 순서대로 매긴 숫자가 필요하다.
                 </p></div>
             </details>
@@ -1365,8 +1340,8 @@ when ${performances.isCancelled} then ${priorityOf('cancelled')}</code></pre>
             <details class="quiz-answer">
               <summary>답 보기</summary>
               <div class="fold-body"><p>
-                  숫자가 SQL 글자가 아니라 빈칸(<code>then $3</code> 등)으로 간다. <code>CASE</code>의 결과 자리가 모두 빈칸이라
-                  PostgreSQL이 결과를 글자(<code>text</code>)로 정한다. 지금은 순번이 0~3 한 자리라 글자 순서와 숫자 순서가 같아
+                  숫자가 SQL 글자가 아니라 빈칸(<code>then $2</code> 등)으로 간다. <code>CASE</code>의 결과 자리가 모두 빈칸이라
+                  PostgreSQL이 결과를 글자(<code>text</code>)로 정한다. 지금은 순번이 0~2 한 자리라 글자 순서와 숫자 순서가 같아
                   결과가 바뀌지 않는다. 순번이 10을 넘으면 <code>min('10', '9')</code>가 <code>'10'</code>이 되어 틀린다. 테스트가
                   통과한다고 맞는 코드라는 보장이 없는 예다.
                 </p></div>
@@ -1380,7 +1355,7 @@ when ${performances.isCancelled} then ${priorityOf('cancelled')}</code></pre>
    then min(${performances.salesOpenAt})
 -       filter (where ${priority} = ${priorityOf('upcoming')})
  end</code></pre>
-            <div class="table-wrap"><table><thead><tr><th>회차 (겨울 기차)</th><th>회차 순번</th><th>sales_open_at</th></tr></thead><tbody><tr><td>13</td><td>1 (판매 예정)</td><td>11-13 14:00</td></tr><tr><td>14</td><td>1 (판매 예정)</td><td>11-12 14:00</td></tr><tr><td>15</td><td>2 (회차 취소)</td><td>11-11 14:00</td></tr></tbody></table></div>
+            <div class="table-wrap"><table><thead><tr><th>회차 (겨울 기차)</th><th>회차 순번</th><th>sales_open_at</th></tr></thead><tbody><tr><td>13</td><td>1 (판매 예정)</td><td>11-13 14:00</td></tr><tr><td>14</td><td>1 (판매 예정)</td><td>11-12 14:00</td></tr><tr><td>15</td><td>2 (판매 종료, 취소됨)</td><td>11-11 14:00</td></tr></tbody></table></div>
             <details class="quiz-answer">
               <summary>답 보기</summary>
               <div class="fold-body"><p>
@@ -1430,11 +1405,11 @@ when ${performances.isCancelled} then ${priorityOf('cancelled')}</code></pre>
    .from(shows)
    .innerJoin(salesStatus, eq(salesStatus.showId, shows.id))
 -  .where(isListed),</code></pre>
-            <div class="table-wrap"><table><thead><tr><th>공연</th><th>공연 판매 상태</th></tr></thead><tbody><tr><td>달빛 정원</td><td>on_sale</td></tr><tr><td>겨울 기차</td><td>upcoming</td></tr><tr><td>붉은 숲</td><td>cancelled</td></tr><tr><td>푸른 등대</td><td>ended</td></tr></tbody></table></div>
+            <div class="table-wrap"><table><thead><tr><th>공연</th><th>공연 판매 상태</th></tr></thead><tbody><tr><td>달빛 정원</td><td>on_sale</td></tr><tr><td>겨울 기차</td><td>upcoming</td></tr><tr><td>붉은 숲</td><td>ended</td></tr><tr><td>푸른 등대</td><td>on_sale</td></tr></tbody></table></div>
             <details class="quiz-answer">
               <summary>답 보기</summary>
               <div class="fold-body"><p>
-                  목록 쿼리는 판매 종료를 빼서 <code>items</code>는 3개인데, 개수 쿼리는 푸른 등대까지 세어
+                  목록 쿼리는 판매 종료를 빼서 <code>items</code>는 3개인데, 개수 쿼리는 붉은 숲까지 세어
                   <code>totalCount</code>가 4가 된다. 공연이 많아지면 <code>totalPages</code>가 실제보다 커져 빈 페이지가 생길 수
                   있다. 목록과 개수에 같은 조건 변수를 쓰는 이유다.
                 </p></div>
@@ -1447,9 +1422,10 @@ when ${performances.isCancelled} then ${priorityOf('cancelled')}</code></pre>
             <details class="quiz-answer">
               <summary>답 보기</summary>
               <div class="fold-body"><p>
-                  회차 10은 이미 시작해 판매 종료(3), 회차 12는 취소(2)다. 회차 11은 <code>11-15 19:30 &lt;= 11-15 19:30</code>이
-                  참이라 시작 정각에 판매 종료(3)가 된다. 순번은 3, 3, 2라서 <code>min</code>은 2, 공연 판매 상태는
-                  <strong>회차 취소</strong>다. 비교가 <code>&lt;</code>였다면 회차 11이 아직 판매 중(0)이라 공연도 판매 중으로 남는다.
+                  회차 10은 이미 시작해, 회차 12는 취소돼 판매 종료(2)다. 회차 11은 <code>11-15 19:30 &lt;= 11-15 19:30</code>이
+                  참이라 시작 정각에 판매 종료(2)가 된다. 순번은 2, 2, 2라서 <code>min</code>은 2, 공연 판매 상태는
+                  <strong>판매 종료</strong>이고 목록에서 빠진다. 비교가 <code>&lt;</code>였다면 회차 11이 아직 판매 중(0)이라 공연도
+                  판매 중으로 남는다.
                 </p></div>
             </details>
           </div>
