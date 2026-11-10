@@ -21,12 +21,13 @@ function summaryOf(overrides: Partial<ShowSummary>): ShowSummary {
     },
     salesStatus: 'on_sale',
     salesOpenAt: null,
+    posterUrl: 'http://localhost:3001/posters/show-01.png',
     ...overrides,
   };
 }
 
 describe('selectShowCards', () => {
-  it('공연 기간을 한국 날짜로 바꿔 시작일 ~ 종료일로 보여 준다', () => {
+  it('공연 기간을 한국 날짜로 바꿔 시작일 ~ 종료일로 보여 주고, 포스터 URL은 그대로 둔다', () => {
     const cards = selectShowCards(
       pageOf([
         {
@@ -41,6 +42,7 @@ describe('selectShowCards', () => {
           },
           salesStatus: 'on_sale',
           salesOpenAt: null,
+          posterUrl: 'http://localhost:3001/posters/show-07.png',
         },
       ]),
     );
@@ -53,6 +55,7 @@ describe('selectShowCards', () => {
         period: '2026.03.01 ~ 2026.03.20',
         salesStatus: { label: '판매 중', tone: 'primary' },
         salesOpenAt: null,
+        posterUrl: 'http://localhost:3001/posters/show-07.png',
       },
     ]);
   });
@@ -71,6 +74,7 @@ describe('selectShowCards', () => {
           },
           salesStatus: 'on_sale',
           salesOpenAt: null,
+          posterUrl: 'http://localhost:3001/posters/show-01.png',
         },
       ]),
     );

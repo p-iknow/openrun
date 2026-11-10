@@ -1,4 +1,5 @@
 import { Badge, Skeleton } from '@openrun/store-ui';
+import Image from 'next/image';
 import type { ReactNode } from 'react';
 import type { ShowCardData } from './select-show-cards';
 
@@ -12,19 +13,42 @@ export function ShowCardList({ children }: { children: ReactNode }) {
 }
 
 // 카드와 로딩 카드가 같은 틀을 써서, 응답이 와서 바뀌어도 자리가 흔들리지 않는다.
-function ShowCardFrame({ children }: { children: ReactNode }) {
+// 포스터 자리는 이미지와 상관없이 3:4로 크기가 정해져, 이미지가 늦게 와도 목록이 밀리지 않는다.
+function ShowCardFrame({
+  poster,
+  children,
+}: {
+  poster: ReactNode;
+  children: ReactNode;
+}) {
   return (
     <li className="flex gap-md sm:flex-col sm:gap-sm">
-      {/* 포스터는 뒤 티켓에서 넣는다. 그때도 같은 3:4 자리를 차지한다. */}
-      <Skeleton className="aspect-3/4 w-[96px] shrink-0 sm:w-full" />
+      <div className="relative aspect-3/4 w-[96px] shrink-0 overflow-hidden rounded-card bg-surface-muted sm:w-full">
+        {poster}
+      </div>
       <div className="flex min-w-0 flex-1 flex-col gap-xs">{children}</div>
     </li>
   );
 }
 
+// 모바일은 96px, sm부터 3열, lg부터 4열(본문 최대 폭 1200px 기준 약 280px)이다. ShowCardList의 열 수와 맞춘다.
+const POSTER_SIZES = '(min-width: 1024px) 280px, (min-width: 640px) 33vw, 96px';
+
 export function ShowCard({ card }: { card: ShowCardData }) {
   return (
-    <ShowCardFrame>
+    <ShowCardFrame
+      poster={
+        // 제목이 바로 옆에 글자로 있어 포스터는 장식으로 둔다. 스크린 리더가 제목을 두 번 읽지 않는다.
+        // 로드 전에는 틀의 배경색이 자리 표시자 역할을 한다.
+        <Image
+          src={card.posterUrl}
+          alt=""
+          fill
+          sizes={POSTER_SIZES}
+          className="object-cover"
+        />
+      }
+    >
       <div className="flex items-center gap-sm">
         <Badge tone={card.salesStatus.tone}>{card.salesStatus.label}</Badge>
       </div>
@@ -46,7 +70,7 @@ export function ShowCard({ card }: { card: ShowCardData }) {
 
 export function ShowCardSkeleton() {
   return (
-    <ShowCardFrame>
+    <ShowCardFrame poster={<Skeleton className="size-full rounded-none" />}>
       <Skeleton className="h-[24px] w-[56px] rounded-badge" />
       <Skeleton className="h-[20px] w-full rounded-badge" />
       <Skeleton className="h-[16px] w-1/2 rounded-badge" />

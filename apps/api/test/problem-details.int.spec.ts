@@ -64,6 +64,7 @@ describe('오류 응답', () => {
 
   beforeAll(() => {
     vi.stubEnv('DATABASE_URL', inject('databaseUrl'));
+    vi.stubEnv('POSTER_BASE_URL', 'https://posters.example.com/openrun');
   });
 
   afterAll(() => {
