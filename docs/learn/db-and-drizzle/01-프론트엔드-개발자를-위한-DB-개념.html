@@ -849,19 +849,19 @@ runQuery({ select: ['show_id', 'min(...)'], from: 'performances', groupBy: 'show
             2026-11-10이라고 보고 그 날짜를 직접 적었다. 실제 코드에서는 이 자리에 실행할 때의 시각이 들어간다.
           </p>
           <pre><code class="language-sql">case
-  when is_cancelled              then 2
-  when starts_at &lt;= '2026-11-10' then 3
+  when is_cancelled or starts_at &lt;= '2026-11-10' then 2
+  when '2026-11-10' &lt; sales_open_at              then 1
   else 0
 end</code></pre>
           <pre><code class="language-ts">// 행 하나마다 이 함수를 부르는 것과 같다
 ((row) =&gt; {
-  if (row.isCancelled) return 2;
-  else if (row.startsAt &lt;= '2026-11-10') return 3;
+  if (row.isCancelled || row.startsAt &lt;= '2026-11-10') return 2;
+  else if ('2026-11-10' &lt; row.salesOpenAt) return 1;
   else return 0;
 })(row);</code></pre>
           <ul>
             <li>
-              <strong>위에서부터 먼저 맞는 것 하나만 고른다.</strong> 취소된 회차가 이미 시작했어도 첫 줄에서 2가 정해지고 아래
+              <strong>위에서부터 먼저 맞는 것 하나만 고른다.</strong> 취소된 회차는 판매 오픈 전이어도 첫 줄에서 2가 정해지고 아래
               줄은 보지 않는다. 그래서 <code>when</code>의 순서가 곧 규칙의 우선순위다.
             </li>
             <li>
@@ -909,18 +909,18 @@ Math.min(...list.filter((p) =&gt; !p.isCancelled).map((p) =&gt; p.salesOpenAt));
 
           <h3 id="condition-value">조건식도 값이다</h3>
           <p>
-            <code>remaining * 10 &lt;= total</code> 같은 조건식은 <code>WHERE</code>에서만 쓰는 것이 아니다. 행마다 계산되는
+            <code>starts_at &lt;= '2026-11-10'</code> 같은 조건식은 <code>WHERE</code>에서만 쓰는 것이 아니다. 행마다 계산되는
             true/false <strong>값</strong>이라 <code>select</code>에 그대로 놓을 수도 있다. 자바스크립트에서
-            <code>const isLow = remaining * 10 &lt;= total</code>로 boolean 변수를 만드는 것과 같다.
+            <code>const isStarted = startsAt &lt;= today</code>로 boolean 변수를 만드는 것과 같다.
           </p>
-          <pre><code class="language-sql">select performance_id, remaining * 10 &lt;= total as is_low
-from seat_count</code></pre>
+          <pre><code class="language-sql">select id, starts_at &lt;= '2026-11-10' as is_started
+from performances</code></pre>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>performance_id</th><th>remaining</th><th>total</th><th>is_low</th></tr></thead>
+              <thead><tr><th>id</th><th>starts_at</th><th>is_started</th></tr></thead>
               <tbody>
-                <tr><td>20</td><td>1</td><td>20</td><td>true</td></tr>
-                <tr><td>21</td><td>5</td><td>20</td><td>false</td></tr>
+                <tr><td>10</td><td>2026-11-08 19:30</td><td>true</td></tr>
+                <tr><td>11</td><td>2026-11-15 19:30</td><td>false</td></tr>
               </tbody>
             </table>
           </div>
@@ -951,14 +951,14 @@ from seat_count</code></pre>
             <code>WHERE</code>, <code>CASE WHEN</code>, <code>FILTER (WHERE …)</code>는 조건이 <strong>true인 경우만</strong> 받아
             준다. NULL은 true가 아니므로 false와 똑같이 지나친다. 이 때문에 NULL이 섞이면 생각지 못한 갈래로 빠진다.
           </p>
-          <pre><code class="language-sql">case when remaining = 0 then 'sold_out' else 'on_sale' end</code></pre>
+          <pre><code class="language-sql">case when review_count = 0 then '첫 리뷰를 남겨 주세요' else '리뷰 보기' end</code></pre>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>remaining</th><th><code>remaining = 0</code></th><th>결과</th></tr></thead>
+              <thead><tr><th>review_count</th><th><code>review_count = 0</code></th><th>결과</th></tr></thead>
               <tbody>
-                <tr><td>0</td><td>true</td><td><code>sold_out</code></td></tr>
-                <tr><td>5</td><td>false</td><td><code>on_sale</code></td></tr>
-                <tr><td><strong>NULL</strong></td><td><strong>NULL</strong></td><td><strong><code>on_sale</code></strong>. 남은 좌석을 모르는데 판매 중이 된다</td></tr>
+                <tr><td>0</td><td>true</td><td>첫 리뷰를 남겨 주세요</td></tr>
+                <tr><td>5</td><td>false</td><td>리뷰 보기</td></tr>
+                <tr><td><strong>NULL</strong></td><td><strong>NULL</strong></td><td><strong>리뷰 보기</strong>. 리뷰가 몇 개인지 모르는데 리뷰가 있는 쪽이 된다</td></tr>
               </tbody>
             </table>
           </div>
@@ -981,7 +981,7 @@ from seat_count</code></pre>
             </table>
           </div>
           <p>
-            예를 들어 "판매 중 AND 남은 좌석 10% 이하"에서 <code>total</code>이 NULL이어도, 회차가 판매 중이 아니면(false) 결과는
+            예를 들어 <code>조건A AND review_count = 0</code>에서 <code>review_count</code>가 NULL이어도, 조건A가 false면 결과는
             false로 정해진다.
           </p>
         </section>
@@ -1005,45 +1005,45 @@ from seat_count</code></pre>
           <h3 id="coalesce-left-join">LEFT JOIN이 만든 NULL 메우기</h3>
           <p>
             NULL은 테이블에 저장된 값에서만 오지 않는다. <a href="#join">LEFT JOIN</a>에서 짝이 없는 행은 붙인 쪽 컬럼이 모두 NULL이
-            된다. 회차별로 남은 좌석을 센 결과(<code>seat_count</code>)를 회차에 붙이는 경우를 보자. 회차 22는 회차 좌석을 아직 만들지
-            않아 <code>seat_count</code>에 행이 없다.
+            된다. 공연별로 리뷰 수를 센 결과(<code>review_count</code>)를 공연에 붙이는 경우를 보자. 공연 3은 리뷰가 아직 없어
+            <code>review_count</code>에 행이 없다.
           </p>
           <div class="table-wrap">
             <table>
-              <thead><tr><th colspan="2">performances</th><th colspan="2">seat_count</th></tr><tr><th>id</th><th>show_id</th><th>performance_id</th><th>remaining</th></tr></thead>
+              <thead><tr><th>shows.id</th><th colspan="2">review_count</th></tr><tr><th></th><th>show_id</th><th>count</th></tr></thead>
               <tbody>
-                <tr><td>20</td><td>5</td><td>20</td><td>1</td></tr>
-                <tr><td>21</td><td>5</td><td>21</td><td>0</td></tr>
-                <tr><td>22</td><td>5</td><td>(행 없음)</td><td>(행 없음)</td></tr>
+                <tr><td>1</td><td>1</td><td>4</td></tr>
+                <tr><td>2</td><td>2</td><td>1</td></tr>
+                <tr><td>3</td><td>(행 없음)</td><td>(행 없음)</td></tr>
               </tbody>
             </table>
           </div>
-          <pre><code class="language-sql">select performances.id, seat_count.remaining, coalesce(seat_count.remaining, 0) as remaining_or_zero
-from performances
-left join seat_count on seat_count.performance_id = performances.id</code></pre>
+          <pre><code class="language-sql">select shows.id, review_count.count, coalesce(review_count.count, 0) as count_or_zero
+from shows
+left join review_count on review_count.show_id = shows.id</code></pre>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>id</th><th>seat_count.remaining</th><th>remaining_or_zero</th></tr></thead>
+              <thead><tr><th>id</th><th>review_count.count</th><th>count_or_zero</th></tr></thead>
               <tbody>
-                <tr><td>20</td><td>1</td><td>1</td></tr>
-                <tr><td>21</td><td>0</td><td>0</td></tr>
-                <tr><td>22</td><td><strong>NULL</strong></td><td><strong>0</strong></td></tr>
+                <tr><td>1</td><td>4</td><td>4</td></tr>
+                <tr><td>2</td><td>1</td><td>1</td></tr>
+                <tr><td>3</td><td><strong>NULL</strong></td><td><strong>0</strong></td></tr>
               </tbody>
             </table>
           </div>
           <p>
-            <code>coalesce</code> 없이 <code>remaining = 0</code>을 조건에 쓰면, 회차 22는 <a href="#null-as-false">조건 자리에서
-            NULL이 false처럼 지나가</a> 매진이 아닌 쪽으로 빠진다.
+            <code>coalesce</code> 없이 <code>review_count.count = 0</code>을 조건에 쓰면, 공연 3은 <a href="#null-as-false">조건
+            자리에서 NULL이 false처럼 지나가</a> 리뷰가 없는 쪽으로 잡히지 않는다.
           </p>
           <div class="callout">
             <p>
-              <strong>바꿀 값은 의미로 고른다.</strong> 여기서 0을 고른 것은 "회차 좌석이 없으면 팔 좌석도 없다"가 이 서비스의
-              규칙이기 때문이다. 아무 생각 없이 0이나 빈 문자열을 넣으면 "모름"이 엉뚱한 값으로 둔갑한다.
+              <strong>바꿀 값은 의미로 고른다.</strong> 여기서 0을 고른 것은 "리뷰 행이 없으면 리뷰가 0개"이기 때문이다. 아무
+              생각 없이 0이나 빈 문자열을 넣으면 "모름"이 엉뚱한 값으로 둔갑한다.
             </p>
           </div>
           <p>
             <a href="#aggregate"><code>count(*)</code></a>는 셀 행이 없으면 0을 주는데, 왜 여기서는 NULL이 나올까?
-            <code>seat_count</code> 안에서 <code>count(*)</code>는 회차 좌석이 있는 회차만 묶어서 센다. 회차 22는 묶을 행이 없어
+            <code>review_count</code> 안에서 <code>count(*)</code>는 리뷰가 있는 공연만 묶어서 센다. 공연 3은 묶을 행이 없어
             <strong>결과 행 자체가 생기지 않고</strong>, 그 빈자리를 LEFT JOIN이 NULL로 채운다.
           </p>
         </section>
@@ -1062,17 +1062,17 @@ left join seat_count on seat_count.performance_id = performances.id</code></pre>
               </tbody>
             </table>
           </div>
-          <p>공연 5의 회차 중 매진 임박인 회차가 하나라도 있는지 구한다.</p>
-          <pre><code class="language-sql">select show_id, bool_or(is_almost_sold_out)
-from performance_status
+          <p>공연 5의 회차 중 취소된 회차가 하나라도 있는지 구한다.</p>
+          <pre><code class="language-sql">select show_id, bool_or(is_cancelled)
+from performances
 group by show_id</code></pre>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>회차</th><th>show_id</th><th>is_almost_sold_out</th></tr></thead>
+              <thead><tr><th>회차</th><th>show_id</th><th>is_cancelled</th></tr></thead>
               <tbody>
-                <tr><td>20 (판매 중, 20석 중 1석)</td><td>5</td><td>true</td></tr>
-                <tr><td>21 (매진)</td><td>5</td><td>false</td></tr>
-                <tr><td>23 (판매 예정)</td><td>5</td><td>false</td></tr>
+                <tr><td>20</td><td>5</td><td>false</td></tr>
+                <tr><td>21</td><td>5</td><td>true</td></tr>
+                <tr><td>23</td><td>5</td><td>false</td></tr>
               </tbody>
             </table>
           </div>
@@ -1113,18 +1113,18 @@ group by show_id</code></pre>
             </table>
           </div>
           <p>
-            <a href="#aggregate"><code>count(*)</code></a>는 정수(<code>bigint</code>)를 돌려준다. "남은 좌석이 전체의 10% 이하"를
-            <code>remaining / total &lt;= 0.1</code>로 쓰면, 20석 중 3석이 남은 회차는 <code>3 / 20</code>이 0이 되어 10% 이하로
-            잘못 판단된다.
+            <a href="#aggregate"><code>count(*)</code></a>는 정수(<code>bigint</code>)를 돌려준다. 두 개수의 비율이 "10% 이하"인지를
+            <code>part / total &lt;= 0.1</code>로 쓰면, 20개 중 3개인 경우 <code>3 / 20</code>이 0이 되어 10% 이하로 잘못
+            판단된다.
           </p>
           <p>
             나누지 말고 양쪽에 <code>total</code>을 곱해 <strong>곱셈으로 바꾸면</strong> 정수끼리 정확히 비교된다.
-            <code>remaining / total &lt;= 1/10</code>은 <code>remaining * 10 &lt;= total</code>과 같은 뜻이다(<code>total</code>은 0보다
+            <code>part / total &lt;= 1/10</code>은 <code>part * 10 &lt;= total</code>과 같은 뜻이다(<code>total</code>은 0보다
             크다).
           </p>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>남은 좌석 / 전체</th><th><code>remaining * 10 &lt;= total</code></th><th>결과</th></tr></thead>
+              <thead><tr><th>part / total</th><th><code>part * 10 &lt;= total</code></th><th>결과</th></tr></thead>
               <tbody>
                 <tr><td>3 / 20</td><td><code>30 &lt;= 20</code></td><td>false (15%)</td></tr>
                 <tr><td>2 / 20</td><td><code>20 &lt;= 20</code></td><td>true (10%)</td></tr>

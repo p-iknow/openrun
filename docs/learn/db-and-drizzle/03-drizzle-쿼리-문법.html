@@ -310,13 +310,12 @@ this.db
             방법이 없고, <a href="01-프론트엔드-개발자를-위한-DB-개념.html#bool-or"><code>bool_or</code></a>는 헬퍼가 아예 없다. 이럴
             때는 <a href="#sql-fragment"><code>sql</code> 템플릿</a>으로 직접 쓴다.
           </p>
-          <pre><code class="language-ts">// apps/api/src/shows/show-sales-status.ts
-remaining: sql&lt;number&gt;`count(*) filter (where not ${performanceSeats.isSold})`
+          <pre><code class="language-ts">// 예: 공연별로 묶은 회차에서 (groupBy(performances.showId))
+total: count().as('total'),                // 전체 회차 수
+active: sql&lt;number&gt;`count(*) filter (where not ${performances.isCancelled})`
   .mapWith(Number)
-  .as('remaining'),
-total: count().as('total'),
-
-isAlmostSoldOut: sql&lt;boolean&gt;`bool_or(${isAlmostSoldOut})`.as('is_almost_sold_out'),</code></pre>
+  .as('active'),                           // 취소되지 않은 회차 수
+hasCancelled: sql&lt;boolean&gt;`bool_or(${performances.isCancelled})`.as('has_cancelled'), // 취소된 회차가 있는가</code></pre>
           <div class="table-wrap">
             <table>
               <thead><tr><th>값</th><th>쓴 방법</th><th><code>.mapWith</code></th></tr></thead>
@@ -327,12 +326,12 @@ isAlmostSoldOut: sql&lt;boolean&gt;`bool_or(${isAlmostSoldOut})`.as('is_almost_s
                   <td>필요 없다. 헬퍼가 안에서 숫자로 바꿔 준다</td>
                 </tr>
                 <tr>
-                  <td><code>remaining</code></td>
+                  <td><code>active</code></td>
                   <td><code>sql</code>로 쓴 <code>count(*) filter (...)</code></td>
                   <td><code>.mapWith(Number)</code>. <code>count(*)</code>는 <code>bigint</code>이고, 드라이버가 <code>bigint</code>를 문자열(<code>'3'</code>)로 준다(<a href="#map-with">.mapWith</a>)</td>
                 </tr>
                 <tr>
-                  <td><code>isAlmostSoldOut</code></td>
+                  <td><code>hasCancelled</code></td>
                   <td><code>sql</code>로 쓴 <code>bool_or(...)</code></td>
                   <td>필요 없다. 드라이버가 boolean은 처음부터 JS <code>true</code>/<code>false</code>로 준다</td>
                 </tr>
@@ -408,34 +407,7 @@ this.db.select({ status: salesStatus.salesStatus }).from(shows).innerJoin(salesS
             인자로 받는다. 함수를 부를 때마다 새 서브쿼리 객체가 생기므로, 한 쿼리 안에서는 한 번 만든 객체를 같이 쓴다.
           </p>
 
-          <h3 id="subquery-left-join">서브쿼리를 leftJoin할 때</h3>
-          <pre><code class="language-ts">// apps/api/src/shows/show-sales-status.ts
-const seatCount = seatCountSubquery(db); // 회차별 남은 좌석, 전체 좌석
-const remaining = sql&lt;number&gt;`coalesce(${seatCount.remaining}, 0)`;
-
-db.select({ /* remaining을 쓰는 계산 */ })
-  .from(performances)
-  .leftJoin(seatCount, eq(seatCount.performanceId, performances.id))
-  .groupBy(performances.showId)
-  .as('show_sales_status'); // 이 쿼리도 다시 서브쿼리가 된다</code></pre>
-          <ul>
-            <li>
-              <strong>서브쿼리 안에서 서브쿼리를 JOIN할 수 있다.</strong> <code>seat_count</code>를 JOIN한 쿼리가 다시
-              <code>.as()</code>로 서브쿼리가 되어, SQL에서는 괄호가 두 겹이 된다.
-            </li>
-            <li>
-              <strong>짝이 없는 행에서는 서브쿼리 컬럼이 NULL이다.</strong> 회차 좌석이 없는 회차는 <code>seat_count</code>에 행이 없어
-              <code>seatCount.remaining</code>이 NULL이다. <code>select</code>에서 그대로 고르면 Drizzle이 결과 타입을
-              <code>number | null</code>로 알려 주지만, 위처럼 <code>sql</code> 조각 안에 넣으면 타입은 <code>sql&lt;number&gt;</code>에
-              적은 대로만 믿는다. NULL을 직접 챙겨야 한다.
-            </li>
-            <li>
-              <strong>그래서 <code>coalesce</code>로 감싼 조각을 한 번 만들어 같이 쓴다.</strong> NULL이 조건에 들어가면 엉뚱한 갈래로
-              빠지므로(<a href="01-프론트엔드-개발자를-위한-DB-개념.html#null-as-false">조건 자리에서 NULL은 false처럼 지나간다</a>),
-              <a href="01-프론트엔드-개발자를-위한-DB-개념.html#coalesce"><code>coalesce(…, 0)</code></a>으로 0을 채운
-              <code>remaining</code>을 만들어 판매 상태와 매진 임박 계산에 모두 넘긴다.
-            </li>
-          </ul>
+        </section>
 
         <section id="parallel">
           <h2>쿼리 두 개를 함께 보내기</h2>
@@ -559,8 +531,7 @@ await tx.execute(sql`TRUNCATE ${performances}, ${shows}, ${venues} RESTART IDENT
 // 조각을 돌려주는 함수 (실제 코드에서 줄였다)
 function performancePriority(now: Date): SQL&lt;number&gt; {
   return sql&lt;number&gt;`case
-    when ${performances.isCancelled} then 3
-    when ${performances.startsAt} &lt;= ${now} then 4
+    when ${performances.isCancelled} or ${performances.startsAt} &lt;= ${now} then 2
     else 0
   end`;
 }
@@ -568,8 +539,8 @@ function performancePriority(now: Date): SQL&lt;number&gt; {
 const priority = performancePriority(now);
 const showPriority = sql`min(${priority})`; // 조각 안에 조각을 넣는다</code></pre>
           <pre><code class="language-sql">min(case
-    when "performances"."is_cancelled" then 3
-    when "performances"."starts_at" &lt;= '2026-11-10 12:00+09' then 4   -- now(2026-11-10 12:00, 한국 시각). 실제로는 빈칸 $1로 따로 간다
+    when "performances"."is_cancelled" or "performances"."starts_at" &lt;= '2026-11-10 12:00+09' then 2
+    -- '2026-11-10 12:00+09'은 now(한국 시각). 실제로는 빈칸 $1로 따로 간다
     else 0
   end)</code></pre>
           <h3><code>${...}</code>에 넣을 수 있는 것</h3>
@@ -646,19 +617,19 @@ min('10', '9') → '10'                              -- '1'이 '9'보다 앞이�
 -- 결과 자리가 숫자 리터럴: integer가 된다
 SELECT pg_typeof(CASE WHEN true THEN 2 ELSE 0 END); -- integer</code></pre>
           <p>
-            그래서 판매 상태 순번(<code>0</code>~<code>3</code>)과 상태 이름(<code>'on_sale'</code>)처럼 코드에 고정된 상수는
+            그래서 판매 상태 순번(<code>0</code>~<code>2</code>)과 상태 이름(<code>'on_sale'</code>)처럼 코드에 고정된 상수는
             <code>sql.raw</code>로 리터럴로 넣었다. SQL을 읽을 때도 <code>then $3</code>보다 <code>then 2</code>가 뜻이 바로
             보인다. 반대로 <code>now</code>처럼 실행할 때마다 달라지는 값은 파라미터로 보낸다.
           </p>
           <pre><code class="language-ts">// apps/api/src/shows/show-sales-status.ts
 function priorityOf(status: ShowSalesStatus): SQL {
-  return sql.raw(String(SHOW_SALES_STATUSES.indexOf(status))); // 'cancelled' → 2
+  return sql.raw(String(SHOW_SALES_STATUSES.indexOf(status))); // 'ended' → 2
 }
 function literalOf(status: ShowSalesStatus): SQL {
   return sql.raw(`'${status}'`); // 'on_sale' → 'on_sale'(작은따옴표 포함)
 }</code></pre>
           <p>
-            인자 타입이 <code>ShowSalesStatus</code>라서 정해진 네 값 말고는 들어올 수 없다. 이렇게 타입으로 입력을 막아 두면
+            인자 타입이 <code>ShowSalesStatus</code>라서 정해진 세 값 말고는 들어올 수 없다. 이렇게 타입으로 입력을 막아 두면
             <code>sql.raw</code>를 써도 안전하다는 것을 코드만 보고 알 수 있다.
           </p>
         </section>
@@ -669,14 +640,14 @@ function literalOf(status: ShowSalesStatus): SQL {
   SHOW_SALES_STATUSES.map((status) =&gt; sql`when ${priorityOf(status)} then ${literalOf(status)}`),
   sql` `, // 조각 사이에 넣을 구분자
 );</code></pre>
-          <pre><code class="language-sql">when 0 then 'on_sale' when 1 then 'upcoming' when 2 then 'cancelled' when 3 then 'ended'</code></pre>
+          <pre><code class="language-sql">when 0 then 'on_sale' when 1 then 'upcoming' when 2 then 'ended'</code></pre>
           <p>
             <code>sql.join(조각 배열, 구분자)</code>는 <code>Array.prototype.join</code>의 SQL 조각 버전이다. 문자열이 아니라
             조각을 잇기 때문에, 각 조각의 파라미터도 순서대로 함께 이어진다. 구분자도 조각으로 넘긴다. 쉼표로 이으려면
             <code>sql`, `</code>를 넘긴다.
           </p>
           <p>
-            배열에서 SQL을 만들면 배열이 바뀔 때 SQL도 따라 바뀐다. 판매 상태에 <code>sold_out</code>을 더하면 배열에 한
+            배열에서 SQL을 만들면 배열이 바뀔 때 SQL도 따라 바뀐다. 판매 상태를 하나 더하면 배열에 한
             줄만 넣으면 되고, 순번과 위 매핑은 다시 손으로 고치지 않는다.
           </p>
         </section>
