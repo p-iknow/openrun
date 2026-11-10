@@ -331,73 +331,46 @@
           </ol>
           <p>
             <code>seats</code>는 한 줄도 늘지 않는다. 공연이 몇 개 올라오든 좌석 10은 하나이고, 공연마다 달라지는 것(판매 여부,
-            좌석 등급)은 좌석이 아니라 회차 좌석과 구역 등급 쪽에 둔다. 지금은 회차와 회차 좌석을 시드가 만들고, 좌석 배치 편집기는
+            좌석 등급)은 좌석 테이블이 아니라 회차 좌석과 공연별 좌석 등급 지정 쪽에 둔다. 지금은 회차와 회차 좌석을 시드가 만들고, 좌석 배치 편집기는
             만들지 않는다.
           </p>
 
           <h3 id="why-section">공연장과 좌석 사이에 구역을 둔 이유</h3>
           <p>
-            용어집은 구역을 "공연장의 좌석을 나눈 묶음이며, 공연마다 좌석 등급을 지정하는 단위"로 정한다. 좌석 등급(VIP석, R석 같은
-            이름과 가격)은 뒤 티켓에서 붙이는데, 같은 공연장이라도 공연마다 등급을 다르게 나눈다. 등급을 붙일 방법으로 대안 두
-            가지를 따져 보고 구역 테이블을 골랐다.
-          </p>
-          <p>
-            좌석 등급 테이블은 아직 없다. 아래에 나오는 등급 테이블은 뒤 티켓에서 생긴다고 가정한 모양이다. 지금 구조라면 등급은
-            "공연 × 구역"마다 한 줄이 된다.
+            용어집은 구역을 "공연장의 좌석을 나눈 묶음이며, 좌석의 위치를 나타낸다"로 정한다. 좌석은 "A구역 C열 5번"처럼 구역, 열,
+            번호로 불린다. 구역은 좌석 위치를 부르는 이름의 첫 단계이고, 화면과 어드민에서 좌석을 묶어 다루는 단위다.
           </p>
           <div class="table-wrap">
             <table>
-              <thead><tr><th colspan="3">section_grades (공연별 구역 등급, 가정) — 지금 구조</th></tr><tr><th>show_id</th><th>section_id</th><th>grade</th></tr></thead>
+              <thead><tr><th>구역을 쓰는 곳</th><th>예</th></tr></thead>
               <tbody>
-                <tr><td><strong>5</strong></td><td><strong>1</strong> (A구역)</td><td>VIP석</td></tr>
-                <tr><td><strong>5</strong></td><td><strong>2</strong> (B구역)</td><td>R석</td></tr>
+                <tr><td>좌석 표기</td><td>티켓, 주문 내역의 "A구역 C열 5번"</td></tr>
+                <tr><td>좌석 선택 화면(1.5)</td><td>구역별로 좌석을 묶어 보여 준다</td></tr>
+                <tr><td>좌석 등급 지정(1.7 어드민)</td><td>"A구역 전체" 또는 "A구역의 A~C열"을 골라 한 번에 등급을 넣는다</td></tr>
               </tbody>
             </table>
+          </div>
+          <div class="callout">
+            <p>
+              <strong>좌석 등급은 구역이 아니라 좌석마다 지정한다.</strong> 처음 기획은 "등급은 구역 단위로 지정한다"였지만, 이
+              문서를 리뷰하며 실제 예매 서비스처럼 바꿨다. 실제 공연장에서는 같은 구역 안에서도 앞 몇 열은 VIP석, 뒤는 R석처럼 열에
+              따라 등급이 갈리고, 그 경계가 공연마다 다르다. 그래서 등급 지정은 #49에서 공연마다 좌석 하나하나를 가리키는 테이블로
+              만든다. 600석이면 공연 하나에 600행이지만, 어드민은 구역·열 단위로 골라 한 번에 넣으므로 운영자가 600번 입력하지는 않는다.
+            </p>
           </div>
 
-          <h4 id="section-per-seat">대안 1: 좌석마다 등급을 지정한다</h4>
+          <h4 id="section-as-text">대안: 구역을 좌석의 글자 컬럼으로 둔다</h4>
           <p>
-            <strong>문제: 공연마다 좌석 수만큼 등급 줄을 만들어야 한다.</strong>
+            <strong>문제: 구역 이름이 좌석마다 반복되어, 이름에 오타가 있어도 DB가 막지 못하고(외래 키를 걸 대상이 없다), 구역 이름을
+            바꾸면 그 구역 좌석을 모두 고쳐야 한다.</strong>
           </p>
           <p>
-            <code>sections</code>는 있어도 없어도 되고, 등급 테이블이 구역 대신 좌석을 가리킨다.
-          </p>
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th colspan="3">seat_grades (공연별 좌석 등급) — 대안 1</th></tr><tr><th>show_id</th><th>seat_id</th><th>grade</th></tr></thead>
-              <tbody>
-                <tr><td><strong>5</strong></td><td><strong>10</strong></td><td>VIP석</td></tr>
-                <tr><td><strong>5</strong></td><td><strong>11</strong></td><td>VIP석</td></tr>
-                <tr><td><strong>5</strong></td><td><strong>12</strong></td><td>R석</td></tr>
-              </tbody>
-            </table>
-          </div>
-          <p>
-            예시는 좌석이 셋뿐이라 차이가 작아 보인다. 등급은 보통 "1층 앞쪽은 VIP"처럼 묶음 단위로 정하므로, 좌석 하나하나에 적으면
-            같은 등급이 반복된다. 서울 그랜드 씨어터(600석, 구역 4개, 구역당 150석)에 공연 하나를 올리면 이렇다.
+            <code>sections</code> 테이블을 없애고, <code>seats</code>가 공연장 id와 구역 이름 글자를 직접 갖는다. 열 이름(<code>row</code>)을
+            글자로 두는 것과 같은 방식이다.
           </p>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>항목</th><th>대안 1: <code>seat_grades</code></th><th>지금 구조: <code>section_grades</code></th></tr></thead>
-              <tbody>
-                <tr><td>공연 하나의 등급 줄</td><td>600줄. A구역 150줄이 모두 VIP석</td><td>4줄</td></tr>
-                <tr><td>A구역을 R석으로 바꾸면</td><td>150줄을 고친다. 몇 줄 빠지면 A구역 안에 VIP석이 섞인다</td><td>1줄을 고친다</td></tr>
-              </tbody>
-            </table>
-          </div>
-
-          <h4 id="section-as-text">대안 2: 구역을 좌석의 글자 컬럼으로 둔다</h4>
-          <p>
-            <strong>문제: 등급 테이블에서 구역을 이름 글자로 가리켜야 해서, 이름에 오타가 있어도 DB가 막지 못하고(외래 키를 걸 대상이
-            없다), 구역 이름을 바꾸면 좌석과 등급 테이블의 이름을 모두 고쳐야 한다.</strong>
-          </p>
-          <p>
-            <code>sections</code> 테이블을 없애고, <code>seats</code>가 공연장 id와 구역 이름 글자를 직접 갖는다. 등급 테이블도 구역
-            id 대신 구역 이름을 적는다. 테이블이 셋(<code>venues</code>, <code>seats</code>, 등급)에서 끝난다.
-          </p>
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th colspan="5">seats (좌석) — 대안 2</th></tr><tr><th>id</th><th>venue_id</th><th>section</th><th>row</th><th>number</th></tr></thead>
+              <thead><tr><th colspan="5">seats (좌석) — 대안</th></tr><tr><th>id</th><th>venue_id</th><th>section</th><th>row</th><th>number</th></tr></thead>
               <tbody>
                 <tr><td>10</td><td><strong>1</strong></td><td>A구역</td><td>C</td><td>5</td></tr>
                 <tr><td>11</td><td><strong>1</strong></td><td>A구역</td><td>C</td><td>6</td></tr>
@@ -405,69 +378,54 @@
               </tbody>
             </table>
           </div>
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th colspan="3">section_grades (공연별 구역 등급) — 대안 2</th></tr><tr><th>show_id</th><th>section</th><th>grade</th></tr></thead>
-              <tbody>
-                <tr><td><strong>5</strong></td><td>A구역</td><td>VIP석</td></tr>
-                <tr><td><strong>5</strong></td><td>B구역</td><td>R석</td></tr>
-              </tbody>
-            </table>
-          </div>
           <p>
-            지금 구조(<a href="#tables">지금 구조의 테이블</a>의 <code>sections</code>, <code>seats</code>와 위 <code>section_grades</code>)와
-            비교하면, 구역을 가리키는 칸이 숫자 id(외래 키)에서 이름 글자로 바뀌었다. 등급 테이블은 이름으로도 구역을 가리킬 수는
-            있다. 문제는 그 이름이 맞는지 DB가 확인해 주지 않는다는 점이다.
+            지금 구조(<a href="#tables">지금 구조의 테이블</a>의 <code>sections</code>, <code>seats</code>)와 비교하면, 좌석이 구역을
+            가리키는 칸이 숫자 id(외래 키)에서 이름 글자로 바뀌었다. 열은 글자로 둬도 되는데 구역은 왜 안 될까? 열은 좌석 위치를
+            나타내는 글자일 뿐 따로 다룰 일이 없지만, 구역은 위 표처럼 목록으로 보여 주고, 골라서 묶어 다루고, 이름을 바꾸는 대상이기
+            때문이다. 그 차이가 아래 문제로 나타난다.
           </p>
 
           <h4 id="section-typo">문제 1: 오타를 막지 못한다</h4>
-          <p>운영자가 등급을 넣다가 "A구역"을 "A 구역"(띄어쓰기)으로 적었다.</p>
+          <p>시드나 운영자가 좌석을 넣다가 "A구역"을 "A구억"으로 적었다.</p>
           <div class="table-wrap">
             <table>
-              <thead>
-                <tr><th>방식</th><th>넣으려는 등급</th><th>결과</th></tr>
-              </thead>
+              <thead><tr><th>방식</th><th>넣으려는 좌석</th><th>결과</th></tr></thead>
               <tbody>
                 <tr>
                   <td>글자 컬럼</td>
-                  <td><code>section_grades</code>에 show_id 5, section <strong>A 구역</strong>, grade VIP석</td>
+                  <td><code>seats</code>에 venue_id 1, section <strong>A구억</strong>, row C, number 7</td>
                   <td>
-                    들어간다. 좌석에 "A 구역"이 없으니 A구역 좌석 10, 11은 등급이 없는 채로 남는다. 가격을 모르는 좌석이 생기고,
-                    누군가 화면을 보고 알아챌 때까지 모른다
+                    들어간다. 혼자만 "A구억"이라는 구역에 속한 좌석이 생긴다. 어드민에서 "A구역 전체"에 VIP석을 지정해도 이 좌석은
+                    빠져 등급이 없는 채로 남고, 누군가 화면을 보고 알아챌 때까지 모른다
                   </td>
                 </tr>
                 <tr>
                   <td>구역 테이블</td>
-                  <td><code>section_grades</code>에 show_id 5, section_id <strong>3</strong>, grade VIP석 (구역 3은 없다)</td>
+                  <td><code>seats</code>에 section_id <strong>3</strong>, row C, number 7 (구역 3은 없다)</td>
                   <td>
-                    <a href="01-프론트엔드-개발자를-위한-DB-개념.html#fk">외래 키</a>가 거부한다. 넣는 순간 에러가 난다
+                    <a href="01-프론트엔드-개발자를-위한-DB-개념.html#fk">외래 키</a>가 거부한다. 넣는 순간 에러가 난다. 구역 이름은
+                    <code>sections</code>에 한 번만 적으니 오타가 나도 그 구역 전체가 같이 틀려 바로 보인다
                   </td>
                 </tr>
               </tbody>
             </table>
           </div>
-          <p>좌석을 넣을 때도 같다. 글자 컬럼이면 "A구억" 같은 오타로 혼자 다른 구역인 좌석이 생겨도 DB는 받는다.</p>
 
           <h4 id="section-rename">문제 2: 이름을 바꾸면 여러 곳을 고쳐야 한다</h4>
-          <p>"A구역"을 "1층 A구역"으로 바꾼다. 600석 공연장이면 A구역 좌석이 150줄이다.</p>
+          <p>"A구역"을 "1층 A구역"으로 바꾼다. 600석 공연장이면 A구역 좌석이 150행이다.</p>
           <div class="table-wrap">
             <table>
-              <thead>
-                <tr><th>방식</th><th>고칠 곳</th><th>하나라도 빠지면</th></tr>
-              </thead>
+              <thead><tr><th>방식</th><th>고칠 곳</th><th>하나라도 빠지면</th></tr></thead>
               <tbody>
                 <tr>
                   <td>글자 컬럼</td>
-                  <td>
-                    좌석 150줄의 <code>section</code><br />
-                    + 그 공연장에 올라온 모든 공연의 등급 테이블에서 "A구역"인 줄
-                  </td>
-                  <td>좌석은 "1층 A구역"인데 등급 테이블은 "A구역"이라 연결이 끊긴다. 문제 1과 같은 상태가 된다</td>
+                  <td>좌석 150행의 <code>section</code></td>
+                  <td>한 구역이 "A구역"과 "1층 A구역" 두 개로 쪼개져 보인다</td>
                 </tr>
                 <tr>
                   <td>구역 테이블</td>
-                  <td><code>sections</code>의 1줄(<code>name</code>)</td>
-                  <td>빠질 곳이 없다. 좌석과 등급 테이블은 이름이 아니라 구역 id 1을 들고 있어 그대로다</td>
+                  <td><code>sections</code>의 1행(<code>name</code>)</td>
+                  <td>빠질 곳이 없다. 좌석은 이름이 아니라 구역 id 1을 들고 있어 그대로다</td>
                 </tr>
               </tbody>
             </table>
@@ -481,9 +439,9 @@
               </thead>
               <tbody>
                 <tr>
-                  <td>공연장의 구역 목록 보기(등급 지정 화면의 선택지)</td>
+                  <td>공연장의 구역 목록 보기(좌석 선택 화면, 등급 지정 화면의 선택지)</td>
                   <td>좌석 600줄에서 <code>select distinct section</code>으로 매번 뽑는다</td>
-                  <td><code>sections</code>에서 <code>venue_id = 1</code>인 줄. 4줄이다</td>
+                  <td><code>sections</code>에서 <code>venue_id = 1</code>인 행. 4행이다</td>
                 </tr>
                 <tr>
                   <td>좌석이 아직 없는 구역 두기</td>
@@ -504,13 +462,13 @@
             </table>
           </div>
           <p>
-            세 문제는 뿌리가 같다. 글자 컬럼은 같은 사실("이 공연장에 A구역이 있다")을 좌석 줄마다, 등급 줄마다 반복해서 적는다.
-            반복된 사본끼리 어긋나도 DB가 모른다. 구역 테이블은 그 사실을 한 줄에만 적고, 나머지는 id로 그 줄을 가리킨다. 이렇게
+            세 문제는 뿌리가 같다. 글자 컬럼은 같은 사실("이 공연장에 A구역이 있다")을 좌석 행마다 반복해서 적는다.
+            반복된 사본끼리 어긋나도 DB가 모른다. 구역 테이블은 그 사실을 한 행에만 적고, 좌석은 id로 그 행을 가리킨다. 이렇게
             같은 사실을 한 곳에만 두도록 테이블을 나누는 것을 <strong>정규화</strong>라고 한다.
           </p>
           <p>
-            두 대안을 피해 구역을 테이블로 두면, 등급 지정은 "공연 × 구역" 몇 줄로 끝나고 구역 id를 외래 키로 가리킬 수 있다. 그래서
-            좌석 등급이 없는 지금도 구역 테이블을 먼저 만들었다.
+            그래서 구역은 좌석의 글자 컬럼이 아니라 테이블로 두고, 좌석이 구역 id를 외래 키로 가리키게 했다. 좌석 선택 화면과
+            등급 지정이 아직 없는 지금도 구역 테이블을 먼저 만든 이유다.
           </p>
 
           <h3 id="why-module">테이블을 둔 모듈</h3>

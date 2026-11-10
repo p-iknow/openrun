@@ -6,7 +6,7 @@ export const venues = pgTable('venues', {
   name: text().notNull(),
 });
 
-// 공연마다 좌석 등급을 지정하는 단위다. 좌석 등급은 뒤 티켓에서 붙인다.
+// 공연장의 좌석을 나눈 묶음으로, 좌석의 위치(예: A구역 C열 5번)를 나타낸다. 좌석 등급은 구역이 아니라 좌석마다 지정한다.
 export const sections = pgTable(
   'sections',
   {
