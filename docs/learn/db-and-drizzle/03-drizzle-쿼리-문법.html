@@ -554,11 +554,11 @@ await tx.execute(sql`TRUNCATE ${performances}, ${shows}, ${venues} RESTART IDENT
           </p>
           <pre><code class="language-ts">import { type SQL, sql } from 'drizzle-orm';
 
-// 조각을 돌려주는 함수
+// 조각을 돌려주는 함수 (실제 코드에서 줄였다)
 function performancePriority(now: Date): SQL&lt;number&gt; {
   return sql&lt;number&gt;`case
-    when ${performances.isCancelled} then 2
-    when ${performances.startsAt} &lt;= ${now} then 3
+    when ${performances.isCancelled} then 3
+    when ${performances.startsAt} &lt;= ${now} then 4
     else 0
   end`;
 }
@@ -566,8 +566,8 @@ function performancePriority(now: Date): SQL&lt;number&gt; {
 const priority = performancePriority(now);
 const showPriority = sql`min(${priority})`; // 조각 안에 조각을 넣는다</code></pre>
           <pre><code class="language-sql">min(case
-    when "performances"."is_cancelled" then 2
-    when "performances"."starts_at" &lt;= $1 then 3
+    when "performances"."is_cancelled" then 3
+    when "performances"."starts_at" &lt;= $1 then 4
     else 0
   end)
 -- params: [2026-11-10T03:00:00.000Z]   ← now가 2026-11-10 12:00(한국 시각)일 때</code></pre>
