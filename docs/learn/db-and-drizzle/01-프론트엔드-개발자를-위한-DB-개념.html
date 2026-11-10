@@ -22,6 +22,7 @@
           <li><a href="#constraint">제약: DB가 하는 검증</a></li>
           <li><a href="#join">JOIN: 두 테이블을 이어 붙이기</a></li>
           <li><a href="#index">인덱스: 찾아보기 목차</a></li>
+          <li><a href="#unique">유니크 제약</a></li>
           <li><a href="#sql">SQL 문장의 두 종류</a></li>
           <li><a href="#timestamptz">timestamptz</a></li>
           <li><a href="#order-limit">ORDER BY, LIMIT, OFFSET</a></li>
@@ -154,7 +155,7 @@ const venue = venues[shows[1].venueId]; // 필요할 때 id로 찾아 붙인다<
         <section id="constraint">
           <h2>제약: DB가 하는 검증</h2>
           <p>
-            <code>NOT NULL</code>, 기본 키, 외래 키처럼 DB가 값을 검사하는 규칙을 <strong>제약</strong>(constraint)이라고
+            <code>NOT NULL</code>, 기본 키, 외래 키, <a href="#unique">유니크</a>처럼 DB가 값을 검사하는 규칙을 <strong>제약</strong>(constraint)이라고
             한다. 폼 값을 zod 같은 라이브러리로 검증하는 것과 비슷한데, 검증이 DB 안에서 일어난다. 제약을 어기는 SQL은
             실패하고 데이터는 바뀌지 않는다. API 코드에 버그가 있어도 깨진 데이터가 저장되지 않는 마지막 방어선이다.
           </p>
@@ -365,6 +366,133 @@ byShowId.get(3);</code></pre>
             DB는 쿼리를 받으면 인덱스를 쓸지, 테이블 전체를 읽을지를 스스로 정한다. 이 결정을
             <strong>실행 계획</strong>이라고 하며, SQL 앞에 <code>EXPLAIN</code>을 붙이면 볼 수 있다.
           </p>
+
+          <h3 id="composite-index">여러 컬럼 인덱스는 앞 컬럼부터 쓴다</h3>
+          <p>
+            인덱스는 컬럼 여러 개를 묶어 만들 수도 있다. <code>(performance_id, seat_id)</code> 인덱스는 먼저
+            <code>performance_id</code>로 정렬하고, 같은 <code>performance_id</code> 안에서 <code>seat_id</code>로 정렬한 목록이다.
+            전화번호부가 (성, 이름) 순으로 정렬된 것과 같다.
+          </p>
+          <pre><code class="language-ts">// (performance_id, seat_id) 인덱스를 배열로 그리면
+const index = [
+  { performance_id: 1, seat_id: 1 },
+  { performance_id: 1, seat_id: 2 },
+  { performance_id: 1, seat_id: 3 },
+  { performance_id: 2, seat_id: 1 }, // performance_id가 바뀌면 seat_id는 다시 1부터
+  { performance_id: 2, seat_id: 2 },
+];</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>찾는 조건</th><th>인덱스를 쓸 수 있나</th><th>전화번호부로 치면</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>performance_id = 1 and seat_id = 2</code></td><td>쓴다</td><td>"김영희" 찾기</td></tr>
+                <tr><td><code>performance_id = 1</code></td><td>쓴다. 앞 컬럼만으로도 정렬되어 있다</td><td>"김씨 전체" 찾기</td></tr>
+                <tr><td><code>seat_id = 2</code></td><td>잘 쓰지 못한다. 뒤 컬럼은 앞 컬럼마다 흩어져 있다(아래 참고)</td><td>"이름이 영희인 사람 전체" 찾기</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            그래서 <code>(a, b)</code> 인덱스가 있으면 <code>a</code> 하나짜리 인덱스는 따로 만들 필요가 없다. 반대로
+            <code>b</code>만으로 찾는 일이 잦으면 <code>b</code> 인덱스가 따로 있어야 한다. 묶음 인덱스에서는 컬럼 순서가 곧 쓰임새다.
+          </p>
+          <p>
+            PostgreSQL 18(이 저장소가 쓰는 버전)부터는 <strong>skip scan</strong>이 있어서, 앞 컬럼의 서로 다른 값이 적으면
+            "김씨 중 영희, 이씨 중 영희, …"처럼 앞 컬럼 값마다 건너뛰며 뒤 컬럼으로 찾기도 한다. 앞 컬럼 값이 많으면 이득이 없어
+            쓰지 않는다. 뒤 컬럼으로 자주 찾는다면 여전히 그 컬럼으로 시작하는 인덱스를 두는 게 확실하다.
+          </p>
+
+          <h3 id="explain">실행 계획 읽기: Seq Scan과 Index Scan</h3>
+          <p>
+            인덱스가 있다고 DB가 늘 쓰는 것은 아니다. <code>EXPLAIN</code>으로 실제로 어떻게 읽는지 확인한다. 자주 보는 말은 셋이다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>실행 계획의 말</th><th>뜻</th><th>자바스크립트로 치면</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>Seq Scan</code></td><td>테이블을 처음부터 끝까지 읽는다</td><td><code>rows.filter(...)</code></td></tr>
+                <tr><td><code>Index Scan</code></td><td>인덱스로 행 위치를 찾고, 테이블에서 그 행을 읽는다</td><td><code>map.get(key)</code>로 찾은 뒤 원본을 본다</td></tr>
+                <tr><td><code>Index Only Scan</code></td><td>필요한 값이 인덱스에 다 있어 테이블을 읽지 않는다</td><td><code>map.get(key)</code>만으로 끝난다</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <pre><code class="language-sql">explain select count(*) from performance_seats where performance_id = 5;
+-- Index Only Scan using performance_seats_performance_id_seat_id_unique ...
+--   Index Cond: (performance_id = 5)
+
+explain select performance_id, count(*) from performance_seats group by performance_id;
+-- HashAggregate
+--   -&gt; Seq Scan on performance_seats</code></pre>
+          <p>
+            첫 쿼리는 회차 하나의 행만 필요하니 인덱스로 바로 간다. 둘째 쿼리는 모든 행을 세야 하니, 인덱스를 거쳐 하나씩 찾는
+            것보다 테이블을 한 번에 다 읽는 쪽이 빠르다고 DB가 판단한다. <strong>인덱스는 테이블의 일부만 읽을 때 이득이다.</strong>
+            어차피 전부 읽는 쿼리에는 인덱스가 쓰이지 않는다.
+          </p>
+        </section>
+
+        <section id="unique">
+          <h2>유니크 제약: 같은 값이 두 번 들어가지 않게</h2>
+          <p>
+            <strong>유니크 제약</strong>(unique constraint)은 "이 컬럼 값, 또는 이 컬럼들의 조합은 테이블에 한 번만 있을 수 있다"는
+            <a href="#constraint">제약</a>이다. 같은 값을 가진 행을 넣으려 하면 SQL이 실패한다.
+          </p>
+          <pre><code class="language-ts">// 자바스크립트로 쓰면: 넣기 전에 같은 조합이 있는지 보고, 있으면 던진다
+function insert(row) {
+  const key = `${row.performance_id}:${row.seat_id}`;
+  if (keys.has(key)) throw new Error('duplicate key value violates unique constraint');
+  keys.add(key);
+  rows.push(row);
+}</code></pre>
+          <pre><code>ERROR:  duplicate key value violates unique constraint "performance_seats_performance_id_seat_id_unique"
+DETAIL:  Key (performance_id, seat_id)=(7, 42) already exists.</code></pre>
+
+          <h3 id="unique-why-db">앱 코드에서 확인하면 안 되나</h3>
+          <p>
+            API에서 "이미 있나?"를 먼저 SELECT하고 없으면 INSERT하는 방법도 있다. 하지만 요청 두 개가 거의 동시에 오면 둘 다
+            "없다"를 보고 둘 다 넣을 수 있다. 확인과 넣기 사이에 틈이 있기 때문이다. 유니크 제약은 DB가 넣는 순간에 검사하므로
+            이 틈이 없다. 시드 스크립트 버그나 직접 실행한 SQL처럼 API를 거치지 않는 경로도 막는다.
+          </p>
+
+          <h3 id="unique-composite">여러 컬럼 유니크는 조합을 본다</h3>
+          <p>
+            <code>(performance_id, seat_id)</code> 유니크 제약은 두 값이 <strong>모두</strong> 같은 행만 막는다. 하나만 같은 것은 괜찮다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>이미 있는 행</th><th>넣으려는 행</th><th>결과</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>(7, 42)</td><td>(7, 43)</td><td>된다. 같은 회차의 다른 좌석</td></tr>
+                <tr><td>(7, 42)</td><td>(8, 42)</td><td>된다. 다른 회차의 같은 좌석</td></tr>
+                <tr><td>(7, 42)</td><td>(7, 42)</td><td>실패한다</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3 id="unique-index">유니크 제약을 걸면 인덱스가 같이 생긴다</h3>
+          <p>
+            넣을 때마다 "같은 조합이 있나?"를 확인하려면, 매번 테이블 전체를 훑을 수는 없다. 그래서 PostgreSQL은 유니크 제약을
+            만들 때 그 컬럼들로 B-tree <a href="#index">인덱스</a>를 자동으로 만들고, 그 인덱스로 중복을 확인한다. 위 자바스크립트
+            예시의 <code>keys</code>(Set)가 그 인덱스다. <a href="#pk">기본 키</a>도 "유니크 + NOT NULL"이라 인덱스가 같이 생긴다.
+            <a href="#fk">외래 키</a>는 인덱스를 만들지 않는다.
+          </p>
+          <pre><code>Indexes:
+    "performance_seats_pkey" PRIMARY KEY, btree (id)
+    "performance_seats_performance_id_seat_id_unique" UNIQUE CONSTRAINT, btree (performance_id, seat_id)</code></pre>
+          <p>
+            이 인덱스는 중복 확인에만 쓰이는 게 아니라 일반 인덱스처럼 조회에도 쓰인다. <a href="#composite-index">앞 컬럼 규칙</a>대로
+            <code>performance_id</code>만으로 찾을 때도 쓰이므로, <code>performance_id</code> 인덱스를 따로 만들지 않아도 된다.
+          </p>
+          <div class="callout warn">
+            <p>
+              유니크 제약에서 <code>NULL</code>은 서로 같지 않다고 본다. 컬럼이 <code>NULL</code>을 허용하면 <code>(7, NULL)</code>을
+              여러 번 넣을 수 있다. 막으려면 컬럼을 <code>NOT NULL</code>로 두거나 PostgreSQL 15부터 있는 <code>NULLS NOT DISTINCT</code>를 쓴다.
+            </p>
+          </div>
         </section>
 
         <section id="sql">

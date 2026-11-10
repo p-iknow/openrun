@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>07 좌석 테이블의 유니크와 인덱스</title>
+    <link rel="stylesheet" href="../learn.css" />
+    <script src="../vendor/highlightjs/highlight.min.js" defer></script>
+    <script src="../learn.js" defer></script>
+  </head>
+  <body>
+    <div class="layout">
+      <nav aria-label="목차">
+        <strong>목차</strong>
+        <ol>
+          <li><a href="#overview">한눈에 보기</a></li>
+          <li><a href="#performance-seats">회차 좌석: 같은 좌석을 두 번 팔지 않게</a></li>
+          <li><a href="#seats">좌석: 같은 자리가 두 번 생기지 않게</a></li>
+          <li><a href="#sections">구역: 이름이 겹치면 생기는 일</a></li>
+          <li><a href="#fk-index">외래 키마다 인덱스가 있나</a></li>
+          <li><a href="#migration">0002를 고치지 않고 0003을 만든 이유</a></li>
+          <li><a href="#check">스스로 확인하기</a></li>
+        </ol>
+      </nav>
+
+      <main>
+        <h1>07 좌석 테이블의 유니크와 인덱스</h1>
+        <p class="lead">
+          1.4(#41)에서 만든 구역(<code>sections</code>), 좌석(<code>seats</code>), 회차 좌석(<code>performance_seats</code>)
+          테이블에 어떤 유니크 제약과 인덱스를 걸었고, 각각 어떤 문제를 막는지 따라간다. 리뷰에서 실행 계획을 확인하고 주석을
+          고친 일, 구역 이름 유니크 제약을 더한 결정도 함께 적는다. 유니크 제약, 여러 컬럼 인덱스, 실행 계획 같은 개념은
+          <a href="01-프론트엔드-개발자를-위한-DB-개념.html#unique">db-and-drizzle 01 문서</a>, <code>unique()</code>와
+          <code>index()</code> 문법은 <a href="02-drizzle-스키마-문법.html#unique">db-and-drizzle 02 문서</a>에 있다.
+        </p>
+
+        <section id="overview">
+          <h2>한눈에 보기</h2>
+          <p>
+            공연장은 구역으로, 구역은 좌석으로 나뉜다. 회차를 만들면 공연장의 좌석마다 회차 좌석을 하나씩 만들고, 판매 여부는
+            회차 좌석이 갖는다.
+          </p>
+          <ul class="tree" style="--tree-col: 20rem">
+            <li>
+              <div class="tree-row"><span class="tree-node">venues</span><span class="tree-note">공연장. 낙산 소극장</span></div>
+              <ul>
+                <li>
+                  <div class="tree-row"><span class="tree-node">sections</span><span class="tree-note">구역. A구역</span></div>
+                  <ul>
+                    <li>
+                      <div class="tree-row"><span class="tree-node">seats</span><span class="tree-note">좌석. A구역 3열 5번</span></div>
+                      <ul>
+                        <li>
+                          <div class="tree-row">
+                            <span class="tree-node">performance_seats</span>
+                            <span class="tree-note">회차 좌석. 11-20 19:30 회차의 A구역 3열 5번, 판매됨</span>
+                          </div>
+                        </li>
+                      </ul>
+                    </li>
+                  </ul>
+                </li>
+              </ul>
+            </li>
+          </ul>
+          <p>세 테이블에 건 규칙은 이렇다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>테이블</th><th>규칙</th><th>막는 문제</th><th>같이 생긴 인덱스가 하는 일</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>sections</code></td>
+                  <td><code>unique(venue_id, name)</code></td>
+                  <td>한 공연장에 같은 이름의 구역이 둘</td>
+                  <td>공연장 하나의 구역 찾기</td>
+                </tr>
+                <tr>
+                  <td><code>seats</code></td>
+                  <td><code>unique(section_id, row, number)</code></td>
+                  <td>한 구역에 같은 열·번호 좌석이 둘</td>
+                  <td>구역 하나의 좌석 찾기</td>
+                </tr>
+                <tr>
+                  <td><code>performance_seats</code></td>
+                  <td><code>unique(performance_id, seat_id)</code></td>
+                  <td>한 회차에 같은 좌석이 둘</td>
+                  <td>회차 하나의 좌석 찾기</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            세 규칙은 모양이 같다. <strong>"부모 id + 그 안에서 구분하는 값"이 한 번만 있게 한다.</strong> 부모 id가 맨 앞이라,
+            제약이 만든 인덱스가 <a href="01-프론트엔드-개발자를-위한-DB-개념.html#composite-index">앞 컬럼 규칙</a>대로 "부모
+            하나의 자식 찾기"에도 쓰인다. 그래서 부모 id(외래 키) 인덱스를 따로 만들지 않았다.
+          </p>
+        </section>
+
+        <section id="performance-seats">
+          <h2>회차 좌석: 같은 좌석을 두 번 팔지 않게</h2>
+          <pre><code class="language-ts">// apps/api/src/db/schema/shows.ts
+export const performanceSeats = pgTable(
+  'performance_seats',
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    performanceId: integer('performance_id').notNull().references(() =&gt; performances.id),
+    seatId: integer('seat_id').notNull().references(() =&gt; seats.id),
+    isSold: boolean('is_sold').notNull().default(false),
+  },
+  // 같은 회차에 같은 좌석이 두 번 들어가지 않게 막는다.
+  // 이 제약이 만드는 인덱스가 performance_id로 시작하므로, 회차 하나의 좌석을 찾을 때도 쓰인다.
+  (table) =&gt; [unique().on(table.performanceId, table.seatId)],
+);</code></pre>
+
+          <h3 id="ps-problem">제약이 없으면</h3>
+          <p>
+            시드를 두 번 돌리거나 회차 좌석을 만드는 코드에 버그가 있으면, "회차 7의 좌석 42"가 두 줄 들어갈 수 있다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>id</th><th>performance_id</th><th>seat_id</th><th>is_sold</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>1</td><td>7</td><td>42</td><td>true</td></tr>
+                <tr><td>2</td><td>7</td><td>42</td><td>false</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <ul>
+            <li><strong>같은 자리가 두 번 팔린다.</strong> 1번 줄은 판매됨인데 2번 줄은 판매 가능이라, 다른 사람이 같은 자리를 또 산다.</li>
+            <li>
+              <strong>좌석 수가 틀린다.</strong> 판매 상태 쿼리는 회차 좌석 줄 수로 전체 좌석과 남은 좌석을 센다. 20석 공연장이
+              21석으로 세어지고, 매진과 매진 임박 판단이 어긋난다.
+            </li>
+          </ul>
+          <p>제약이 있으면 2번 줄을 넣는 순간 DB가 거부한다.</p>
+
+          <h3 id="ps-explain">인덱스가 실제로 쓰이는 곳: 실행 계획으로 확인</h3>
+          <p>
+            처음 주석은 "회차별 남은 좌석 집계에도 쓰인다"였다. 리뷰에서 로컬 DB(회차 좌석 57,200줄)로
+            <a href="01-프론트엔드-개발자를-위한-DB-개념.html#explain">실행 계획</a>을 보니 그렇지 않았다.
+          </p>
+          <pre><code class="language-sql">-- 공연 목록의 seat_count 서브쿼리: 모든 회차를 한꺼번에 센다
+explain select performance_id, count(*) filter (where not is_sold), count(*)
+from performance_seats group by performance_id;
+-- HashAggregate
+--   -&gt; Seq Scan on performance_seats
+
+-- 회차 하나의 좌석 세기
+explain select count(*) from performance_seats where performance_id = 5;
+-- Index Only Scan using performance_seats_performance_id_seat_id_unique
+--   Index Cond: (performance_id = 5)</code></pre>
+          <p>
+            공연 목록은 모든 회차의 좌석을 세야 하니 어차피 57,200줄을 다 읽는다. 인덱스를 거쳐 한 줄씩 찾는 것보다 처음부터
+            끝까지 읽는 쪽이 빨라서 DB가 인덱스를 쓰지 않는다. 인덱스가 쓰이는 것은 공연 상세나 좌석 선택처럼
+            <strong>회차 하나</strong>를 볼 때다. 그래서 주석을 "회차 하나의 좌석을 찾을 때도 쓰인다"로 고쳤다.
+          </p>
+          <div class="callout">
+            <p>
+              <strong>주석에 "인덱스가 이 쿼리에 쓰인다"고 적으려면 <code>EXPLAIN</code>으로 확인한다.</strong> 인덱스가 있다는 것과
+              DB가 그 인덱스를 고른다는 것은 다른 이야기다.
+            </p>
+          </div>
+        </section>
+
+        <section id="seats">
+          <h2>좌석: 같은 자리가 두 번 생기지 않게</h2>
+          <pre><code class="language-ts">// apps/api/src/db/schema/venues.ts
+export const seats = pgTable(
+  'seats',
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    sectionId: integer('section_id').notNull().references(() =&gt; sections.id),
+    row: text().notNull(),
+    number: integer().notNull(),
+  },
+  // 같은 구역에 같은 열·번호 좌석이 두 번 들어가지 않게 막는다.
+  // 이 제약이 만드는 인덱스가 section_id로 시작하므로, 구역 하나의 좌석을 찾을 때도 쓰인다.
+  (table) =&gt; [unique().on(table.sectionId, table.row, table.number)],
+);</code></pre>
+          <p>
+            "1번 구역 3열 5번"이 두 줄이면, 회차를 만들 때 공연장의 좌석마다 회차 좌석을 만드므로 그 자리의 회차 좌석도 회차마다
+            두 개가 생긴다. 회차 좌석 테이블의 제약은 <code>seat_id</code>가 다르니 막지 못한다. 문제를 뿌리에서 막으려면 좌석
+            테이블에서 막아야 한다.
+          </p>
+          <p>
+            세 컬럼이 <strong>모두</strong> 같아야 막힌다. 같은 구역의 3열 5번과 3열 6번, 1번 구역 3열 5번과 2번 구역 3열 5번은 모두
+            괜찮다.
+          </p>
+        </section>
+
+        <section id="sections">
+          <h2>구역: 이름이 겹치면 생기는 일</h2>
+          <pre><code class="language-ts">// apps/api/src/db/schema/venues.ts
+export const sections = pgTable(
+  'sections',
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    venueId: integer('venue_id').notNull().references(() =&gt; venues.id),
+    name: text().notNull(),
+  },
+  // 같은 공연장에 같은 이름의 구역이 두 번 들어가지 않게 막는다. 이름이 겹치면 "A구역 3열 5번"이 두 자리가 된다.
+  // 이 제약이 만드는 인덱스가 venue_id로 시작하므로, 공연장 하나의 구역을 찾을 때도 쓰인다.
+  (table) =&gt; [unique().on(table.venueId, table.name)],
+);</code></pre>
+          <p>
+            처음에는 이 제약 없이 <code>index().on(table.venueId)</code>만 있었다. 리뷰에서 "좌석 제약이 있는데 구역 이름은 왜 안
+            막나"를 따져 보고 더했다. 핵심은 <strong>DB는 구역을 이름이 아니라 id로 구분한다</strong>는 점이다.
+          </p>
+
+          <h3 id="sections-scenario">이름이 겹치는 과정</h3>
+          <ol class="steps blue">
+            <li>
+              <strong>구역이 두 번 들어간다.</strong> 시드 버그로 낙산 소극장(공연장 id 1)에 "A구역"이 두 번 들어갔다. DB는 줄마다
+              id를 새로 붙이므로 1번 구역과 2번 구역, 서로 다른 구역이 된다.
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>sections.id</th><th>venue_id</th><th>name</th></tr></thead>
+                  <tbody>
+                    <tr><td>1</td><td>1</td><td>A구역</td></tr>
+                    <tr><td>2</td><td>1</td><td>A구역</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </li>
+            <li>
+              <strong>좌석 제약은 통과한다.</strong> 좌석에는 이름이 아니라 구역 id가 저장된다. <code>(1, 3열, 5)</code>와
+              <code>(2, 3열, 5)</code>는 구역 id가 다르니 좌석 제약이 둘 다 받아 준다.
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>seats.id</th><th>section_id</th><th>row</th><th>number</th></tr></thead>
+                  <tbody>
+                    <tr><td>10</td><td>1</td><td>3열</td><td>5</td></tr>
+                    <tr><td>11</td><td>2</td><td>3열</td><td>5</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </li>
+            <li>
+              <strong>사람에게는 같은 자리로 보인다.</strong> 화면과 티켓에는 구역 id가 아니라 이름이 나간다. 좌석 10과 11이 모두
+              "A구역 3열 5번"이다. 좌석 선택 화면에 같은 이름의 자리가 둘 보이고, 같은 이름의 티켓을 든 관객 두 명이 모두 정상
+              티켓을 가진 셈이 된다.
+            </li>
+          </ol>
+          <p>
+            <code>unique(venue_id, name)</code>이 있으면 1단계에서 두 번째 <code>(1, A구역)</code>을 넣는 순간 거부된다. 한 공연장 안에서
+            구역 이름이 하나뿐이니, 좌석 제약이 막는 "같은 구역 id + 같은 열 + 같은 번호"가 사람 눈에도 "같은 이름의 자리"와 같아진다.
+            DB가 구분하는 기준(id)과 사람이 구분하는 기준(이름)이 어긋나지 않게 하는 제약이다.
+          </p>
+          <p>
+            다른 공연장끼리는 이름이 같아도 된다. 낙산 소극장 A구역 <code>(1, A구역)</code>과 한강 아트홀 A구역
+            <code>(2, A구역)</code>은 공연장 id가 달라 둘 다 들어간다. 티켓에 공연장 이름이 함께 나가니 사람도 헷갈리지 않는다.
+          </p>
+
+          <h3 id="sections-index">venue_id 인덱스를 지운 이유</h3>
+          <p>
+            유니크 제약의 인덱스가 <code>(venue_id, name)</code> 순서라 <code>venue_id</code>만으로 찾을 때도 쓰인다. 기존
+            <code>venue_id</code> 인덱스가 하던 일을 그대로 대신하므로 지웠다. 인덱스가 둘이면 구역을 넣을 때마다 둘 다 고쳐야
+            하고 얻는 것은 없다. 결과적으로 인덱스 수는 그대로 하나이고, 막는 문제가 하나 늘었다.
+          </p>
+        </section>
+
+        <section id="fk-index">
+          <h2>외래 키마다 인덱스가 있나</h2>
+          <p>
+            PostgreSQL은 외래 키에 인덱스를 만들지 않는다(<a href="02-drizzle-스키마-문법.html#references">db-and-drizzle 02 문서</a>).
+            그 컬럼으로 찾을 일이 있으면 직접 준비해야 한다. 이번 테이블의 외래 키는 이렇다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>테이블</th><th>외래 키</th><th>그 컬럼으로 찾을 때 쓰는 인덱스</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>sections</code></td><td><code>venue_id</code></td><td>유니크 제약의 인덱스. 맨 앞이 <code>venue_id</code></td></tr>
+                <tr><td><code>seats</code></td><td><code>section_id</code></td><td>유니크 제약의 인덱스. 맨 앞이 <code>section_id</code></td></tr>
+                <tr><td><code>performance_seats</code></td><td><code>performance_id</code></td><td>유니크 제약의 인덱스. 맨 앞이 <code>performance_id</code></td></tr>
+                <tr><td><code>performance_seats</code></td><td><code>seat_id</code></td><td>없음</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            <code>seat_id</code>는 유니크 제약에서 뒤 컬럼이라 그 인덱스로는 잘 찾지 못한다. "이 좌석의 모든 회차 좌석"을 찾는
+            쿼리가 아직 없어서 인덱스를 만들지 않았다. 좌석을 지울 때 DB가 남은 회차 좌석이 있는지 확인하는 데도 쓰이겠지만,
+            좌석은 시드로만 만들고 지우지 않는다. 필요한 쿼리가 생기면 그때 더한다.
+          </p>
+        </section>
+
+        <section id="migration">
+          <h2>0002를 고치지 않고 0003을 만든 이유</h2>
+          <p>
+            구역 유니크 제약을 더할 때 PR은 병합 전이었다. 그래서 <code>0002</code> 마이그레이션을 다시 생성해 처음부터 제약이
+            있던 것처럼 만들 수도 있었다. 하지만 개발자의 로컬 DB에는 이미 <code>0002</code>가 적용되어 있다. drizzle-kit은
+            적용한 마이그레이션을 다시 실행하지 않으므로, 내용을 바꿔도 로컬 DB에는 반영되지 않고 코드와 DB가 조용히 어긋난다.
+          </p>
+          <pre><code class="language-sql">-- apps/api/drizzle/0003_unique_section_name_per_venue.sql
+DROP INDEX "sections_venue_id_index";
+ALTER TABLE "sections" ADD CONSTRAINT "sections_venue_id_name_unique" UNIQUE("venue_id","name");</code></pre>
+          <p>
+            새 파일로 두면 <code>pnpm db:migrate</code>만 다시 돌리면 된다. 이미 있는 구역 이름은 A구역, B구역…으로 공연장 안에서
+            겹치지 않아 제약을 더할 때 실패하지 않는다. 겹치는 데이터가 이미 있었다면 <code>ADD CONSTRAINT</code>가 실패하므로,
+            먼저 데이터를 정리해야 한다.
+          </p>
+        </section>
+
+        <section id="check">
+          <h2>스스로 확인하기</h2>
+          <div class="quiz">
+            <p class="quiz-q">1. 이 줄을 넣으면 어떻게 되는가? 각각 답한다.</p>
+            <p class="quiz-context"><a href="#performance-seats">회차 좌석</a>의 <code>unique(performance_id, seat_id)</code>가 걸려 있고, 테이블에는 아래 한 줄만 있다.</p>
+            <div class="table-wrap"><table><thead><tr><th>performance_id</th><th>seat_id</th><th>is_sold</th></tr></thead><tbody><tr><td>7</td><td>42</td><td>true</td></tr></tbody></table></div>
+            <p>(가) <code>(7, 43, false)</code> (나) <code>(8, 42, false)</code> (다) <code>(7, 42, false)</code></p>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body"><p>
+                  (가)와 (나)는 들어간다. 두 컬럼 중 하나만 같기 때문이다. 같은 회차의 다른 좌석, 다른 회차의 같은 좌석은 정상이다.
+                  (다)는 두 컬럼이 모두 같아 <code>duplicate key value violates unique constraint</code>로 실패한다.
+                  <code>is_sold</code>가 달라도 제약은 <code>(performance_id, seat_id)</code>만 본다.
+                </p></div>
+            </details>
+          </div>
+          <div class="quiz">
+            <p class="quiz-q">2. 회차 좌석의 유니크 제약을 이렇게 바꾸면, "회차 하나의 좌석 세기" 쿼리의 실행 계획은 어떻게 될까?</p>
+            <p class="quiz-context"><a href="#ps-explain">인덱스가 실제로 쓰이는 곳</a>의 두 번째 쿼리(<code>where performance_id = 5</code>)를 떠올린다.</p>
+            <pre><code class="language-diff">-  (table) =&gt; [unique().on(table.performanceId, table.seatId)],
++  (table) =&gt; [unique().on(table.seatId, table.performanceId)],</code></pre>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body"><p>
+                  중복을 막는 효과는 같다. 조합이 같으면 순서와 상관없이 같은 조합이기 때문이다. 하지만 인덱스가
+                  <code>seat_id</code>로 먼저 정렬되어, <code>performance_id = 5</code>인 행이 좌석마다 흩어진다. 앞 컬럼 규칙에 따라
+                  이 인덱스로는 잘 찾지 못해 <code>Seq Scan</code>이 될 가능성이 크다(PostgreSQL 18의 skip scan은 앞 컬럼 값이 적을 때만
+                  이득인데, 좌석은 1,000개다). 회차 하나의 좌석을 빨리 찾으려면 <code>performance_id</code> 인덱스를 따로 만들어야 한다.
+                </p></div>
+            </details>
+          </div>
+          <div class="quiz">
+            <p class="quiz-q">3. 구역 유니크 제약이 없을 때, 아래 데이터에서 좌석 선택 화면에 보이는 자리 이름은?</p>
+            <p class="quiz-context"><a href="#sections-scenario">이름이 겹치는 과정</a>과 같은 상황이다. 공연장은 모두 낙산 소극장(id 1)이다.</p>
+            <div class="table-wrap"><table><thead><tr><th>sections.id</th><th>venue_id</th><th>name</th></tr></thead><tbody><tr><td>1</td><td>1</td><td>A구역</td></tr><tr><td>2</td><td>1</td><td>A구역</td></tr><tr><td>3</td><td>1</td><td>B구역</td></tr></tbody></table></div>
+            <div class="table-wrap"><table><thead><tr><th>seats.id</th><th>section_id</th><th>row</th><th>number</th></tr></thead><tbody><tr><td>10</td><td>1</td><td>1열</td><td>1</td></tr><tr><td>11</td><td>2</td><td>1열</td><td>1</td></tr><tr><td>12</td><td>3</td><td>1열</td><td>1</td></tr></tbody></table></div>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body"><p>
+                  좌석 10과 11은 둘 다 <strong>A구역 1열 1번</strong>, 좌석 12는 B구역 1열 1번이다. 좌석 제약은
+                  <code>(1, 1열, 1)</code>과 <code>(2, 1열, 1)</code>을 다른 값으로 보니 막지 못한다. 구역 제약이 있으면 2번 구역을 넣을 때
+                  <code>(1, A구역)</code>이 겹쳐 실패하므로 이런 데이터가 생기지 않는다.
+                </p></div>
+            </details>
+          </div>
+          <div class="quiz">
+            <p class="quiz-q">4. 공연장 하나의 구역 목록을 찾는 쿼리를 쓴다. 구역 테이블에 <code>venue_id</code> 인덱스를 다시 만들어야 하나?</p>
+            <p class="quiz-context"><a href="#sections-index">venue_id 인덱스를 지운 이유</a>를 떠올린다.</p>
+            <pre><code class="language-sql">select * from sections where venue_id = 1;</code></pre>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body"><p>
+                  만들지 않아도 된다. <code>sections_venue_id_name_unique</code>의 인덱스가 <code>venue_id</code>로 시작해서, 앞 컬럼만으로
+                  찾는 이 쿼리에 쓰일 수 있다. 같은 일을 하는 인덱스를 하나 더 두면 쓰기만 느려진다. 다만 구역이 몇 줄뿐이면 DB가
+                  인덱스 대신 테이블 전체를 읽을 수도 있다. 작은 테이블은 다 읽어도 빠르기 때문이다.
+                </p></div>
+            </details>
+          </div>
+          <div class="quiz">
+            <p class="quiz-q">5. 공연 목록의 <code>seat_count</code> 서브쿼리가 회차 좌석 인덱스를 쓰지 않는 이유는? 인덱스를 쓰게 하려면 무엇이 달라져야 할까?</p>
+            <p class="quiz-context"><a href="#ps-explain">인덱스가 실제로 쓰이는 곳</a>의 첫 번째 실행 계획(<code>Seq Scan</code>)을 본다.</p>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body"><p>
+                  모든 회차의 좌석을 세려면 회차 좌석 테이블을 어차피 전부 읽어야 한다. 인덱스는 일부 행만 고를 때 이득이라, 전부 읽는
+                  쿼리에서는 처음부터 끝까지 읽는 쪽이 빠르다. 인덱스가 쓰이려면 읽는 행이 줄어야 한다. 예를 들어 지금 페이지에 나오는
+                  공연의 회차만 세도록 <code>where performance_id in (...)</code>로 범위를 좁히면 인덱스를 쓸 수 있다. 데이터가 커져
+                  목록이 느려지면 그때 검토할 일이다.
+                </p></div>
+            </details>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
