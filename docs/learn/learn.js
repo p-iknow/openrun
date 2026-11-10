@@ -37,7 +37,7 @@ const learnFolders = [
       { file: '04-공연장-공연-회차-스키마.html', title: '04 공연장·공연·회차 스키마', tags: ['drizzle', 'database'] },
       { file: '05-공연-목록-쿼리-읽기.html', title: '05 공연 목록 쿼리 읽기', tags: ['drizzle', 'database'] },
       { file: '06-판매-상태-쿼리-읽기.html', title: '06 판매 상태 쿼리 읽기', tags: ['drizzle', 'database'] },
-      { file: '07-좌석-테이블의-유니크와-인덱스.html', title: '07 좌석 테이블의 유니크와 인덱스', tags: ['drizzle', 'database'] },
+      { file: '07-구역-좌석-회차-좌석-스키마.html', title: '07 구역·좌석·회차 좌석 스키마', tags: ['drizzle', 'database'] },
     ],
   },
   {
