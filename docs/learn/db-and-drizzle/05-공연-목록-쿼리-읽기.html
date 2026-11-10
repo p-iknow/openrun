@@ -402,7 +402,25 @@ const period = Object.values(Object.groupBy(performances, (p) =&gt; p.showId)).m
             <code>sales_open_at</code>이 붙는다. 그다음 <code>where(isListed)</code>가 <code>sales_status</code>가
             <code>'ended'</code>인 줄을 뺀다. 예시의 두 공연은 판매 중이라 둘 다 남는다.
           </p>
-          <p>세 번의 JOIN과 <code>where</code>를 마친 표는 다음과 같다.</p>
+          <p>
+            세 번의 JOIN을 마친 표는 아래처럼 넓다. 붙인 테이블과 서브쿼리의 컬럼이 모두 옆으로 이어지고, <code>shows.id</code>,
+            <code>venues.id</code>, <code>period.show_id</code>처럼 같은 값이 여러 번 나온다. 실제로는 <code>shows</code>의 다른
+            컬럼(<code>genre</code>, <code>description</code> 등)도 모두 있지만 예시 데이터에 없는 컬럼은 뺐다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>shows.id</th><th>shows.title</th><th>shows.venue_id</th><th>venues.id</th><th>venues.name</th><th>period.show_id</th><th>period.start</th><th>period.end</th><th>show_sales_status.show_id</th><th>sales_status</th><th>sales_open_at</th></tr></thead>
+              <tbody>
+                <tr><td>1</td><td>달빛 정원</td><td>1</td><td>1</td><td>낙산 소극장</td><td>1</td><td>12-01 19:30</td><td>12-05 19:30</td><td>1</td><td>on_sale</td><td>null</td></tr>
+                <tr><td>2</td><td>겨울 기차</td><td>2</td><td>2</td><td>한강 아트홀</td><td>2</td><td>12-03 15:00</td><td>12-03 15:00</td><td>2</td><td>on_sale</td><td>null</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            <code>where</code>가 이 표에서 줄을 거르고, <code>orderBy</code>, <code>limit</code>, <code>offset</code>이 줄 순서를
+            정하고 자른다. 여기까지는 컬럼이 그대로다. 마지막으로 <code>select</code>가 필요한 컬럼만 골라 이름을 붙인 결과는
+            다음과 같다.
+          </p>
           <div class="table-wrap">
             <table>
               <thead>

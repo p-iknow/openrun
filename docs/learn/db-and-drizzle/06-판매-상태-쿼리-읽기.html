@@ -258,9 +258,22 @@ export function showSalesStatusSubquery(db: Database, { now }: { now: Date }) {
               </tbody>
             </table>
           </div>
+          <h3><code>performance_seats</code> (회차별로 센 결과)</h3>
           <p>
-            회차 좌석(<code>performance_seats</code>)은 표에서 뺐다. 회차 18만 회차 좌석이 모두 판매됨이라 회차 판매 상태가
-            매진이고, 나머지 회차는 남은 좌석이 있다.
+            회차 좌석은 회차마다 좌석 수만큼 줄이 있어서, 줄 대신 회차별로 센 결과만 적는다. 모든 회차가 20석이다. 회차 18은 남은
+            좌석이 0이라 <strong>매진</strong>이다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>회차</th><th>10</th><th>11</th><th>12</th><th>13</th><th>14</th><th>15</th><th>16</th><th>17</th><th>18</th><th>19</th></tr></thead>
+              <tbody>
+                <tr><th>남은 좌석</th><td>3</td><td>8</td><td>20</td><td>20</td><td>20</td><td>20</td><td>5</td><td>20</td><td><strong>0</strong></td><td>2</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            판매 상태 쿼리는 이 표를 보지 않는다. 그래도 넣은 것은, 매진인 회차 18을 공연 판매 상태로 어떻게 세는지
+            <a href="#performance">회차 하나의 순번</a>에서 확인하기 위해서다.
           </p>
         </section>
 
@@ -660,7 +673,15 @@ for (const [showId, rows] of Object.entries(groups)) {
             다시 살 수 있다.
           </p>
           <h3>순번을 이름으로 바꾸기</h3>
-          <pre><code class="language-ts">const priority = performancePriority({ now }); // 회차 한 줄의 순번 (행마다)
+          <pre><code class="language-ts">function performancePriority({ now }) {
+  return sql`case
+    when ${performances.isCancelled} or ${performances.startsAt} &lt;= ${now} then ${priorityOf('ended')}
+    when ${now} &lt; ${performances.salesOpenAt} then ${priorityOf('upcoming')}
+    else ${priorityOf('on_sale')}
+  end`;
+}
+
+const priority = performancePriority({ now }); // 회차 한 줄의 순번 (행마다)
 const showPriority = sql`min(${priority})`; // 공연의 가장 작은 순번 (묶음마다)
 
 const toStatus = sql.join(
@@ -702,58 +723,19 @@ end as "sales_status"</code></pre>
               >.as()가 두 번 나오는 이유</a
             >).
           </p>
-          <h3>CASE가 겹쳐 있을 때 groupBy는 어떻게 동작하나</h3>
-          <p>
-            <code>sales_status</code>는 안쪽 <code>CASE</code>를 <code>min</code>이 감싸고, 그것을 다시 바깥
-            <code>CASE</code>가 감싼 세 겹이다. <code>groupBy</code>는 <code>CASE</code>가 겹친 모양을 신경 쓰지 않는다. 각
-            부분이 <strong><code>min</code> 괄호 안에 있느냐, 밖에 있느냐</strong>만 본다(<a
-              href="01-프론트엔드-개발자를-위한-DB-개념.html#aggregate"
-              >집계 괄호 안은 행마다, 밖은 묶음마다</a
-            >).
-          </p>
-          <pre><code class="language-sql">case                                   -- 괄호 밖 → 묶음(공연)마다: 4번
-  min(                                 -- ── 경계: 여러 행 → 값 하나
-    case                               -- 괄호 안 → 행(회차)마다: 10번
-      when is_cancelled or starts_at &lt;= '2026-11-10 12:00+09' then 2
-      when '2026-11-10 12:00+09' &lt; sales_open_at then 1
-      else 0
-    end
-  )
-  when 0 then 'on_sale'
-  when 1 then 'upcoming'
-  when 2 then 'ended'
-end as "sales_status"</code></pre>
-          <p>DB는 이 순서로 계산한다.</p>
-          <ol class="steps green">
-            <li><strong>FROM</strong> 회차 10줄을 가져온다.</li>
-            <li><strong>GROUP BY</strong> <code>show_id</code>로 4묶음을 만든다.</li>
-            <li>
-              <strong>괄호 안</strong> 묶음마다 그 묶음의 회차 하나하나에 안쪽 <code>CASE</code>를 계산한다. 공연 1이면 2,
-              0, 2.
-            </li>
-            <li><strong>min</strong> 그 값들을 하나로 줄인다. 공연 1이면 0.</li>
-            <li>
-              <strong>괄호 밖</strong> 바깥 <code>CASE</code>가 그 값 하나로 이름을 정한다. 공연 1이면
-              <code>'on_sale'</code>.
-            </li>
-          </ol>
-          <p>
-            바깥 <code>CASE</code>에서 회차마다 다른 컬럼(<code>starts_at</code> 등)을 집계 없이 쓰면 공연 1의 어느 회차
-            값인지 정할 수 없어 에러가 난다. JS로는 <code>rows.map</code> 콜백 안에서만 <code>row</code>를 쓸 수 있고, 바깥에서는
-            <code>Math.min</code> 결과와 <code>showId</code>만 쓸 수 있는 것과 같다.
-          </p>
-          <pre><code class="language-js">for (const [showId, rows] of Object.entries(groups)) {
-  // 콜백 안: row를 쓸 수 있다 (행마다)
-  const m = Math.min(...rows.map((row) =&gt; 안쪽CASE(row)));
-
-  // 밖: row가 없다. m과 showId만 (묶음마다)
-  const status = 바깥CASE(m);
-}</code></pre>
         </section>
 
         <section id="sales-open-at">
           <h2>판매 오픈 일시</h2>
-          <pre><code class="language-ts">const priority = performancePriority({ now }); // 회차 한 줄의 순번 (행마다)
+          <pre><code class="language-ts">function performancePriority({ now }) {
+  return sql`case
+    when ${performances.isCancelled} or ${performances.startsAt} &lt;= ${now} then ${priorityOf('ended')}
+    when ${now} &lt; ${performances.salesOpenAt} then ${priorityOf('upcoming')}
+    else ${priorityOf('on_sale')}
+  end`;
+}
+
+const priority = performancePriority({ now }); // 회차 한 줄의 순번 (행마다)
 const showPriority = sql`min(${priority})`; // 공연의 가장 작은 순번 (묶음마다)
 
 salesOpenAt: sql&lt;Date | null&gt;`case
