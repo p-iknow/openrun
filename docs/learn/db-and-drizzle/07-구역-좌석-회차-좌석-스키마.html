@@ -132,16 +132,28 @@
             <strong>좌석 + 회차</strong>마다 다르다. 이를 담는 방법으로 대안 두 가지를 따져 보고 회차 좌석을 골랐다.
           </p>
 
-          <h4 id="alt-sold-only">대안 1: 팔린 좌석만 줄로 저장한다</h4>
+          <h4 id="alt-sold-only">대안 1: 좌석이 팔릴 때만 행을 추가한다</h4>
           <p>
-            <strong>문제: 남은 좌석을 구하려면 공연장 좌석 수에서 팔린 수를 빼야 해서 두 테이블을 맞춰 세야 하고, 줄이 빠지면 판매
+            <strong>문제: 남은 좌석을 구하려면 공연장 좌석 수에서 팔린 수를 빼야 해서 두 테이블을 맞춰 세야 하고, 행이 빠지면 판매
             가능으로 보인다.</strong>
           </p>
           <p>
-            <code>performance_seats</code> 대신 <code>sold_seats</code>를 둔다. 팔린 짝만 줄로 적고, 줄이 없으면 판매 가능으로 본다.
-            <code>is_sold</code> 컬럼은 필요 없다. 나머지 테이블(<code>venues</code>, <code>sections</code>, <code>seats</code>,
-            <code>performances</code>)은 그대로다.
+            <code>performance_seats</code> 대신 <code>sold_seats</code>를 둔다. 처음에는 비어 있고, 좌석이 팔리는 순간 "회차 20의 좌석
+            10이 팔렸다"는 <a href="01-프론트엔드-개발자를-위한-DB-개념.html#table">행</a>을 하나 추가(INSERT)한다. 팔리지 않은 좌석은
+            행이 없고, 행이 없으면 판매 가능으로 본다. 그래서 <code>is_sold</code> 컬럼이 필요 없다. 나머지 테이블(<code>venues</code>,
+            <code>sections</code>, <code>seats</code>, <code>performances</code>)은 그대로다.
           </p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>시점</th><th>대안 1: <code>sold_seats</code></th><th>지금 구조: <code>performance_seats</code></th></tr></thead>
+              <tbody>
+                <tr><td>회차 20을 만들 때</td><td>아무것도 하지 않는다. 0행</td><td>좌석 수만큼 행을 미리 넣는다. 3행, 모두 <code>is_sold = false</code></td></tr>
+                <tr><td>좌석 10이 팔릴 때</td><td>(20, 10) 행을 <strong>추가</strong>한다(INSERT). 1행</td><td>(20, 10) 행의 <code>is_sold</code>를 true로 <strong>바꾼다</strong>(UPDATE). 3행 그대로</td></tr>
+                <tr><td>판매 가능한 좌석</td><td>행이 없는 좌석</td><td><code>is_sold = false</code>인 행</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>지금 예시 데이터를 대안 1로 옮기면 <code>sold_seats</code>는 이 한 행뿐이다.</p>
           <div class="table-wrap">
             <table>
               <thead><tr><th colspan="2">sold_seats (팔린 좌석)</th></tr><tr><th>performance_id</th><th>seat_id</th></tr></thead>
@@ -149,7 +161,7 @@
             </table>
           </div>
           <p>
-            지금 구조의 6줄이 1줄로 준다. 판매 여부도 회차마다 맞다. 하지만 남은 좌석을 세는 방법이 달라진다.
+            지금 구조의 6행이 1행으로 준다. 판매 여부도 회차마다 맞다. 하지만 남은 좌석을 세는 방법이 달라진다.
           </p>
           <div class="table-wrap">
             <table>
@@ -160,37 +172,37 @@
                   <td>
                     ① <code>performances</code> → <code>shows</code> → <code>venues</code> → <code>sections</code> →
                     <code>seats</code>로 JOIN해 공연장 좌석 수(3)를 센다<br />
-                    ② <code>sold_seats</code>에서 <code>performance_id = 20</code>인 줄 수(1)를 센다<br />
+                    ② <code>sold_seats</code>에서 <code>performance_id = 20</code>인 행 수(1)를 센다<br />
                     ③ 3 − 1 = 2
                   </td>
                 </tr>
                 <tr>
                   <td>지금 구조</td>
-                  <td><code>performance_seats</code>에서 <code>performance_id = 20</code>이고 <code>is_sold = false</code>인 줄 수를 센다 → 2</td>
+                  <td><code>performance_seats</code>에서 <code>performance_id = 20</code>이고 <code>is_sold = false</code>인 행 수를 센다 → 2</td>
                 </tr>
               </tbody>
             </table>
           </div>
-          <p>더 큰 차이는 데이터가 빠졌을 때 드러난다. 새 회차 22를 만들면서 좌석 쪽 줄을 하나도 만들지 못했다고 하자.</p>
+          <p>더 큰 차이는 데이터가 빠졌을 때 드러난다. 새 회차 22를 만들었는데, 지금 구조에서 회차 좌석을 넣는 단계가 실패했다고 하자. 두 방식 모두 회차 22의 행이 0개다.</p>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>방식</th><th>회차 22의 줄</th><th>보이는 모습</th></tr></thead>
+              <thead><tr><th>방식</th><th>회차 22의 행</th><th>보이는 모습</th></tr></thead>
               <tbody>
                 <tr>
                   <td>대안 1</td>
-                  <td><code>sold_seats</code>에 0줄. 원래 처음엔 0줄이 정상이다</td>
+                  <td><code>sold_seats</code>에 0행. 아직 안 팔렸으면 원래 0행이라 정상과 구분되지 않는다</td>
                   <td>공연장 좌석 3 − 팔린 0 = 3석. 모두 <strong>판매 가능</strong>으로 보이고, 빠진 걸 알아챌 수 없다</td>
                 </tr>
                 <tr>
                   <td>지금 구조</td>
-                  <td><code>performance_seats</code>에 0줄. 원래 3줄이어야 한다</td>
+                  <td><code>performance_seats</code>에 0행. 원래 3행이어야 한다</td>
                   <td>남은 좌석 0석이라 <strong>매진</strong>으로 보인다. 팔면 안 되는 좌석을 팔지는 않는다</td>
                 </tr>
               </tbody>
             </table>
           </div>
           <p>
-            "줄이 없다"를 판매 가능으로 읽으면 실수가 판매하는 쪽으로 새고, 판매하지 않음으로 읽으면 실수가 판매하지 않는 쪽으로
+            "행이 없다"를 판매 가능으로 읽으면 실수가 판매하는 쪽으로 새고, 판매하지 않음으로 읽으면 실수가 판매하지 않는 쪽으로
             샌다. 표를 파는 서비스에서는 뒤쪽이 덜 위험하다. 스펙도 "남은 좌석은 회차 좌석 테이블만 세서 구한다"고 정했다.
           </p>
 
