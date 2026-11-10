@@ -73,6 +73,16 @@
           "end"
         ]
       },
+      "ShowSalesStatus": {
+        "type": "string",
+        "enum": [
+          "on_sale",
+          "upcoming",
+          "cancelled",
+          "ended"
+        ],
+        "description": "공연 판매 상태. 회차들의 판매 상태 중 우선순위가 가장 높은 것이다."
+      },
       "ShowSummaryDto": {
         "type": "object",
         "properties": {
@@ -103,6 +113,20 @@
                 "$ref": "#/components/schemas/ShowPeriodDto"
               }
             ]
+          },
+          "salesStatus": {
+            "description": "공연 판매 상태. 회차들의 판매 상태 중 우선순위가 가장 높은 것이다.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ShowSalesStatus"
+              }
+            ]
+          },
+          "salesOpenAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "판매 예정일 때 가장 이른 판매 오픈 일시. 판매 예정이 아니면 null이다."
           }
         },
         "required": [
@@ -110,7 +134,9 @@
           "title",
           "genre",
           "venueName",
-          "period"
+          "period",
+          "salesStatus",
+          "salesOpenAt"
         ]
       },
       "ShowPageDto": {
