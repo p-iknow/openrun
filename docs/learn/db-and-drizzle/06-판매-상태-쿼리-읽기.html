@@ -806,6 +806,12 @@ salesStatus: sql&lt;ShowSalesStatus&gt;`case ${showPriority} ${toStatus} end`.as
   when 0 then 'on_sale' when 1 then 'upcoming' when 2 then 'cancelled' when 3 then 'ended'
 end as "sales_status"</code></pre>
           <p>
+            <code>min(...)</code>에는 이름(<code>as</code>)이 없다. <code>select</code>에 따로 나오지 않고 <code>CASE</code>의
+            재료로만 쓰이기 때문이다. 이름 <code>"sales_status"</code>는 <code>min</code>을 감싼 <code>CASE</code> 결과 전체에
+            붙고, 결과 컬럼에 <code>min</code>의 숫자는 없다. JS로는 <code>toName(Math.min(...priorities))</code>처럼
+            <code>Math.min</code>의 결과를 변수에 담지 않고 바로 넘기는 것과 같다.
+          </p>
+          <p>
             이름으로 바꾸는 일을 JS가 아니라 SQL에서 하는 이유는 <strong>필터</strong> 때문이다. 결과 컬럼이 이름이면 바깥
             쿼리가 <code>ne(salesStatus.salesStatus, 'ended')</code>처럼 이름으로 거를 수 있다. 다음 티켓의 판매 상태 필터도
             <code>inArray(salesStatus.salesStatus, ['on_sale', 'upcoming'])</code>처럼 쓸 수 있다.
