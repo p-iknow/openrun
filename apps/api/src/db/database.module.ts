@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
 import type { Pool } from 'pg';
-import { readEnv } from '../config/env.js';
+import { readDatabaseUrl } from '../config/env.js';
 
 export const DATABASE = Symbol('DATABASE');
 // drizzle()이 안에서 만든 pg Pool은 $client로 꺼낼 수 있다.
@@ -17,7 +17,7 @@ export type Database = NodePgDatabase & { $client: Pool };
   providers: [
     {
       provide: DATABASE,
-      useFactory: (): Database => drizzle(readEnv().databaseUrl),
+      useFactory: (): Database => drizzle(readDatabaseUrl()),
     },
   ],
   exports: [DATABASE],

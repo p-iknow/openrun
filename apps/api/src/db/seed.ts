@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/node-postgres';
-import { readEnv } from '../config/env.js';
+import { readDatabaseUrl } from '../config/env.js';
 import {
   GENRES,
   type Genre,
@@ -414,7 +414,7 @@ await Promise.all(
   posters.map(({ key, png }) => writeFile(new URL(key, POSTER_DIR), png)),
 );
 
-const db = drizzle(readEnv().databaseUrl);
+const db = drizzle(readDatabaseUrl());
 
 try {
   const performanceSeatCount = await db.transaction(async (tx) => {
