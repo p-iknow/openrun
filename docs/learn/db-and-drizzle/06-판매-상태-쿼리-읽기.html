@@ -40,10 +40,10 @@
           <a href="01-프론트엔드-개발자를-위한-DB-개념.html">db-and-drizzle 01 문서</a>에 있다.
         </p>
         <div class="callout">
-          <strong>이 문서의 "지금"은 2026-11-10 12:00(한국 시각)으로 정해 둔다.</strong>
-          판매 상태는 조회하는 시각에 따라 답이 바뀐다. 그래서 문서에 나오는 "지금", 코드의 <code>now</code>, 표의 판매
+          <strong>이 문서의 "현재"는 2026-11-10 12:00(한국 시각)으로 정해 둔다.</strong>
+          판매 상태는 조회하는 시각에 따라 답이 바뀐다. 그래서 문서에 나오는 "현재", 코드의 <code>now</code>, 표의 판매
           상태는 모두 이 시각을 기준으로 한다. 날짜는 모두 2026년이라 표에서는 연도를 빼고 <code>11-10 12:00</code>처럼
-          쓴다. 다른 시각으로 생각해 보는 문제는 <a href="#check">스스로 확인하기</a>에서 "지금 시각이 ~이면"으로 따로
+          쓴다. 다른 시각으로 생각해 보는 문제는 <a href="#check">스스로 확인하기</a>에서 "현재 시각이 ~이면"으로 따로
           적는다.
         </div>
 
@@ -51,7 +51,7 @@
           <h2>한눈에 보기</h2>
           <p>
             판매 상태는 테이블에 저장하지 않는다. 시간이 지나면 저절로 바뀌는 값이라, 저장하면 누군가 때맞춰 고쳐 줘야 한다.
-            그래서 조회할 때마다 "지금 시각"을 기준으로 쿼리 안에서 계산한다. 저장하는 것은 회차 취소 여부(<code
+            그래서 조회할 때마다 "현재 시각"을 기준으로 쿼리 안에서 계산한다. 저장하는 것은 회차 취소 여부(<code
               >is_cancelled</code
             >)뿐이다.
           </p>
@@ -142,7 +142,7 @@ export function showSalesStatusSubquery(db: Database, { now }: { now: Date }) {
         <section id="example">
           <h2>예시 데이터</h2>
           <p>
-            지금 시각은 맨 위에서 정한 대로 <strong>2026-11-10 12:00</strong>(한국 시각)이다. 표에서는 연도를 빼고
+            현재 시각은 맨 위에서 정한 대로 <strong>2026-11-10 12:00</strong>(한국 시각)이다. 표에서는 연도를 빼고
             <code>11-10 12:00</code>처럼 쓴다. 아래 표로 끝까지 따라간다.
           </p>
           <h3><code>shows</code></h3>
@@ -276,8 +276,7 @@ end`</code></pre>
             계산하면 이렇게 된다.
           </p>
           <p>
-            지금은 <strong>11-10 12:00</strong>이다. ②는 코드의 <code>starts_at &lt;= now</code>를 지금이 왼쪽에 오도록
-            뒤집어 적었다.
+            현재 시각은 <strong>11-10 12:00</strong>이다.
           </p>
           <div class="table-wrap">
             <table>
@@ -286,8 +285,8 @@ end`</code></pre>
                   <th>회차</th>
                   <th>공연</th>
                   <th>① 취소?</th>
-                  <th>② 지금 &gt;= 시작</th>
-                  <th>③ 지금 &lt; 오픈</th>
+                  <th>② 시작 &lt;= 현재</th>
+                  <th>③ 현재 &lt; 오픈</th>
                   <th>판매 상태</th>
                   <th>순번</th>
                 </tr>
@@ -297,7 +296,7 @@ end`</code></pre>
                   <td>10</td>
                   <td>1</td>
                   <td>false</td>
-                  <td><strong><code>11-10 12:00</code><br />&gt;= <code>11-08 19:30</code><br />참 ✔</strong></td>
+                  <td><strong><code>11-08 19:30</code><br />&lt;= <code>11-10 12:00</code><br />참 ✔</strong></td>
                   <td class="muted">— 안 봄</td>
                   <td>판매 종료</td>
                   <td>3</td>
@@ -306,7 +305,7 @@ end`</code></pre>
                   <td>11</td>
                   <td>1</td>
                   <td>false</td>
-                  <td><code>11-10 12:00</code><br />&gt;= <code>11-15 19:30</code><br />거짓</td>
+                  <td><code>11-15 19:30</code><br />&lt;= <code>11-10 12:00</code><br />거짓</td>
                   <td><code>11-10 12:00</code><br />&lt; <code>10-20 14:00</code><br />거짓</td>
                   <td>판매 중 (else)</td>
                   <td>0</td>
@@ -324,7 +323,7 @@ end`</code></pre>
                   <td>13</td>
                   <td>2</td>
                   <td>false</td>
-                  <td><code>11-10 12:00</code><br />&gt;= <code>11-25 19:30</code><br />거짓</td>
+                  <td><code>11-25 19:30</code><br />&lt;= <code>11-10 12:00</code><br />거짓</td>
                   <td><strong><code>11-10 12:00</code><br />&lt; <code>11-13 14:00</code><br />참 ✔</strong></td>
                   <td>판매 예정</td>
                   <td>1</td>
@@ -333,7 +332,7 @@ end`</code></pre>
                   <td>14</td>
                   <td>2</td>
                   <td>false</td>
-                  <td><code>11-10 12:00</code><br />&gt;= <code>11-26 19:30</code><br />거짓</td>
+                  <td><code>11-26 19:30</code><br />&lt;= <code>11-10 12:00</code><br />거짓</td>
                   <td><strong><code>11-10 12:00</code><br />&lt; <code>11-12 14:00</code><br />참 ✔</strong></td>
                   <td>판매 예정</td>
                   <td>1</td>
@@ -351,7 +350,7 @@ end`</code></pre>
                   <td>16</td>
                   <td>3</td>
                   <td>false</td>
-                  <td><strong><code>11-10 12:00</code><br />&gt;= <code>11-05 19:30</code><br />참 ✔</strong></td>
+                  <td><strong><code>11-05 19:30</code><br />&lt;= <code>11-10 12:00</code><br />참 ✔</strong></td>
                   <td class="muted">— 안 봄</td>
                   <td>판매 종료</td>
                   <td>3</td>
@@ -369,7 +368,7 @@ end`</code></pre>
                   <td>18</td>
                   <td>4</td>
                   <td>false</td>
-                  <td><strong><code>11-10 12:00</code><br />&gt;= <code>11-01 19:30</code><br />참 ✔</strong></td>
+                  <td><strong><code>11-01 19:30</code><br />&lt;= <code>11-10 12:00</code><br />참 ✔</strong></td>
                   <td class="muted">— 안 봄</td>
                   <td>판매 종료</td>
                   <td>3</td>
@@ -378,7 +377,7 @@ end`</code></pre>
                   <td>19</td>
                   <td>4</td>
                   <td>false</td>
-                  <td><strong><code>11-10 12:00</code><br />&gt;= <code>11-03 19:30</code><br />참 ✔</strong></td>
+                  <td><strong><code>11-03 19:30</code><br />&lt;= <code>11-10 12:00</code><br />참 ✔</strong></td>
                   <td class="muted">— 안 봄</td>
                   <td>판매 종료</td>
                   <td>3</td>
@@ -735,7 +734,7 @@ export class SystemClock extends Clock {
 constructor(@Inject(DATABASE) private readonly db: Database, private readonly clock: Clock) {}
 showSalesStatusSubquery(this.db, { now: this.clock.now() });</code></pre>
           <p>
-            SQL에는 DB가 지금 시각을 돌려주는 <code>now()</code> 함수가 있다. 그것을 쓰지 않고 앱이 정한 시각을
+            SQL에는 DB가 현재 시각을 돌려주는 <code>now()</code> 함수가 있다. 그것을 쓰지 않고 앱이 정한 시각을
             <a href="01-프론트엔드-개발자를-위한-DB-개념.html#parameter">파라미터</a>로 넘긴다.
           </p>
           <ul>
@@ -852,7 +851,7 @@ where "sales_status" &lt;&gt; $7
             </p>
           </details>
           <details>
-            <summary>8. 지금 시각이 11-15 19:30 정각이면 달빛 정원의 공연 판매 상태는?</summary>
+            <summary>8. 현재 시각이 11-15 19:30 정각이면 달빛 정원의 공연 판매 상태는?</summary>
             <p>
               회차 11이 <code>starts_at &lt;= now</code>로 판매 종료(3)가 된다. 남은 회차 순번은 3, 3, 2라서 min은 2, 회차
               취소다. 남은 회차 12가 취소됐기 때문이다.
