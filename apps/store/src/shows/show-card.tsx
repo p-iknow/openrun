@@ -25,8 +25,13 @@ function ShowCardFrame({ children }: { children: ReactNode }) {
 export function ShowCard({ card }: { card: ShowCardData }) {
   return (
     <ShowCardFrame>
-      <div>
+      <div className="flex items-center gap-sm">
         <Badge tone={card.salesStatus.tone}>{card.salesStatus.label}</Badge>
+        {card.almostSoldOut === null ? null : (
+          <span className="text-caption font-semibold text-warning">
+            {card.almostSoldOut}
+          </span>
+        )}
       </div>
       <h2 className="line-clamp-2 text-body font-semibold break-keep">
         {card.title}

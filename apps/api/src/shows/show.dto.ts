@@ -53,6 +53,13 @@ export class ShowSummaryDto {
       '판매 예정일 때 가장 이른 판매 오픈 일시. 판매 예정이 아니면 null이다.',
   })
   salesOpenAt: string | null;
+
+  @ApiProperty({
+    type: Boolean,
+    description:
+      '매진 임박 여부. 판매 중인 회차 중 남은 좌석이 전체의 10% 이하(0석 제외)인 회차가 하나라도 있으면 참이다.',
+  })
+  isAlmostSoldOut: boolean;
 }
 
 export class ShowPageDto {

@@ -15,6 +15,13 @@
       "when": 1794225322348,
       "tag": "0001_create_venues_and_performances",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794293949719,
+      "tag": "0002_create_sections_seats_performance_seats",
+      "breakpoints": true
     }
   ]
 }

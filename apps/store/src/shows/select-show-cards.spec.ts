@@ -21,6 +21,7 @@ function summaryOf(overrides: Partial<ShowSummary>): ShowSummary {
     },
     salesStatus: 'on_sale',
     salesOpenAt: null,
+    isAlmostSoldOut: false,
     ...overrides,
   };
 }
@@ -41,6 +42,7 @@ describe('selectShowCards', () => {
           },
           salesStatus: 'on_sale',
           salesOpenAt: null,
+          isAlmostSoldOut: false,
         },
       ]),
     );
@@ -53,6 +55,7 @@ describe('selectShowCards', () => {
         period: '2026.03.01 ~ 2026.03.20',
         salesStatus: { label: '판매 중', tone: 'primary' },
         salesOpenAt: null,
+        almostSoldOut: null,
       },
     ]);
   });
@@ -71,6 +74,7 @@ describe('selectShowCards', () => {
           },
           salesStatus: 'on_sale',
           salesOpenAt: null,
+          isAlmostSoldOut: false,
         },
       ]),
     );
@@ -84,6 +88,7 @@ describe('selectShowCards', () => {
       salesStatus: 'upcoming',
       expected: { label: '판매 예정', tone: 'success' },
     },
+    { salesStatus: 'sold_out', expected: { label: '매진', tone: 'neutral' } },
     {
       salesStatus: 'cancelled',
       expected: { label: '회차 취소', tone: 'danger' },
@@ -110,5 +115,13 @@ describe('selectShowCards', () => {
     );
 
     expect(card?.salesOpenAt).toBe('2026.02.15 02:00 판매 오픈');
+  });
+
+  it('매진 임박이면 매진 임박 문구를 보여 준다', () => {
+    const [card] = selectShowCards(
+      pageOf([summaryOf({ isAlmostSoldOut: true })]),
+    );
+
+    expect(card?.almostSoldOut).toBe('매진 임박');
   });
 });

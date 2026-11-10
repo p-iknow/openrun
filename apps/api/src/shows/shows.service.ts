@@ -46,6 +46,7 @@ export class ShowsService {
           end: period.end,
           salesStatus: salesStatus.salesStatus,
           salesOpenAt: salesStatus.salesOpenAt,
+          isAlmostSoldOut: salesStatus.isAlmostSoldOut,
         })
         .from(shows)
         .innerJoin(venues, eq(venues.id, shows.venueId))
