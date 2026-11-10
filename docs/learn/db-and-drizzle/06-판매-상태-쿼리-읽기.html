@@ -1052,14 +1052,39 @@ end`
 
         <section id="service">
           <h2>목록과 개수에 붙이기</h2>
-          <pre><code class="language-ts">// apps/api/src/shows/shows.service.ts (바뀐 부분)
+          <pre><code class="language-ts">// apps/api/src/shows/shows.service.ts (findPage 안)
+import { performances, shows } from '../db/schema/shows.js'; // 공연, 회차 테이블
+import { venues } from '../db/schema/venues.js';             // 공연장 테이블
+
+// 공연 기간: 회차를 공연별로 묶어 첫 회차와 마지막 회차 일시를 구한다 (#39, 05 문서)
+const period = this.db
+  .select({
+    showId: performances.showId,
+    start: min(performances.startsAt).as('start'),
+    end: max(performances.startsAt).as('end'),
+  })
+  .from(performances)
+  .groupBy(performances.showId)
+  .as('period');
+
+// 공연 판매 상태: 이 문서에서 본 서브쿼리 (#40)
 const salesStatus = showSalesStatusSubquery(this.db, { now: this.clock.now() });
+
 // 판매 종료 공연은 목록에서 뺀다. 목록과 전체 개수가 같은 조건을 써야 페이지 수가 맞는다.
 const isListed = ne(salesStatus.salesStatus, 'ended');
 
 const [rows, [total]] = await Promise.all([
   this.db
-    .select({ /* ... */, salesStatus: salesStatus.salesStatus, salesOpenAt: salesStatus.salesOpenAt })
+    .select({
+      id: shows.id,
+      title: shows.title,
+      genre: shows.genre,
+      venueName: venues.name,                // 공연장 테이블에서
+      start: period.start,                   // period 서브쿼리에서
+      end: period.end,
+      salesStatus: salesStatus.salesStatus,  // salesStatus 서브쿼리에서
+      salesOpenAt: salesStatus.salesOpenAt,
+    })
     .from(shows)
     .innerJoin(venues, eq(venues.id, shows.venueId))
     .innerJoin(period, eq(period.showId, shows.id))
@@ -1090,6 +1115,123 @@ const [rows, [total]] = await Promise.all([
               <strong>개수 쿼리는 <code>period</code> 대신 <code>salesStatus</code>를 JOIN한다.</strong> 두 서브쿼리 모두 회차가
               있는 공연만 줄이 있어서, 회차 없는 공연을 빼는 효과는 같다. 판매 종료를 거르려면 <code>salesStatus</code>가
               필요하니 이것 하나로 바꿨다.
+            </li>
+          </ul>
+          <h3>toSQL로 뽑은 SQL</h3>
+          <p>
+            위 코드에 <code>.toSQL()</code>을 붙여 뽑은 SQL이다(<a href="03-drizzle-쿼리-문법.html#to-sql">toSQL</a>). 현재
+            시각은 2026-11-10 12:00(한국 시각)으로 넣었다. 줄 바꿈과 들여쓰기만 손봤고, 오른쪽 주석은 대응하는 Drizzle 코드다.
+          </p>
+          <pre><code class="language-sql">-- 목록 쿼리 (rows)
+-- .select({ ... })
+select "shows"."id", "shows"."title", "shows"."genre", "venues"."name",
+       "start", "end", "sales_status", "sales_open_at"
+-- .from(shows)
+from "shows"
+-- .innerJoin(venues, ...)
+inner join "venues" on "venues"."id" = "shows"."venue_id"
+-- .innerJoin(period, ...)
+inner join (
+    select "show_id", min("starts_at") as "start", max("starts_at") as "end"
+    from "performances"
+    group by "performances"."show_id"
+  ) "period" on "period"."show_id" = "shows"."id"
+-- .innerJoin(salesStatus, ...)
+inner join (
+    select "show_id",
+      case min(case
+          when "performances"."is_cancelled" then 2
+          when "performances"."starts_at" &lt;= $1 then 3
+          when $2 &lt; "performances"."sales_open_at" then 1
+          else 0
+        end)
+        when 0 then 'on_sale'
+        when 1 then 'upcoming'
+        when 2 then 'cancelled'
+        when 3 then 'ended'
+      end as "sales_status",
+      case
+        when min(case
+            when "performances"."is_cancelled" then 2
+            when "performances"."starts_at" &lt;= $3 then 3
+            when $4 &lt; "performances"."sales_open_at" then 1
+            else 0
+          end) = 1
+        then min("sales_open_at") filter (where case
+            when "performances"."is_cancelled" then 2
+            when "performances"."starts_at" &lt;= $5 then 3
+            when $6 &lt; "performances"."sales_open_at" then 1
+            else 0
+          end = 1)
+      end as "sales_open_at"
+    from "performances"
+    group by "performances"."show_id"
+  ) "show_sales_status" on "show_sales_status"."show_id" = "shows"."id"
+-- .where(isListed)
+where "sales_status" &lt;&gt; $7
+-- .orderBy(...)
+order by "start" asc, "shows"."id" asc
+-- .limit(PAGE_SIZE)
+limit $8
+-- params: [now, now, now, now, now, now, 'ended', 20]
+--          now = '2026-11-10T03:00:00.000Z'</code></pre>
+          <pre><code class="language-sql">-- 전체 개수 쿼리 (total)
+-- .select({ count: count() })
+select count(*)
+-- .from(shows)
+from "shows"
+-- .innerJoin(salesStatus, ...)
+inner join (
+    select "show_id",
+      case min(case
+          when "performances"."is_cancelled" then 2
+          when "performances"."starts_at" &lt;= $1 then 3
+          when $2 &lt; "performances"."sales_open_at" then 1
+          else 0
+        end)
+        when 0 then 'on_sale'
+        when 1 then 'upcoming'
+        when 2 then 'cancelled'
+        when 3 then 'ended'
+      end as "sales_status",
+      case
+        when min(case
+            when "performances"."is_cancelled" then 2
+            when "performances"."starts_at" &lt;= $3 then 3
+            when $4 &lt; "performances"."sales_open_at" then 1
+            else 0
+          end) = 1
+        then min("sales_open_at") filter (where case
+            when "performances"."is_cancelled" then 2
+            when "performances"."starts_at" &lt;= $5 then 3
+            when $6 &lt; "performances"."sales_open_at" then 1
+            else 0
+          end = 1)
+      end as "sales_open_at"
+    from "performances"
+    group by "performances"."show_id"
+  ) "show_sales_status" on "show_sales_status"."show_id" = "shows"."id"
+-- .where(isListed)
+where "sales_status" &lt;&gt; $7
+-- params: [now, now, now, now, now, now, 'ended']</code></pre>
+          <ul>
+            <li>
+              <strong>서브쿼리가 <code>inner join ( ... ) "show_sales_status"</code>로 그 자리에 통째로 들어간다.</strong>
+              <code>salesStatus</code> 변수는 하나지만 두 쿼리에 같은 SQL이 각각 펼쳐진다. 두 쿼리는 따로 실행되므로 DB는
+              공연 판매 상태를 두 번 계산한다.
+            </li>
+            <li>
+              <strong><code>isListed</code>는 <code>"sales_status" &lt;&gt; $7</code>이 된다.</strong> <code>ne</code>가
+              <code>&lt;&gt;</code>(같지 않다)이고, <code>'ended'</code>는 값이라 빈칸 <code>$7</code>로 간다.
+              <code>"sales_status"</code>는 서브쿼리 안에서 <code>.as('sales_status')</code>로 붙인 이름이다.
+            </li>
+            <li>
+              <strong><code>.offset(0)</code>은 SQL에 없다.</strong> 첫 페이지라 offset이 0이면 Drizzle이 뺀다. 2페이지부터는
+              <code>offset $9</code>가 붙는다.
+            </li>
+            <li>
+              <strong>서브쿼리 밖에서는 컬럼을 이름만으로 부른다.</strong> <code>"start"</code>, <code>"sales_status"</code>처럼
+              테이블 이름 없이 쓴 것이 서브쿼리가 내놓은 컬럼이다.
             </li>
           </ul>
           <p>예시 데이터의 결과는 다음과 같다. 푸른 등대는 판매 종료라 빠진다.</p>
