@@ -564,33 +564,6 @@ export const performanceSeats = pgTable(
               제약은 회차 좌석 <strong>줄 자체</strong>가 두 번 생기는 데이터 오류만 막는다.
             </p>
           </div>
-
-          <h3 id="ps-explain">인덱스가 실제로 쓰이는 곳: 실행 계획으로 확인</h3>
-          <p>
-            처음 주석은 "회차별 남은 좌석 집계에도 쓰인다"였다. 리뷰에서 로컬 DB(회차 좌석 57,200줄)로
-            <a href="01-프론트엔드-개발자를-위한-DB-개념.html#explain">실행 계획</a>을 보니 그렇지 않았다.
-          </p>
-          <pre><code class="language-sql">-- 공연 목록의 seat_count 서브쿼리: 모든 회차를 한꺼번에 센다
-explain select performance_id, count(*) filter (where not is_sold), count(*)
-from performance_seats group by performance_id;
--- HashAggregate
---   -&gt; Seq Scan on performance_seats
-
--- 회차 하나의 좌석 세기
-explain select count(*) from performance_seats where performance_id = 5;
--- Index Only Scan using performance_seats_performance_id_seat_id_unique
---   Index Cond: (performance_id = 5)</code></pre>
-          <p>
-            공연 목록은 모든 회차의 좌석을 세야 하니 어차피 57,200줄을 다 읽는다. 인덱스를 거쳐 한 줄씩 찾는 것보다 처음부터
-            끝까지 읽는 쪽이 빨라서 DB가 인덱스를 쓰지 않는다. 인덱스가 쓰이는 것은 공연 상세나 좌석 선택처럼
-            <strong>회차 하나</strong>를 볼 때다. 그래서 주석을 "회차 하나의 좌석을 찾을 때도 쓰인다"로 고쳤다.
-          </p>
-          <div class="callout">
-            <p>
-              <strong>주석에 "인덱스가 이 쿼리에 쓰인다"고 적으려면 <code>EXPLAIN</code>으로 확인한다.</strong> 인덱스가 있다는 것과
-              DB가 그 인덱스를 고른다는 것은 다른 이야기다.
-            </p>
-          </div>
         </section>
 
         <section id="seats">
@@ -751,7 +724,7 @@ ALTER TABLE "sections" ADD CONSTRAINT "sections_venue_id_name_unique" UNIQUE("ve
           </div>
           <div class="quiz">
             <p class="quiz-q">2. 회차 좌석의 유니크 제약을 이렇게 바꾸면, "회차 하나의 좌석 세기" 쿼리의 실행 계획은 어떻게 될까?</p>
-            <p class="quiz-context"><a href="#ps-explain">인덱스가 실제로 쓰이는 곳</a>의 두 번째 쿼리(<code>where performance_id = 5</code>)를 떠올린다.</p>
+            <p class="quiz-context"><a href="#performance-seats">회차 좌석</a> 코드의 주석과, 회차 하나의 좌석을 세는 쿼리 <code>select count(*) from performance_seats where performance_id = 5</code>를 떠올린다.</p>
             <pre><code class="language-diff">-  (table) =&gt; [unique().on(table.performanceId, table.seatId)],
 +  (table) =&gt; [unique().on(table.seatId, table.performanceId)],</code></pre>
             <details class="quiz-answer">
@@ -788,19 +761,6 @@ ALTER TABLE "sections" ADD CONSTRAINT "sections_venue_id_name_unique" UNIQUE("ve
                   만들지 않아도 된다. <code>sections_venue_id_name_unique</code>의 인덱스가 <code>venue_id</code>로 시작해서, 앞 컬럼만으로
                   찾는 이 쿼리에 쓰일 수 있다. 같은 일을 하는 인덱스를 하나 더 두면 쓰기만 느려진다. 다만 구역이 몇 줄뿐이면 DB가
                   인덱스 대신 테이블 전체를 읽을 수도 있다. 작은 테이블은 다 읽어도 빠르기 때문이다.
-                </p></div>
-            </details>
-          </div>
-          <div class="quiz">
-            <p class="quiz-q">5. 공연 목록의 <code>seat_count</code> 서브쿼리가 회차 좌석 인덱스를 쓰지 않는 이유는? 인덱스를 쓰게 하려면 무엇이 달라져야 할까?</p>
-            <p class="quiz-context"><a href="#ps-explain">인덱스가 실제로 쓰이는 곳</a>의 첫 번째 실행 계획(<code>Seq Scan</code>)을 본다.</p>
-            <details class="quiz-answer">
-              <summary>답 보기</summary>
-              <div class="fold-body"><p>
-                  모든 회차의 좌석을 세려면 회차 좌석 테이블을 어차피 전부 읽어야 한다. 인덱스는 일부 행만 고를 때 이득이라, 전부 읽는
-                  쿼리에서는 처음부터 끝까지 읽는 쪽이 빠르다. 인덱스가 쓰이려면 읽는 행이 줄어야 한다. 예를 들어 지금 페이지에 나오는
-                  공연의 회차만 세도록 <code>where performance_id in (...)</code>로 범위를 좁히면 인덱스를 쓸 수 있다. 데이터가 커져
-                  목록이 느려지면 그때 검토할 일이다.
                 </p></div>
             </details>
           </div>
