@@ -1,4 +1,5 @@
 import { fakerKO as faker } from '@faker-js/faker';
+import { createHash } from 'node:crypto';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/node-postgres';
@@ -311,7 +312,6 @@ function buildShows(today: number) {
     const performanceCount = faker.number.int({ min: 3, max: 15 });
     return {
       show: {
-        posterKey: `show-${String(index + 1).padStart(2, '0')}.png`,
         venueIndex: faker.number.int({
           min: 0,
           max: VENUE_LAYOUTS.length - 1,
@@ -374,13 +374,39 @@ function buildSeedShows(now: number) {
 faker.seed(FAKER_SEED);
 const seedShows = buildSeedShows(Date.now());
 
+// 포스터에 적을 공연 기간. 카드와 같이 첫 회차부터 마지막 회차까지의 한국 날짜다.
+function posterPeriodOf(list: { startsAt: Date }[]): string {
+  const times = list.map(({ startsAt }) => startsAt.getTime());
+  const kstDate = (time: number) =>
+    new Date(time + KST_OFFSET_MS)
+      .toISOString()
+      .slice(0, 10)
+      .replaceAll('-', '.');
+  const start = kstDate(Math.min(...times));
+  const end = kstDate(Math.max(...times));
+  return start === end ? start : `${start} – ${end}`;
+}
+
 // DB보다 먼저 쓴다. DB 트랜잭션이 실패해도 남는 것은 다음 시드가 지울 파일뿐이고,
 // 반대 순서면 커밋된 공연의 포스터 키가 없는 파일을 가리킬 수 있다.
+// 포스터에 날짜가 들어가 시드를 돌린 날에 따라 내용이 바뀐다. 키에 내용 해시를 넣어, 내용이 바뀌면 URL도 바뀌게 한다.
+// 그래야 next/image가 URL 기준으로 캐시한 예전 포스터를 보여 주지 않는다.
 const posters = await Promise.all(
-  seedShows.map(async ({ show }) => ({
-    key: show.posterKey,
-    png: await renderPoster({ title: show.title, genre: show.genre }),
-  })),
+  seedShows.map(async ({ show, performances: list }, index) => {
+    const png = await renderPoster({
+      title: show.title,
+      genre: show.genre,
+      venueName: VENUE_LAYOUTS[show.venueIndex]?.name ?? '',
+      period: posterPeriodOf(list),
+      // 장르를 순번대로 돌려 붙이므로, 같은 장르 안에서 몇 번째인지로 색과 구도를 바꾼다.
+      variant: Math.floor(index / GENRES.length),
+    });
+    const hash = createHash('sha256').update(png).digest('hex').slice(0, 8);
+    return {
+      key: `show-${String(index + 1).padStart(2, '0')}-${hash}.png`,
+      png,
+    };
+  }),
 );
 await rm(POSTER_DIR, { recursive: true, force: true });
 await mkdir(POSTER_DIR, { recursive: true });
@@ -437,15 +463,22 @@ try {
       seatId: number;
       isSold: boolean;
     }[] = [];
-    for (const { show, performances: showPerformances } of seedShows) {
+    for (const [
+      index,
+      { show, performances: showPerformances },
+    ] of seedShows.entries()) {
       const { venueIndex, ...values } = show;
+      const poster = posters[index];
+      if (!poster) {
+        throw new Error(`포스터를 만들지 못했습니다: ${show.title}`);
+      }
       const venue = venueSeats[venueIndex];
       if (!venue) {
         throw new Error(`공연장 순번이 범위를 벗어났습니다: ${venueIndex}`);
       }
       const [inserted] = await tx
         .insert(shows)
-        .values({ ...values, venueId: venue.venueId })
+        .values({ ...values, venueId: venue.venueId, posterKey: poster.key })
         .returning({ id: shows.id });
       if (!inserted) {
         throw new Error(`공연을 넣지 못했습니다: ${show.title}`);

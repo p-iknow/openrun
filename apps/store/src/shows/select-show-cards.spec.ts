@@ -27,7 +27,7 @@ function summaryOf(overrides: Partial<ShowSummary>): ShowSummary {
 }
 
 describe('selectShowCards', () => {
-  it('공연 기간을 한국 날짜로 바꿔 시작일 ~ 종료일로 보여 주고, 포스터 URL은 그대로 둔다', () => {
+  it('공연 기간을 한국 날짜로 바꿔 시작일 ~ 종료일로 보여 준다', () => {
     const cards = selectShowCards(
       pageOf([
         {
