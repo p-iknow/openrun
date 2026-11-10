@@ -72,7 +72,7 @@
           <p>
             용어집은 좌석을 "공연장에 물리적으로 존재하는 자리이며, 판매 여부를 갖지 않는다", 회차 좌석을 "특정 회차에서 판매되는
             좌석 하나이며, 예매의 최소 판매 단위"로 정한다. 같은 A구역 3열 5번이 11월 20일 회차에서는 팔렸고 11월 21일 회차에서는
-            비어 있을 수 있다. 판매 여부는 <strong>자리 + 회차</strong>마다 다르다. 이를 담는 방법으로 대안 세 가지를 따져 보고
+            비어 있을 수 있다. 판매 여부는 <strong>자리 + 회차</strong>마다 다르다. 이를 담는 방법으로 대안 두 가지를 따져 보고
             회차 좌석을 골랐다. 같은 예시 데이터로 하나씩 본다.
           </p>
 
@@ -106,41 +106,7 @@
           </div>
           <p>정답: 11-20 회차의 남은 좌석은 2석(11, 12), 11-21 회차는 3석이다.</p>
 
-          <h4 id="alt-seat-is-sold">대안 1: 좌석에 판매 여부를 둔다</h4>
-          <p>
-            <strong>문제: 좌석 한 줄에 판매 여부가 하나뿐이라, 한 회차에서 팔리면 모든 회차에서 팔린 것이 된다.</strong>
-            <code>seats</code>에 <code>is_sold</code> 컬럼을 더하면 이렇게 된다.
-          </p>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr><th>seats.id</th><th>자리</th><th>is_sold</th></tr>
-              </thead>
-              <tbody>
-                <tr><td>10</td><td>A구역 3열 5번</td><td><strong>true</strong></td></tr>
-                <tr><td>11</td><td>A구역 3열 6번</td><td>false</td></tr>
-                <tr><td>12</td><td>B구역 1열 1번</td><td>false</td></tr>
-              </tbody>
-            </table>
-          </div>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr><th>질문</th><th>테이블이 주는 답</th><th>정답</th></tr>
-              </thead>
-              <tbody>
-                <tr><td>11-20 회차에 좌석 10이 남았나?</td><td>아니다(true)</td><td>아니다</td></tr>
-                <tr><td>11-21 회차에 좌석 10이 남았나?</td><td><strong>아니다(true)</strong></td><td>남았다</td></tr>
-              </tbody>
-            </table>
-          </div>
-          <p>
-            <code>is_sold</code> 칸이 좌석마다 하나뿐이라 "어느 회차에서 팔렸는지"를 적을 곳이 없다. 11-20 회차에서 팔리는 순간 모든
-            회차에서 팔린 것이 된다. 회차가 늘어날수록 칸을 늘릴 수도 없다. 그래서 판매 여부는 좌석이 아니라 좌석과 회차의 짝마다
-            있어야 한다.
-          </p>
-
-          <h4 id="alt-sold-only">대안 2: 팔린 좌석만 줄로 저장한다</h4>
+          <h4 id="alt-sold-only">대안 1: 팔린 좌석만 줄로 저장한다</h4>
           <p>
             <strong>문제: 남은 좌석을 구하려면 공연장 좌석 수에서 팔린 수를 빼야 해서 두 테이블을 맞춰 세야 하고, 줄이 빠지면 판매
             가능으로 보인다.</strong> 팔린 짝만 적고, 줄이 없으면 판매 가능으로 보는 방식이다.
@@ -165,7 +131,7 @@
               </thead>
               <tbody>
                 <tr>
-                  <td>대안 2</td>
+                  <td>대안 1</td>
                   <td>
                     ① 회차 → 공연 → 공연장 → 구역 → 좌석으로 JOIN해 공연장 좌석 수(3)를 센다<br />
                     ② <code>sold_seats</code>에서 회차 20의 줄 수(1)를 센다<br />
@@ -183,7 +149,7 @@
           <div class="table-wrap">
             <table>
               <thead>
-                <tr><th>사고</th><th>대안 2에서 보이는 모습</th><th>지금 구조에서 보이는 모습</th></tr>
+                <tr><th>사고</th><th>대안 1에서 보이는 모습</th><th>지금 구조에서 보이는 모습</th></tr>
               </thead>
               <tbody>
                 <tr>
@@ -199,7 +165,7 @@
             샌다. 표를 파는 서비스에서는 뒤쪽이 덜 위험하다. 스펙도 "남은 좌석은 회차 좌석 테이블만 세서 구한다"고 정했다.
           </p>
 
-          <h4 id="alt-remaining-count">대안 3: 회차에 남은 좌석 수를 숫자로 저장한다</h4>
+          <h4 id="alt-remaining-count">대안 2: 회차에 남은 좌석 수를 숫자로 저장한다</h4>
           <p>
             <strong>문제: 좌석이 팔릴 때마다 회차 좌석과 이 숫자를 함께 고쳐야 하고, 둘이 어긋날 수 있다.</strong>
             <code>performances</code>에 <code>remaining_seats</code> 컬럼을 더하면 이렇게 된다.
