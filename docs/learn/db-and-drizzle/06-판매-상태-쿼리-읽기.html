@@ -450,7 +450,35 @@ end`</code></pre>
             보고 실제로 만들어지는 SQL을 비교한다.
           </p>
 
-          <h3>방법 1. 숫자를 그냥 넣기: 파라미터가 된다</h3>
+          <h3>먼저: Drizzle이 DB에 보내는 것은 두 덩어리다</h3>
+          <p>
+            Drizzle은 쿼리를 문자열 하나로 보내지 않는다. <strong>빈칸이 뚫린 SQL 글자</strong>와 <strong>빈칸에 채울 값
+            목록</strong>을 따로 보낸다. 빈칸 있는 신청서 양식과, 칸마다 적을 내용을 따로 건네는 것과 같다.
+          </p>
+          <pre><code class="language-ts">// db.select().from(shows).where(eq(shows.id, 42)) 가 실제로 DB에 보내는 것
+{
+  sql: 'select ... from "shows" where "shows"."id" = $1', // 양식: $1이 빈칸
+  params: [42],                                            // 빈칸에 채울 값
+}</code></pre>
+          <ul>
+            <li>
+              <code>$1</code>, <code>$2</code>…가 빈칸이고, 숫자는 <code>params</code> 배열의 몇 번째 값인지를 뜻한다. 이 빈칸을
+              <strong>파라미터</strong>라고 부른다.
+            </li>
+            <li>
+              <code>sql`...`</code> 템플릿 안의 <code>${...}</code>도 같다. 컬럼(<code>${performances.startsAt}</code>)은
+              <code>"starts_at"</code>처럼 이름이 글자로 들어가고, 그 밖의 값(<code>${now}</code>, <code>${2}</code>)은 빈칸
+              <code>$n</code>이 되어 <code>params</code>로 간다.
+            </li>
+            <li>
+              이렇게 나눠 보내는 이유는 사용자가 입력한 값이 SQL 글자에 섞여 명령처럼 실행되는 일(<a
+                href="01-프론트엔드-개발자를-위한-DB-개념.html#parameter"
+                >SQL 인젝션</a
+              >)을 막기 위해서다.
+            </li>
+          </ul>
+
+          <h3>방법 1. 숫자를 그냥 넣기: 빈칸이 된다</h3>
           <pre><code class="language-ts">// 쓰지 않은 방법
 sql`case
   when ${performances.isCancelled} then ${2}
@@ -458,27 +486,58 @@ sql`case
   when ${now} &lt; ${performances.salesOpenAt} then ${1}
   else ${0}
 end`</code></pre>
-          <pre><code class="language-sql">-- 만들어지는 SQL
+          <pre><code class="language-sql">-- DB에 가는 SQL 글자
 case
   when "is_cancelled" then $1
   when "starts_at" &lt;= $2 then $3
   when $4 &lt; "sales_open_at" then $5
   else $6
 end
--- params: [2, now, 3, now, 1, 0]</code></pre>
+-- DB에 가는 값 목록: [2, now, 3, now, 1, 0]</code></pre>
           <p>
-            <code>${...}</code>에 값을 넣으면 Drizzle은 그 값을 SQL 글자에 쓰지 않고 <code>$1</code> 같은 빈칸으로 남긴 뒤 값은
-            따로 보낸다(<a href="03-drizzle-쿼리-문법.html#sql-fragment">sql 조각</a>). 그래서 SQL에는 <code>2</code>가 없고
-            <code>then $1</code>만 있다.
+            <code>${2}</code>, <code>${3}</code>도 값이라 빈칸이 됐다. SQL 글자에는 숫자가 하나도 없고 <code>then $1</code>,
+            <code>then $3</code>처럼 빈칸만 남았다.
           </p>
+          <h3>빈칸의 타입은 누가 정하나</h3>
           <p>
-            문제는 PostgreSQL이 값을 받기 <strong>전에</strong> SQL만 보고 <code>CASE</code> 결과의 타입을 정한다는 점이다.
-            <code>then</code> 자리가 전부 빈칸(<code>$1</code>, <code>$3</code>, <code>$5</code>, <code>$6</code>)이라 숫자인지
-            글자인지 알 단서가 없고, 이럴 때는 <code>text</code>로 정한다. 그러면 바깥의 <code>min</code>이 숫자가 아니라
-            <strong>글자 순서</strong>로 비교한다.
+            DB는 빈칸마다 "여기 들어올 값이 숫자인지, 글자인지, 시각인지"를 정해야 계산할 수 있다. 그런데 값 목록에는 타입이
+            적혀 있지 않다. 드라이버(<code>pg</code>)는 숫자 <code>2</code>도 글자 <code>"2"</code>로 바꿔서 보낸다. 그래서 DB는
+            값이 아니라 <strong>빈칸 주변의 SQL 글자</strong>를 보고 타입을 짐작한다.
           </p>
-          <pre><code class="language-sql">min('0', '3')   → '0'    -- 지금은 숫자 순서와 같아서 우연히 맞는다
-min('10', '9')  → '10'   -- 순번이 10을 넘으면 틀린다. 글자 '1'이 '9'보다 앞이라서</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>빈칸</th>
+                  <th>주변</th>
+                  <th>DB가 정한 타입</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>$2</code>, <code>$4</code></td>
+                  <td>시각 컬럼 <code>starts_at</code>, <code>sales_open_at</code>과 비교한다</td>
+                  <td>시각(<code>timestamptz</code>). 단서가 있다</td>
+                </tr>
+                <tr>
+                  <td><code>$1</code>, <code>$3</code>, <code>$5</code>, <code>$6</code></td>
+                  <td><code>then</code>/<code>else</code> 뒤. 옆에 다른 빈칸밖에 없다</td>
+                  <td>단서가 없어 글자(<code>text</code>)로 정한다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            그래서 이 <code>CASE</code>는 숫자 <code>2</code>가 아니라 글자 <code>'2'</code>를 돌려준다. 바깥의
+            <code>min</code>은 글자를 사전 순서로 비교한다. 사전에서 <code>'10'</code>은 첫 글자 <code>'1'</code>이
+            <code>'9'</code>보다 앞이라 <code>'9'</code>보다 먼저 나온다.
+          </p>
+          <pre><code class="language-sql">min('0', '3')   → '0'    -- 지금은 순번이 한 자리라 사전 순서와 숫자 순서가 같아 우연히 맞는다
+min('10', '9')  → '10'   -- 순번이 10을 넘으면 틀린다</code></pre>
+          <p>
+            이 저장소의 로컬 PostgreSQL에 <code>pg</code> 드라이버로 직접 보내 확인했다. 빈칸으로 보낸 10과 9의
+            <code>min</code>은 글자 <code>"10"</code>이었고, SQL 글자로 쓴 10과 9의 <code>min</code>은 숫자 <code>9</code>였다.
+          </p>
 
           <h3>방법 2. sql.raw로 넣기: SQL 글자가 된다</h3>
           <pre><code class="language-ts">// 실제로 만들어지는 모양 (priorityOf가 sql.raw를 돌려준다)
@@ -488,18 +547,18 @@ sql`case
   when ${now} &lt; ${performances.salesOpenAt} then ${sql.raw('1')}
   else ${sql.raw('0')}
 end`</code></pre>
-          <pre><code class="language-sql">-- 만들어지는 SQL
+          <pre><code class="language-sql">-- DB에 가는 SQL 글자
 case
   when "is_cancelled" then 2
   when "starts_at" &lt;= $1 then 3
   when $2 &lt; "sales_open_at" then 1
   else 0
 end
--- params: [now, now]</code></pre>
+-- DB에 가는 값 목록: [now, now]</code></pre>
           <p>
-            <a href="03-drizzle-쿼리-문법.html#sql-raw"><code>sql.raw</code></a>는 문자열을 빈칸으로 남기지 않고 SQL 글자에
-            그대로 써 넣는다. 이제 <code>then 2</code>가 SQL에 보이므로 PostgreSQL은 결과가 <code>integer</code>라는 것을 알고,
-            <code>min</code>도 숫자로 비교한다. 실행할 때마다 바뀌는 <code>now</code>만 파라미터로 남는다.
+            <a href="03-drizzle-쿼리-문법.html#sql-raw"><code>sql.raw</code></a>는 값을 빈칸으로 만들지 않고 SQL 글자에
+            그대로 써 넣는다. 이제 SQL 글자에 <code>then 2</code>가 보이므로 DB는 짐작할 필요 없이 숫자(<code>integer</code>)로
+            정하고, <code>min</code>도 숫자로 비교한다. 실행할 때마다 바뀌는 <code>now</code>만 빈칸으로 남는다.
           </p>
 
           <h3>'2'를 직접 쓰지 않고 함수로 만든 이유</h3>
