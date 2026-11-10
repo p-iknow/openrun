@@ -88,7 +88,7 @@
               <tbody>
                 <tr>
                   <td><code>db/schema/shows.ts</code></td>
-                  <td><code>shows</code> 테이블의 모양을 정의</td>
+                  <td><code>shows</code>, <code>performances</code>, <code>performance_seats</code> 테이블과 <code>genre</code> enum의 모양을 정의</td>
                   <td>drizzle-kit(개발 도구)과 앱 코드 둘 다</td>
                 </tr>
                 <tr>
@@ -103,13 +103,25 @@
 
         <section id="schema">
           <h2><code>shows.ts</code> 한 줄씩</h2>
-          <p>SQL의 <code>CREATE TABLE</code>을 직접 쓰는 대신 TypeScript 객체로 테이블을 표현한다.</p>
-          <pre><code class="language-ts">import { integer, pgTable, text } from 'drizzle-orm/pg-core';
+          <p>
+            SQL의 <code>CREATE TABLE</code>을 직접 쓰는 대신 TypeScript 객체로 테이블을 표현한다. 아래는
+            <code>shows.ts</code>의 <code>shows</code> 테이블이다. 이 절에서는 기본 문법인 <code>id</code>와
+            <code>title</code> 두 줄만 본다.
+          </p>
+          <pre><code class="language-ts">import { integer, pgTable, text /* ... */ } from 'drizzle-orm/pg-core';
 
-export const shows = pgTable('shows', {
-  id: integer().primaryKey().generatedAlwaysAsIdentity(),
-  title: text().notNull(),
-});</code></pre>
+export const shows = pgTable(
+  'shows',
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    venueId: integer('venue_id')
+      .notNull()
+      .references(() =&gt; venues.id),
+    title: text().notNull(),
+    // genre, minAge, runningMinutes, description, createdAt 생략
+  },
+  (table) =&gt; [index().on(table.venueId)],
+);</code></pre>
 
           <h3><code>from 'drizzle-orm/pg-core'</code></h3>
           <p>
@@ -117,13 +129,14 @@ export const shows = pgTable('shows', {
             <code>sqlite-core</code>를 쓴다. DB마다 지원하는 타입이 달라서 나뉘어 있다.
           </p>
 
-          <h3><code>pgTable('shows', { ... })</code></h3>
+          <h3><code>pgTable('shows', { ... }, (table) =&gt; [...])</code></h3>
           <ul>
             <li>첫 인자 <code>'shows'</code>는 DB의 실제 테이블 이름이다.</li>
             <li>두 번째 인자의 각 키가 컬럼이 된다.</li>
+            <li>세 번째 인자는 인덱스 같은 테이블 단위 설정이다. 없으면 생략한다.</li>
             <li>
               컬럼 이름을 따로 주지 않으면 키 이름(<code>id</code>, <code>title</code>)이 그대로 DB
-              컬럼 이름이 된다. <code>integer('show_id')</code>처럼 쓰면 DB 컬럼 이름만 따로 정할 수
+              컬럼 이름이 된다. <code>integer('venue_id')</code>처럼 쓰면 DB 컬럼 이름만 따로 정할 수
               있다.
             </li>
           </ul>
@@ -156,21 +169,25 @@ export const shows = pgTable('shows', {
           <h3><code>title: text().notNull()</code></h3>
           <p>길이 제한 없는 문자열이고, 비울 수 없다(<code>NOT NULL</code>).</p>
           <p>
-            이 문서 뒤에 나온 Drizzle 스키마 문법(외래 키, 인덱스, enum, <code>timestamptz</code> 등)은 <a href="02-drizzle-스키마-문법.html">db-and-drizzle 02 문서</a>에, 1.3에서 공연장·공연·회차 테이블을 그렇게 만든 이유는 <a href="04-공연장-공연-회차-스키마.html">db-and-drizzle 04 문서</a>에 있다.
+            나머지 스키마 문법(외래 키 <code>references</code>, 인덱스, enum, <code>timestamptz</code> 등)은 <a href="02-drizzle-스키마-문법.html">db-and-drizzle 02 문서</a>에, 공연장·공연·회차 테이블을 그렇게 만든 이유는 <a href="04-공연장-공연-회차-스키마.html">db-and-drizzle 04 문서</a>에 있다.
           </p>
         </section>
 
         <section id="schema-sql">
           <h2>이 코드가 만드는 SQL</h2>
           <p>
-            <code>pnpm db:generate</code>를 실행하면 drizzle-kit이 이 파일을 읽어
-            <code>apps/api/drizzle/0000_create_shows.sql</code>을 만든다.
+            <code>pnpm db:generate</code>를 실행하면 drizzle-kit이 스키마를 읽어 SQL 파일을 만든다.
+            처음 만들 때는 <code>shows</code>에 <code>id</code>와 <code>title</code>만 있었고, 그때 생긴 첫
+            마이그레이션 <code>apps/api/drizzle/0000_create_shows.sql</code>은 이렇다.
           </p>
           <pre><code class="language-sql">CREATE TABLE "shows" (
   "id" integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY (...),
   "title" text NOT NULL
 );</code></pre>
-          <p>TypeScript 한 줄이 SQL 한 줄과 거의 1:1로 대응한다.</p>
+          <p>
+            TypeScript 한 줄이 SQL 한 줄과 거의 1:1로 대응한다. 나머지 컬럼은 뒤 마이그레이션
+            (<code>0001_create_venues_and_performances.sql</code>)이 더했다.
+          </p>
         </section>
 
         <section id="schema-uses">
@@ -199,7 +216,13 @@ export const shows = pgTable('shows', {
           </p>
 
           <h3>2. 앱에서 쿼리할 때 (drizzle-orm, 런타임)</h3>
-          <p><code>shows.service.ts</code>는 같은 <code>shows</code> 객체를 쿼리 재료로 쓴다.</p>
+          <p>
+            <code>shows.service.ts</code>는 같은 <code>shows</code> 객체를 쿼리 재료로 쓴다. 실제 목록
+            쿼리는 공연장과 회차 서브쿼리를 JOIN하고 판매 종료 공연을 거르지만(<a
+              href="05-공연-목록-쿼리-읽기.html"
+              >db-and-drizzle 05 문서</a
+            >), 스키마 객체를 쓰는 방식만 보려고 <code>shows</code> 한 테이블로 줄였다.
+          </p>
           <pre><code class="language-ts">this.db
   .select({ id: shows.id, title: shows.title })
   .from(shows)
@@ -558,12 +581,15 @@ export class DatabaseModule implements OnApplicationShutdown { /* ... */ }</code
           <p>그래서 <code>ShowsModule</code>은 <code>imports</code> 없이 이렇게 받아 쓴다.</p>
           <pre><code class="language-ts">@Injectable()
 export class ShowsService {
-  constructor(@Inject(DATABASE) private readonly db: Database) {}
+  constructor(
+    @Inject(DATABASE) private readonly db: Database,
+    private readonly clock: Clock,
+  ) {}
 }</code></pre>
           <p>
             클래스가 아니라 이름표로 등록했으므로, 받을 때도 <code>@Inject(DATABASE)</code>로 이름표를
             적어 줘야 한다. 생성자 타입 <code>Database</code>만으로는 Symbol 이름표를 찾을 수 없기
-            때문이다.
+            때문이다. 반면 <code>Clock</code>은 추상 클래스 <code>Clock</code>을 이름표로 등록했으므로, 생성자 타입만 적어도 Nest가 찾는다.
           </p>
 
           <h3>꼭 Symbol과 <code>@Inject</code>여야 하나</h3>

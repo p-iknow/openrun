@@ -413,7 +413,7 @@ this.db.select({ status: salesStatus.salesStatus }).from(shows).innerJoin(salesS
           <h2>쿼리 두 개를 함께 보내기</h2>
           <pre><code class="language-ts">const [rows, [total]] = await Promise.all([
   this.db.select({ ... }).from(shows) /* ... */.limit(20),
-  this.db.select({ count: count() }).from(shows).innerJoin(period, eq(period.showId, shows.id)),
+  this.db.select({ count: count() }).from(shows).innerJoin(salesStatus, eq(salesStatus.showId, shows.id)).where(isListed),
 ]);</code></pre>
           <p>
             쿼리 빌더는 <code>await</code>할 수 있는 객체라 <code>Promise.all</code>에 그대로 넣을 수 있다. 두 쿼리가 서로를
@@ -439,13 +439,18 @@ this.db.select({ status: salesStatus.salesStatus }).from(shows).innerJoin(salesS
 
         <section id="insert">
           <h2>insert, values, returning</h2>
-          <pre><code class="language-ts">const venueRows = await tx
-  .insert(venues)
-  .values(VENUE_NAMES.map((name) =&gt; ({ name })))
-  .returning({ id: venues.id });
+          <p>시드는 구역 하나의 좌석을 문장 하나로 한꺼번에 넣는다(실제 코드에서 줄였다).</p>
+          <pre><code class="language-ts">const sectionSeats = await tx
+  .insert(seats)
+  .values([
+    { sectionId: section.id, row: 'A', number: 1 },
+    { sectionId: section.id, row: 'A', number: 2 },
+    // ... 열 수 × 열당 좌석 수만큼
+  ])
+  .returning({ id: seats.id });
 // 결과 타입: { id: number }[]</code></pre>
-          <pre><code class="language-sql">insert into "venues" ("id", "name")
-values (default, '낙산 소극장'), (default, '한강 아트홀'), (default, '서울 그랜드 씨어터')  -- 이름은 실제로는 빈칸 $1, $2, $3으로 따로 간다
+          <pre><code class="language-sql">insert into "seats" ("id", "section_id", "row", "number")
+values (default, $1, $2, $3), (default, $4, $5, $6)  -- 값 1, 'A', 1, 1, 'A', 2는 따로 간다
 returning "id"</code></pre>
           <ul>
             <li>
@@ -460,12 +465,13 @@ returning "id"</code></pre>
             </li>
             <li>
               <strong><code>.returning({...})</code></strong>: 넣은 행에서 돌려받을 컬럼을 고른다. DB가 매긴 <code>id</code>처럼
-              넣은 뒤에야 알 수 있는 값을 받을 때 쓴다. 시드는 공연을 넣고 받은 <code>id</code>로 그 공연의 회차를 넣는다.
+              넣은 뒤에야 알 수 있는 값을 받을 때 쓴다. 시드는 좌석을 넣고 받은 <code>id</code>로 회차 좌석을 만든다. 공연장,
+              구역, 공연, 회차는 하나씩 넣고 받은 <code>id</code>로 그 아래 행을 넣는다.
               <code>returning</code>이 없으면 결과에 행이 없다.
             </li>
           </ul>
           <p>
-            <code>(default, '낙산 소극장')</code>의 <code>default</code>는 <code>id</code>를 DB가 정하게 하는 SQL 표기다. 행을 여러 개
+            <code>(default, $1, $2, $3)</code>의 <code>default</code>는 <code>id</code>를 DB가 정하게 하는 SQL 표기다. 행을 여러 개
             넣을 때 각 행의 값이 <code>$1</code>, <code>$2</code>… 빈칸으로 따로 간다.
           </p>
         </section>
@@ -474,8 +480,10 @@ returning "id"</code></pre>
           <h2>execute와 sql 템플릿</h2>
           <pre><code class="language-ts">import { sql } from 'drizzle-orm';
 
-await tx.execute(sql`TRUNCATE ${performances}, ${shows}, ${venues} RESTART IDENTITY`);
-// → TRUNCATE "performances", "shows", "venues" RESTART IDENTITY</code></pre>
+await tx.execute(
+  sql`TRUNCATE ${performanceSeats}, ${performances}, ${shows}, ${seats}, ${sections}, ${venues} RESTART IDENTITY`,
+);
+// → TRUNCATE "performance_seats", "performances", "shows", "seats", "sections", "venues" RESTART IDENTITY</code></pre>
           <p>
             쿼리 빌더에 없는 SQL은 <code>sql</code> 태그드 템플릿으로 직접 쓰고 <code>execute</code>로 보낸다.
             <code>TRUNCATE</code>는 빌더 메서드가 없어서 이렇게 썼다.
@@ -509,7 +517,7 @@ await tx.execute(sql`TRUNCATE ${performances}, ${shows}, ${venues} RESTART IDENT
             테이블 이름을 문자열로 적지 않고 객체로 넣으면, 스키마에서 이름을 바꿨을 때 이 SQL도 함께 바뀐다.
           </p>
           <p>
-            통합 테스트는 <code>db.execute('TRUNCATE performances, shows, venues RESTART IDENTITY CASCADE')</code>처럼 문자열을
+            통합 테스트는 <code>db.execute('TRUNCATE performance_seats, performances, shows, seats, sections, venues RESTART IDENTITY CASCADE')</code>처럼 문자열을
             그대로 넘긴다. 값이 섞이지 않는 고정 문장이라 문제는 없지만, 테이블 이름이 바뀌어도 타입 검사가 잡아 주지 않는다.
           </p>
           <p>
@@ -528,15 +536,15 @@ await tx.execute(sql`TRUNCATE ${performances}, ${shows}, ${venues} RESTART IDENT
           </p>
           <pre><code class="language-ts">import { type SQL, sql } from 'drizzle-orm';
 
-// 조각을 돌려주는 함수 (실제 코드에서 줄였다)
-function performancePriority(now: Date): SQL&lt;number&gt; {
+// 조각을 돌려주는 함수 (실제 코드에서 when 갈래를 줄였다)
+function performancePriority({ now }: { now: Date }): SQL&lt;number&gt; {
   return sql&lt;number&gt;`case
     when ${performances.isCancelled} or ${performances.startsAt} &lt;= ${now} then 2
     else 0
   end`;
 }
 
-const priority = performancePriority(now);
+const priority = performancePriority({ now });
 const showPriority = sql`min(${priority})`; // 조각 안에 조각을 넣는다</code></pre>
           <pre><code class="language-sql">min(case
     when "performances"."is_cancelled" or "performances"."starts_at" &lt;= '2026-11-10 12:00+09' then 2
@@ -694,9 +702,9 @@ function literalOf(status: ShowSalesStatus): SQL {
         <section id="transaction">
           <h2>transaction</h2>
           <pre><code class="language-ts">await db.transaction(async (tx) =&gt; {
-  await tx.execute(sql`TRUNCATE ${performances}, ${shows}, ${venues} RESTART IDENTITY`);
-  const venueRows = await tx.insert(venues).values(/* ... */).returning({ id: venues.id });
-  // ... 공연과 회차를 넣는다
+  await tx.execute(sql`TRUNCATE ${performanceSeats}, ${performances}, ${shows}, ${seats}, ${sections}, ${venues} RESTART IDENTITY`);
+  const [venue] = await tx.insert(venues).values({ name: layout.name }).returning({ id: venues.id });
+  // ... 구역, 좌석, 공연, 회차, 회차 좌석을 넣는다
 });</code></pre>
           <p>
             콜백 안의 쿼리를 <a href="01-프론트엔드-개발자를-위한-DB-개념.html#transaction">트랜잭션</a> 하나로 묶는다.

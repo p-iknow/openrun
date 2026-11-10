@@ -414,12 +414,12 @@ describe('GET /shows', () => {
         },
       },
       {
-        name: '다 팔린 회차도 판매 중이라 판매 예정 회차보다 앞선다',
+        name: '매진인 회차도 판매 중이라 판매 예정 회차보다 앞선다',
         performances: [soldOut, upcoming],
         expected: { salesStatus: 'on_sale', salesOpenAt: null },
       },
       {
-        name: '끝난 회차와 취소된 회차 말고 남은 회차가 모두 다 팔렸어도 판매 중이다',
+        name: '끝난 회차와 취소된 회차 말고 남은 회차가 모두 매진이어도 판매 중이다',
         performances: [ended, cancelled, soldOut, soldOut],
         expected: { salesStatus: 'on_sale', salesOpenAt: null },
       },

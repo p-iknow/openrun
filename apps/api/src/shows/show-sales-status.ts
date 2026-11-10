@@ -19,7 +19,7 @@ function literalOf(status: ShowSalesStatus): SQL {
 
 // 회차 하나를 공연 판매 상태의 순번으로 계산한다. 위에서부터 먼저 맞는 것을 고른다.
 // 취소된 회차는 더 팔 수 없으니 판매 종료로 센다.
-// 남은 좌석은 보지 않는다. 다 팔린 회차도 판매 기간 안이면 취소표가 나올 수 있어 판매 중이다.
+// 남은 좌석은 보지 않는다. 매진인 회차도 판매 기간 안이면 취소표가 나올 수 있어 판매 중이다.
 function performancePriority({ now }: { now: Date }): SQL<number> {
   return sql<number>`case
     when ${performances.isCancelled} or ${performances.startsAt} <= ${now} then ${priorityOf('ended')}
@@ -30,7 +30,7 @@ function performancePriority({ now }: { now: Date }): SQL<number> {
 
 /**
  * 공연마다 공연 판매 상태와, 판매 예정이면 가장 이른 판매 오픈 일시를 계산하는 서브쿼리다.
- * 판매 상태는 저장하지 않으므로, 목록과 상세가 이 서브쿼리를 JOIN해 필터, 개수, 페이지를 같은 기준으로 맞춘다.
+ * 판매 상태는 저장하지 않으므로, 목록 쿼리와 개수 쿼리가 이 서브쿼리를 JOIN해 거르기와 개수를 같은 기준으로 맞춘다.
  * 회차가 없는 공연은 행이 없다.
  */
 export function showSalesStatusSubquery(db: Database, { now }: { now: Date }) {
