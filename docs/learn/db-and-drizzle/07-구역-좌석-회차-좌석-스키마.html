@@ -48,12 +48,12 @@
                   <div class="tree-row"><span class="tree-node">sections</span><span class="tree-note">구역. A구역</span></div>
                   <ul>
                     <li>
-                      <div class="tree-row"><span class="tree-node">seats</span><span class="tree-note">좌석. A구역 3열 5번</span></div>
+                      <div class="tree-row"><span class="tree-node">seats</span><span class="tree-note">좌석. A구역 C열 5번</span></div>
                       <ul>
                         <li>
                           <div class="tree-row">
                             <span class="tree-node">performance_seats</span>
-                            <span class="tree-note">회차 좌석. 11-20 19:30 회차의 A구역 3열 5번, 판매됨</span>
+                            <span class="tree-note">회차 좌석. 11-20 19:30 회차의 A구역 C열 5번, 판매됨</span>
                           </div>
                         </li>
                       </ul>
@@ -88,9 +88,9 @@
             <table>
               <thead><tr><th colspan="4">seats (좌석)</th></tr><tr><th>id</th><th>section_id</th><th>row</th><th>number</th></tr></thead>
               <tbody>
-                <tr><td>10</td><td><strong>1</strong></td><td>3열</td><td>5</td></tr>
-                <tr><td>11</td><td><strong>1</strong></td><td>3열</td><td>6</td></tr>
-                <tr><td>12</td><td><strong>2</strong></td><td>1열</td><td>1</td></tr>
+                <tr><td>10</td><td><strong>1</strong></td><td>C</td><td>5</td></tr>
+                <tr><td>11</td><td><strong>1</strong></td><td>C</td><td>6</td></tr>
+                <tr><td>12</td><td><strong>2</strong></td><td>A</td><td>1</td></tr>
               </tbody>
             </table>
           </div>
@@ -117,7 +117,7 @@
             </table>
           </div>
           <p>
-            공연 5는 낙산 소극장에서 열린다(<code>shows.venue_id = 1</code>). 회차 좌석 1번은 "회차 20의 좌석 10(A구역 3열 5번),
+            공연 5는 낙산 소극장에서 열린다(<code>shows.venue_id = 1</code>). 회차 좌석 1번은 "회차 20의 좌석 10(A구역 C열 5번),
             판매됨"이라고 읽는다. 정답: 11-20 회차의 남은 좌석은 2석, 11-21 회차는 3석이다.
           </p>
           <p>
@@ -399,9 +399,9 @@
             <table>
               <thead><tr><th colspan="5">seats (좌석) — 대안 2</th></tr><tr><th>id</th><th>venue_id</th><th>section</th><th>row</th><th>number</th></tr></thead>
               <tbody>
-                <tr><td>10</td><td><strong>1</strong></td><td>A구역</td><td>3열</td><td>5</td></tr>
-                <tr><td>11</td><td><strong>1</strong></td><td>A구역</td><td>3열</td><td>6</td></tr>
-                <tr><td>12</td><td><strong>1</strong></td><td>B구역</td><td>1열</td><td>1</td></tr>
+                <tr><td>10</td><td><strong>1</strong></td><td>A구역</td><td>C</td><td>5</td></tr>
+                <tr><td>11</td><td><strong>1</strong></td><td>A구역</td><td>C</td><td>6</td></tr>
+                <tr><td>12</td><td><strong>1</strong></td><td>B구역</td><td>A</td><td>1</td></tr>
               </tbody>
             </table>
           </div>
@@ -652,12 +652,12 @@ export const seats = pgTable(
   (table) =&gt; [unique().on(table.sectionId, table.row, table.number)],
 );</code></pre>
           <p>
-            "1번 구역 3열 5번"이 두 줄이면, 회차를 만들 때 공연장의 좌석마다 회차 좌석을 만드므로 그 자리의 회차 좌석도 회차마다
+            "1번 구역 C열 5번"이 두 줄이면, 회차를 만들 때 공연장의 좌석마다 회차 좌석을 만드므로 그 자리의 회차 좌석도 회차마다
             두 개가 생긴다. 회차 좌석 테이블의 제약은 <code>seat_id</code>가 다르니 막지 못한다. 문제를 뿌리에서 막으려면 좌석
             테이블에서 막아야 한다.
           </p>
           <p>
-            세 컬럼이 <strong>모두</strong> 같아야 막힌다. 같은 구역의 3열 5번과 3열 6번, 1번 구역 3열 5번과 2번 구역 3열 5번은 모두
+            세 컬럼이 <strong>모두</strong> 같아야 막힌다. 같은 구역의 C열 5번과 C열 6번, 1번 구역 C열 5번과 2번 구역 C열 5번은 모두
             괜찮다.
           </p>
         </section>
@@ -672,7 +672,7 @@ export const sections = pgTable(
     venueId: integer('venue_id').notNull().references(() =&gt; venues.id),
     name: text().notNull(),
   },
-  // 같은 공연장에 같은 이름의 구역이 두 번 들어가지 않게 막는다. 이름이 겹치면 "A구역 3열 5번"이 두 자리가 된다.
+  // 같은 공연장에 같은 이름의 구역이 두 번 들어가지 않게 막는다. 이름이 겹치면 "A구역 C열 5번"이 두 자리가 된다.
   // 이 제약이 만드는 인덱스가 venue_id로 시작하므로, 공연장 하나의 구역을 찾을 때도 쓰인다.
   (table) =&gt; [unique().on(table.venueId, table.name)],
 );</code></pre>
@@ -697,21 +697,21 @@ export const sections = pgTable(
               </div>
             </li>
             <li>
-              <strong>좌석 제약은 통과한다.</strong> 좌석에는 이름이 아니라 구역 id가 저장된다. <code>(1, 3열, 5)</code>와
-              <code>(2, 3열, 5)</code>는 구역 id가 다르니 좌석 제약이 둘 다 받아 준다.
+              <strong>좌석 제약은 통과한다.</strong> 좌석에는 이름이 아니라 구역 id가 저장된다. <code>(1, 'C', 5)</code>와
+              <code>(2, 'C', 5)</code>는 구역 id가 다르니 좌석 제약이 둘 다 받아 준다.
               <div class="table-wrap">
                 <table>
                   <thead><tr><th>seats.id</th><th>section_id</th><th>row</th><th>number</th></tr></thead>
                   <tbody>
-                    <tr><td>10</td><td>1</td><td>3열</td><td>5</td></tr>
-                    <tr><td>11</td><td>2</td><td>3열</td><td>5</td></tr>
+                    <tr><td>10</td><td>1</td><td>C</td><td>5</td></tr>
+                    <tr><td>11</td><td>2</td><td>C</td><td>5</td></tr>
                   </tbody>
                 </table>
               </div>
             </li>
             <li>
               <strong>사람에게는 같은 자리로 보인다.</strong> 화면과 티켓에는 구역 id가 아니라 이름이 나간다. 좌석 10과 11이 모두
-              "A구역 3열 5번"이다. 좌석 선택 화면에 같은 이름의 자리가 둘 보이고, 같은 이름의 티켓을 든 관객 두 명이 모두 정상
+              "A구역 C열 5번"이다. 좌석 선택 화면에 같은 이름의 자리가 둘 보이고, 같은 이름의 티켓을 든 관객 두 명이 모두 정상
               티켓을 가진 셈이 된다.
             </li>
           </ol>
@@ -811,12 +811,12 @@ ALTER TABLE "sections" ADD CONSTRAINT "sections_venue_id_name_unique" UNIQUE("ve
             <p class="quiz-q">3. 구역 유니크 제약이 없을 때, 아래 데이터에서 좌석 선택 화면에 보이는 자리 이름은?</p>
             <p class="quiz-context"><a href="#sections-scenario">이름이 겹치는 과정</a>과 같은 상황이다. 공연장은 모두 낙산 소극장(id 1)이다.</p>
             <div class="table-wrap"><table><thead><tr><th>sections.id</th><th>venue_id</th><th>name</th></tr></thead><tbody><tr><td>1</td><td>1</td><td>A구역</td></tr><tr><td>2</td><td>1</td><td>A구역</td></tr><tr><td>3</td><td>1</td><td>B구역</td></tr></tbody></table></div>
-            <div class="table-wrap"><table><thead><tr><th>seats.id</th><th>section_id</th><th>row</th><th>number</th></tr></thead><tbody><tr><td>10</td><td>1</td><td>1열</td><td>1</td></tr><tr><td>11</td><td>2</td><td>1열</td><td>1</td></tr><tr><td>12</td><td>3</td><td>1열</td><td>1</td></tr></tbody></table></div>
+            <div class="table-wrap"><table><thead><tr><th>seats.id</th><th>section_id</th><th>row</th><th>number</th></tr></thead><tbody><tr><td>10</td><td>1</td><td>A</td><td>1</td></tr><tr><td>11</td><td>2</td><td>A</td><td>1</td></tr><tr><td>12</td><td>3</td><td>A</td><td>1</td></tr></tbody></table></div>
             <details class="quiz-answer">
               <summary>답 보기</summary>
               <div class="fold-body"><p>
-                  좌석 10과 11은 둘 다 <strong>A구역 1열 1번</strong>, 좌석 12는 B구역 1열 1번이다. 좌석 제약은
-                  <code>(1, 1열, 1)</code>과 <code>(2, 1열, 1)</code>을 다른 값으로 보니 막지 못한다. 구역 제약이 있으면 2번 구역을 넣을 때
+                  좌석 10과 11은 둘 다 <strong>A구역 A열 1번</strong>, 좌석 12는 B구역 A열 1번이다. 좌석 제약은
+                  <code>(1, 'A', 1)</code>과 <code>(2, 'A', 1)</code>을 다른 값으로 보니 막지 못한다. 구역 제약이 있으면 2번 구역을 넣을 때
                   <code>(1, A구역)</code>이 겹쳐 실패하므로 이런 데이터가 생기지 않는다.
                 </p></div>
             </details>
