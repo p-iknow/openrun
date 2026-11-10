@@ -13,7 +13,7 @@ import { seats, sections, venues } from './schema/venues.js';
 
 // 개발용 시드다. 매번 비우고 같은 id부터 다시 넣는다.
 // Faker 시드 값을 고정하고 Faker를 부르는 순서가 실행 시각과 무관하므로, 공연 구성(제목, 장르, 공연장, 회차 수)은 늘 같다.
-// 날짜만 실행 시각 기준 상대값이라, 몇 주가 지나도 판매 예정부터 판매 종료까지, 매진과 매진 임박까지 모든 경우가 남는다.
+// 날짜만 실행 시각 기준 상대값이라, 몇 주가 지나도 판매 예정부터 판매 종료까지, 다 팔린 회차와 매진 임박까지 모든 경우가 남는다.
 const FAKER_SEED = 20261109;
 const SHOW_COUNT = 20;
 
@@ -107,12 +107,12 @@ interface Scenario {
   cancel: 'none' | 'one-future' | 'all-future';
   // 판매 중인 회차의 판매됨 배치. 판매 예정 회차와 취소된 회차는 늘 모두 판매 가능이다.
   // some: 회차마다 전체의 0~70%를 판매해 매진 임박이 나오지 않는다.
-  // sold-out: 남은 회차를 모두 매진으로 둔다(매진).
+  // sold-out: 남은 회차의 회차 좌석을 모두 판매됨으로 둔다.
   // one-almost-sold-out: 첫 남은 회차만 남은 좌석을 10% 이하로 두고 나머지는 some이다(매진 임박).
   sales: 'some' | 'sold-out' | 'one-almost-sold-out';
 }
 
-// 앞의 공연 6개는 목록의 모든 판매 상태와 매진 임박이 나오도록 고정한다.
+// 앞의 공연 6개는 모든 공연 판매 상태와, 다 팔린 회차, 매진 임박 회차가 나오도록 고정한다.
 const FIXED_SCENARIOS: Scenario[] = [
   // 판매 예정
   {
@@ -130,7 +130,7 @@ const FIXED_SCENARIOS: Scenario[] = [
     cancel: 'one-future',
     sales: 'some',
   },
-  // 남은 회차가 모두 취소됐다(회차 취소).
+  // 남은 회차가 모두 취소됐다. 취소된 회차는 판매 종료라 공연도 판매 종료다.
   {
     salesOpenDay: -10,
     pastCount: 0,
@@ -146,7 +146,7 @@ const FIXED_SCENARIOS: Scenario[] = [
     cancel: 'none',
     sales: 'some',
   },
-  // 남은 회차가 모두 매진이다(매진). 지난 회차와 취소된 회차가 섞여 있어도 매진이다.
+  // 남은 회차가 모두 다 팔렸다. 판매 기간 안이라 공연은 판매 중이다.
   {
     salesOpenDay: -14,
     pastCount: 1,

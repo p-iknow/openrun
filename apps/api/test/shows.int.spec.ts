@@ -28,7 +28,7 @@ import { seats, sections, venues } from '../src/db/schema/venues.js';
 // 이 시각 뒤에 시작하는 회차는 판매 중이다.
 const DEFAULT_NOW = '2026-02-01T00:00:00Z';
 const DEFAULT_SALES_OPEN_AT = '2026-01-01T01:00:00Z';
-// 공연장 하나의 좌석 수. 10%가 2석이라 매진 임박의 경계를 정수로 나눌 수 있다.
+// 공연장 하나의 좌석 수.
 const VENUE_SEAT_COUNT = 20;
 
 interface PerformanceInput {
@@ -209,7 +209,6 @@ describe('GET /shows', () => {
           },
           salesStatus: 'on_sale',
           salesOpenAt: null,
-          isAlmostSoldOut: false,
         },
       ],
       page: 1,
@@ -319,7 +318,7 @@ describe('GET /shows', () => {
       expect(await fetchSalesStatus()).toBe(expected);
     });
 
-    // 판매 종료 공연은 목록에서 빠지므로, 취소된 회차를 함께 두어 회차가 판매 종료가 되면 공연이 회차 취소로 보이게 한다.
+    // 판매 종료 공연은 목록에서 빠지므로, 판매 예정 회차를 함께 두어 회차가 판매 종료가 되면 공연이 판매 예정으로 보이게 한다.
     it.each([
       {
         moment: '회차 시작 직전',
@@ -329,7 +328,7 @@ describe('GET /shows', () => {
       {
         moment: '회차 시작 정각',
         at: new Date(startsAt),
-        expected: 'cancelled',
+        expected: 'upcoming',
       },
     ])('$moment: $expected', async ({ at, expected }) => {
       const venueId = await insertVenue('예술의전당');
@@ -339,9 +338,8 @@ describe('GET /shows', () => {
         performances: [
           { startsAt, salesOpenAt },
           {
-            startsAt: '2026-03-20T10:00:00.000Z',
-            salesOpenAt,
-            isCancelled: true,
+            startsAt: '2026-04-10T10:00:00.000Z',
+            salesOpenAt: '2026-03-20T05:00:00.000Z',
           },
         ],
       });
@@ -350,7 +348,7 @@ describe('GET /shows', () => {
       expect(await fetchSalesStatus()).toBe(expected);
     });
 
-    it('취소된 회차는 판매 오픈 전이어도 회차 취소다', async () => {
+    it('취소된 회차는 판매 오픈 전이어도 판매 종료라, 그 회차만 있는 공연은 목록에서 빠진다', async () => {
       const venueId = await insertVenue('예술의전당');
       await insertShow({
         venueId,
@@ -359,10 +357,10 @@ describe('GET /shows', () => {
       });
       now = msBefore(salesOpenAt, { ms: 1 });
 
-      expect(await fetchSalesStatus()).toBe('cancelled');
+      expect(await fetchSalesStatus()).toBeUndefined();
     });
 
-    it('남은 회차 좌석이 0이면 매진이다', async () => {
+    it('남은 회차 좌석이 0이어도 판매 중이다', async () => {
       const venueId = await insertVenue('예술의전당');
       await insertShow({
         venueId,
@@ -371,7 +369,7 @@ describe('GET /shows', () => {
       });
       now = new Date(salesOpenAt);
 
-      expect(await fetchSalesStatus()).toBe('sold_out');
+      expect(await fetchSalesStatus()).toBe('on_sale');
     });
 
     it('남은 회차 좌석이 0이어도 판매 오픈 전이면 판매 예정이다', async () => {
@@ -416,22 +414,14 @@ describe('GET /shows', () => {
         },
       },
       {
-        name: '매진 회차가 있어도 판매 예정 회차가 있으면 판매 예정이다',
+        name: '다 팔린 회차도 판매 중이라 판매 예정 회차보다 앞선다',
         performances: [soldOut, upcoming],
-        expected: {
-          salesStatus: 'upcoming',
-          salesOpenAt: '2026-02-10T05:00:00.000Z',
-        },
+        expected: { salesStatus: 'on_sale', salesOpenAt: null },
       },
       {
-        name: '끝난 회차와 취소된 회차를 빼고 남은 회차가 모두 매진이면 매진이다',
+        name: '끝난 회차와 취소된 회차 말고 남은 회차가 모두 다 팔렸어도 판매 중이다',
         performances: [ended, cancelled, soldOut, soldOut],
-        expected: { salesStatus: 'sold_out', salesOpenAt: null },
-      },
-      {
-        name: '끝나지 않은 회차가 모두 취소됐으면 회차 취소다',
-        performances: [ended, cancelled],
-        expected: { salesStatus: 'cancelled', salesOpenAt: null },
+        expected: { salesStatus: 'on_sale', salesOpenAt: null },
       },
     ])('$name', async ({ performances: inputs, expected }) => {
       const venueId = await insertVenue('예술의전당');
@@ -440,6 +430,19 @@ describe('GET /shows', () => {
       const response = await request(app.getHttpServer()).get('/shows');
 
       expect(response.body.items[0]).toMatchObject(expected);
+    });
+
+    it('끝나지 않은 회차가 모두 취소됐으면 판매 종료라 목록과 전체 개수에서 뺀다', async () => {
+      const venueId = await insertVenue('예술의전당');
+      await insertShow({
+        venueId,
+        title: '달빛 정원',
+        performances: [ended, cancelled],
+      });
+
+      const response = await request(app.getHttpServer()).get('/shows');
+
+      expect(response.body).toMatchObject({ items: [], totalCount: 0 });
     });
 
     it('판매 예정이면 판매 예정 회차 중 가장 이른 판매 오픈 일시를 담는다', async () => {
@@ -470,126 +473,6 @@ describe('GET /shows', () => {
       expect(response.body.items[0]).toMatchObject({
         salesStatus: 'upcoming',
         salesOpenAt: '2026-02-15T05:00:00.000Z',
-      });
-    });
-  });
-
-  describe('매진 임박', () => {
-    async function fetchFirstItem(): Promise<unknown> {
-      const response = await request(app.getHttpServer()).get('/shows');
-      return response.body.items[0];
-    }
-
-    // 공연장 좌석 20석 기준
-    it.each([
-      { remaining: 3, expected: false },
-      { remaining: 2, expected: true },
-      { remaining: 1, expected: true },
-    ])(
-      '판매 중 회차의 남은 좌석 $remaining / 20: $expected',
-      async ({ remaining, expected }) => {
-        const venueId = await insertVenue('예술의전당');
-        await insertShow({
-          venueId,
-          title: '달빛 정원',
-          performances: [
-            {
-              startsAt: '2026-03-10T10:00:00Z',
-              soldSeats: VENUE_SEAT_COUNT - remaining,
-            },
-          ],
-        });
-
-        expect(await fetchFirstItem()).toMatchObject({
-          salesStatus: 'on_sale',
-          isAlmostSoldOut: expected,
-        });
-      },
-    );
-
-    it('매진 회차는 매진 임박이 아니다', async () => {
-      const venueId = await insertVenue('예술의전당');
-      await insertShow({
-        venueId,
-        title: '달빛 정원',
-        performances: [
-          { startsAt: '2026-03-10T10:00:00Z', soldSeats: VENUE_SEAT_COUNT },
-          // 공연이 판매 중이어도 매진 회차는 매진 임박으로 세지 않는다.
-          { startsAt: '2026-03-11T10:00:00Z' },
-        ],
-      });
-
-      expect(await fetchFirstItem()).toMatchObject({
-        salesStatus: 'on_sale',
-        isAlmostSoldOut: false,
-      });
-    });
-
-    it('판매 중 회차 중 하나라도 매진 임박이면 참이다', async () => {
-      const venueId = await insertVenue('예술의전당');
-      await insertShow({
-        venueId,
-        title: '달빛 정원',
-        performances: [
-          { startsAt: '2026-03-10T10:00:00Z' },
-          { startsAt: '2026-03-11T10:00:00Z', soldSeats: 19 },
-        ],
-      });
-
-      expect(await fetchFirstItem()).toMatchObject({ isAlmostSoldOut: true });
-    });
-
-    it.each([
-      {
-        name: '판매 예정 회차',
-        performance: {
-          startsAt: '2026-03-10T10:00:00Z',
-          salesOpenAt: '2026-02-10T05:00:00Z',
-          soldSeats: 19,
-        },
-        salesStatus: 'upcoming',
-      },
-      {
-        name: '취소된 회차',
-        performance: {
-          startsAt: '2026-03-10T10:00:00Z',
-          isCancelled: true,
-          soldSeats: 19,
-        },
-        salesStatus: 'cancelled',
-      },
-    ])(
-      '$name: 남은 좌석이 적어도 매진 임박이 아니다',
-      async ({ performance, salesStatus }) => {
-        const venueId = await insertVenue('예술의전당');
-        await insertShow({
-          venueId,
-          title: '달빛 정원',
-          performances: [performance],
-        });
-
-        expect(await fetchFirstItem()).toMatchObject({
-          salesStatus,
-          isAlmostSoldOut: false,
-        });
-      },
-    );
-
-    it('끝난 회차는 남은 좌석이 적어도 매진 임박이 아니다', async () => {
-      const venueId = await insertVenue('예술의전당');
-      await insertShow({
-        venueId,
-        title: '달빛 정원',
-        performances: [
-          { startsAt: '2026-01-20T10:00:00Z', soldSeats: 19 },
-          // 공연이 판매 종료로 목록에서 빠지지 않게 판매 중 회차를 둔다.
-          { startsAt: '2026-03-10T10:00:00Z' },
-        ],
-      });
-
-      expect(await fetchFirstItem()).toMatchObject({
-        salesStatus: 'on_sale',
-        isAlmostSoldOut: false,
       });
     });
   });

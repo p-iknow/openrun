@@ -27,11 +27,6 @@ export function ShowCard({ card }: { card: ShowCardData }) {
     <ShowCardFrame>
       <div className="flex items-center gap-sm">
         <Badge tone={card.salesStatus.tone}>{card.salesStatus.label}</Badge>
-        {card.almostSoldOut === null ? null : (
-          <span className="text-caption font-semibold text-warning-strong">
-            {card.almostSoldOut}
-          </span>
-        )}
       </div>
       <h2 className="line-clamp-2 text-body font-semibold break-keep">
         {card.title}
