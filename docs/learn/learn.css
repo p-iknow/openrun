@@ -254,6 +254,10 @@ th {
 td {
   background: var(--surface);
 }
+/* 계산 표에서 보지 않고 건너뛰는 칸 */
+td.muted {
+  color: var(--muted);
+}
 
 .callout {
   margin: 1.25rem 0;
