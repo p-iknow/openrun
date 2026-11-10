@@ -277,9 +277,8 @@ end`</code></pre>
           </p>
           <p>
             지금은 <strong>11-10 12:00</strong>이다. ①②③ 칸은 위 코드의 <code>when</code> 세 줄에 그 회차의 값과 지금
-            시각을 넣은 비교다. 읽기 쉽도록 ②③은 <strong>지금을 늘 오른쪽</strong>에 두고 "회차의 일시 ? 지금" 모양으로
-            썼다. 그래서 ③은 코드의 <code>now &lt; sales_open_at</code>을 뒤집은 <code>sales_open_at &gt; now</code>로 적었다.
-            뜻은 같다. 왼쪽 칸(위의 <code>when</code>)부터 보고, 처음 참이 된 칸(✔)에서 판매 상태가 정해진다. 그 오른쪽 칸은
+            시각을 넣은 비교다. 읽기 쉽도록 ②③은 <strong>지금을 늘 왼쪽</strong>에 두고 "지금 ? 회차의 일시" 모양으로 썼다. 그래서 ②는
+            코드의 <code>starts_at &lt;= now</code>를 뒤집은 <code>now &gt;= starts_at</code>으로 적었다. 뜻은 같다. 왼쪽 칸(위의 <code>when</code>)부터 보고, 처음 참이 된 칸(✔)에서 판매 상태가 정해진다. 그 오른쪽 칸은
             DB가 보지 않는다. 세 칸이 모두 거짓이면 <code>else</code>로 판매 중이 된다.
           </p>
           <div class="table-wrap">
@@ -289,8 +288,8 @@ end`</code></pre>
                   <th>회차</th>
                   <th>공연</th>
                   <th>① 취소?</th>
-                  <th>② 시작 &lt;= 지금</th>
-                  <th>③ 오픈 &gt; 지금</th>
+                  <th>② 지금 &gt;= 시작</th>
+                  <th>③ 지금 &lt; 오픈</th>
                   <th>판매 상태</th>
                   <th>순번</th>
                 </tr>
@@ -300,7 +299,7 @@ end`</code></pre>
                   <td>10</td>
                   <td>1</td>
                   <td>false</td>
-                  <td><strong><code>11-08 19:30</code><br />&lt;= <code>11-10 12:00</code><br />참 ✔</strong></td>
+                  <td><strong><code>11-10 12:00</code><br />&gt;= <code>11-08 19:30</code><br />참 ✔</strong></td>
                   <td class="muted">— 안 봄</td>
                   <td>판매 종료</td>
                   <td>3</td>
@@ -309,8 +308,8 @@ end`</code></pre>
                   <td>11</td>
                   <td>1</td>
                   <td>false</td>
-                  <td><code>11-15 19:30</code><br />&lt;= <code>11-10 12:00</code><br />거짓</td>
-                  <td><code>10-20 14:00</code><br />&gt; <code>11-10 12:00</code><br />거짓</td>
+                  <td><code>11-10 12:00</code><br />&gt;= <code>11-15 19:30</code><br />거짓</td>
+                  <td><code>11-10 12:00</code><br />&lt; <code>10-20 14:00</code><br />거짓</td>
                   <td>판매 중 (else)</td>
                   <td>0</td>
                 </tr>
@@ -327,8 +326,8 @@ end`</code></pre>
                   <td>13</td>
                   <td>2</td>
                   <td>false</td>
-                  <td><code>11-25 19:30</code><br />&lt;= <code>11-10 12:00</code><br />거짓</td>
-                  <td><strong><code>11-13 14:00</code><br />&gt; <code>11-10 12:00</code><br />참 ✔</strong></td>
+                  <td><code>11-10 12:00</code><br />&gt;= <code>11-25 19:30</code><br />거짓</td>
+                  <td><strong><code>11-10 12:00</code><br />&lt; <code>11-13 14:00</code><br />참 ✔</strong></td>
                   <td>판매 예정</td>
                   <td>1</td>
                 </tr>
@@ -336,8 +335,8 @@ end`</code></pre>
                   <td>14</td>
                   <td>2</td>
                   <td>false</td>
-                  <td><code>11-26 19:30</code><br />&lt;= <code>11-10 12:00</code><br />거짓</td>
-                  <td><strong><code>11-12 14:00</code><br />&gt; <code>11-10 12:00</code><br />참 ✔</strong></td>
+                  <td><code>11-10 12:00</code><br />&gt;= <code>11-26 19:30</code><br />거짓</td>
+                  <td><strong><code>11-10 12:00</code><br />&lt; <code>11-12 14:00</code><br />참 ✔</strong></td>
                   <td>판매 예정</td>
                   <td>1</td>
                 </tr>
@@ -354,7 +353,7 @@ end`</code></pre>
                   <td>16</td>
                   <td>3</td>
                   <td>false</td>
-                  <td><strong><code>11-05 19:30</code><br />&lt;= <code>11-10 12:00</code><br />참 ✔</strong></td>
+                  <td><strong><code>11-10 12:00</code><br />&gt;= <code>11-05 19:30</code><br />참 ✔</strong></td>
                   <td class="muted">— 안 봄</td>
                   <td>판매 종료</td>
                   <td>3</td>
@@ -372,7 +371,7 @@ end`</code></pre>
                   <td>18</td>
                   <td>4</td>
                   <td>false</td>
-                  <td><strong><code>11-01 19:30</code><br />&lt;= <code>11-10 12:00</code><br />참 ✔</strong></td>
+                  <td><strong><code>11-10 12:00</code><br />&gt;= <code>11-01 19:30</code><br />참 ✔</strong></td>
                   <td class="muted">— 안 봄</td>
                   <td>판매 종료</td>
                   <td>3</td>
@@ -381,7 +380,7 @@ end`</code></pre>
                   <td>19</td>
                   <td>4</td>
                   <td>false</td>
-                  <td><strong><code>11-03 19:30</code><br />&lt;= <code>11-10 12:00</code><br />참 ✔</strong></td>
+                  <td><strong><code>11-10 12:00</code><br />&gt;= <code>11-03 19:30</code><br />참 ✔</strong></td>
                   <td class="muted">— 안 봄</td>
                   <td>판매 종료</td>
                   <td>3</td>
@@ -390,8 +389,8 @@ end`</code></pre>
             </table>
           </div>
           <p>
-            지금을 오른쪽에 고정하면 ②와 ③은 부등호 방향만 다르다. ② <code>시작 &lt;= 지금</code>은 "시작 일시가 이미
-            왔나"(이미 시작했나), ③ <code>오픈 &gt; 지금</code>은 "오픈 일시가 아직 안 왔나"(아직 안 열렸나)를 묻는다. 회차
+            지금을 왼쪽에 고정하면 ②와 ③은 부등호 방향만 다르다. ② <code>지금 &gt;= 시작</code>은 "지금이 시작 일시이거나
+            그 뒤인가"(이미 시작했나), ③ <code>지금 &lt; 오픈</code>은 "지금이 오픈 일시 앞인가"(아직 안 열렸나)를 묻는다. 회차
             11은 시작(11-15)이 아직 오지 않았고 오픈(10-20)은 이미 지나서 둘 다 거짓이라 판매 중이다.
           </p>
           <h3>경계: 정각은 어느 쪽인가</h3>
