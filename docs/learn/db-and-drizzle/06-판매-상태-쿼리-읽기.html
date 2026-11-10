@@ -742,8 +742,12 @@ return db
             "취소됐다"를 보여 주는 것이 맞다. 우선순위에서 회차 취소가 판매 종료보다 앞선 이유다.
           </p>
           <h3>③ 순번을 이름으로 바꾸기</h3>
-          <pre><code class="language-ts">const toStatus = sql.join(
-  SHOW_SALES_STATUSES.map((status) =&gt; sql`when ${priorityOf(status)} then ${literalOf(status)}`),
+          <pre><code class="language-ts">const showPriority = sql`min(${priority})`; // ②에서 구한 공연별 가장 작은 순번
+
+const toStatus = sql.join(
+  SHOW_SALES_STATUSES.map(
+    (status) =&gt; sql`when ${priorityOf(status)} then ${literalOf(status)}`,
+  ),
   sql` `,
 );
 
