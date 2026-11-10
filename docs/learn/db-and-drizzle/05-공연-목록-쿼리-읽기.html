@@ -111,7 +111,7 @@ inner join (
   from "performances" group by "performances"."show_id"
 ) "period" on "period"."show_id" = "shows"."id"
 order by "start" asc, "shows"."id" asc
-limit $1    -- params: [20]</code></pre>
+limit 20    -- 20은 실제로는 빈칸 $1로 따로 간다</code></pre>
         </section>
 
         <section id="example">

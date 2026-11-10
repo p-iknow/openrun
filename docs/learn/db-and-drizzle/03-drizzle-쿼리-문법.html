@@ -238,7 +238,7 @@ this.db.select({ count: count() }).from(shows).innerJoin(salesStatus, ...).where
           <h2>limit, offset</h2>
           <pre><code class="language-ts">.limit(PAGE_SIZE) // 20
 .offset((PAGE - 1) * PAGE_SIZE) // 1페이지면 0</code></pre>
-          <pre><code class="language-sql">limit $1    -- params: [20]</code></pre>
+          <pre><code class="language-sql">limit 20    -- 20은 실제로는 빈칸 $1로 따로 간다</code></pre>
           <p>
             최대 몇 개를 가져올지(<code>limit</code>), 앞에서 몇 개를 건너뛸지(<code>offset</code>) 정한다(<a
               href="01-프론트엔드-개발자를-위한-DB-개념.html#order-limit"
@@ -472,7 +472,9 @@ db.select({ /* remaining을 쓰는 계산 */ })
   .values(VENUE_NAMES.map((name) =&gt; ({ name })))
   .returning({ id: venues.id });
 // 결과 타입: { id: number }[]</code></pre>
-          <pre><code class="language-sql">insert into "venues" ("id", "name") values (default, $1), (default, $2), (default, $3) returning "id"</code></pre>
+          <pre><code class="language-sql">insert into "venues" ("id", "name")
+values (default, '낙산 소극장'), (default, '한강 아트홀'), (default, '서울 그랜드 씨어터')  -- 이름은 실제로는 빈칸 $1, $2, $3으로 따로 간다
+returning "id"</code></pre>
           <ul>
             <li>
               <strong><code>.insert(테이블)</code></strong>: 어느 테이블에 넣을지 정한다.
@@ -491,8 +493,8 @@ db.select({ /* remaining을 쓰는 계산 */ })
             </li>
           </ul>
           <p>
-            <code>(default, $1)</code>의 <code>default</code>는 <code>id</code>를 DB가 정하게 하는 SQL 표기다. 행을 여러 개 넣을 때
-            각 행이 <code>$1</code>, <code>$2</code>…로 값을 따로 받는다.
+            <code>(default, '낙산 소극장')</code>의 <code>default</code>는 <code>id</code>를 DB가 정하게 하는 SQL 표기다. 행을 여러 개
+            넣을 때 각 행의 값이 <code>$1</code>, <code>$2</code>… 빈칸으로 따로 간다.
           </p>
         </section>
 
@@ -567,10 +569,9 @@ const priority = performancePriority(now);
 const showPriority = sql`min(${priority})`; // 조각 안에 조각을 넣는다</code></pre>
           <pre><code class="language-sql">min(case
     when "performances"."is_cancelled" then 3
-    when "performances"."starts_at" &lt;= $1 then 4
+    when "performances"."starts_at" &lt;= '2026-11-10 12:00+09' then 4   -- now(2026-11-10 12:00, 한국 시각). 실제로는 빈칸 $1로 따로 간다
     else 0
-  end)
--- params: [2026-11-10T03:00:00.000Z]   ← now가 2026-11-10 12:00(한국 시각)일 때</code></pre>
+  end)</code></pre>
           <h3><code>${...}</code>에 넣을 수 있는 것</h3>
           <p>
             <a href="#execute">execute 절의 표</a>에 하나가 더 있다. <strong>다른 SQL 조각</strong>을 넣으면 그 조각의 SQL이

@@ -645,8 +645,8 @@ return db
        min(                                  -- showPriority
          case                                -- ┐
            when is_cancelled then 3          -- │ priority
-           when starts_at &lt;= $1 then 4       -- │ (CASE 식이 min 괄호 안에 그대로)
-           when $2 &lt; sales_open_at then 1    -- │
+           when starts_at &lt;= '2026-11-10 12:00+09' then 4       -- │ (CASE 식이 min 괄호 안에 그대로)
+           when '2026-11-10 12:00+09' &lt; sales_open_at then 1    -- │
            when coalesce(seat_count.remaining, 0) = 0 then 2  -- │
            else 0                            -- │
          end                                 -- ┘
@@ -770,8 +770,8 @@ end as "sales_status"</code></pre>
   min(                                 -- ── 경계: 여러 행 → 값 하나
     case                               -- 괄호 안 → 행(회차)마다: 10번
       when is_cancelled then 3
-      when starts_at &lt;= $1 then 4
-      when $2 &lt; sales_open_at then 1
+      when starts_at &lt;= '2026-11-10 12:00+09' then 4
+      when '2026-11-10 12:00+09' &lt; sales_open_at then 1
       when coalesce(seat_count.remaining, 0) = 0 then 2
       else 0
     end
@@ -1460,18 +1460,18 @@ sql`case
   when ${remaining} = 0 then ${2}
   else ${0}
 end`</code></pre>
-          <pre><code class="language-sql">-- DB에 가는 SQL 글자
+          <pre><code class="language-sql">-- 빈칸에 값을 채워 쓴 모양. 주석의 $n이 빈칸으로 간 자리다
 case
-  when "is_cancelled" then $1
-  when "starts_at" &lt;= $2 then $3
-  when $4 &lt; "sales_open_at" then $5
-  when coalesce("remaining", 0) = 0 then $6
-  else $7
-end
--- DB에 가는 값 목록: [3, now, 4, now, 1, 2, 0]</code></pre>
+  when "is_cancelled" then '3'                              -- $1
+  when "starts_at" &lt;= '2026-11-10 12:00+09' then '4'      -- $2, $3
+  when '2026-11-10 12:00+09' &lt; "sales_open_at" then '1'  -- $4, $5
+  when coalesce("remaining", 0) = 0 then '2'                -- $6
+  else '0'                                                  -- $7
+end</code></pre>
           <p>
-            <code>${3}</code>, <code>${4}</code>도 값이라 빈칸이 됐다. SQL 글자에는 숫자가 하나도 없고 <code>then $1</code>,
-            <code>then $3</code>처럼 빈칸만 남았다.
+            <code>${3}</code>, <code>${4}</code>도 값이라 빈칸이 됐다. SQL 글자에는 숫자가 하나도 없고, <code>then</code> 뒤가
+            모두 빈칸이다. 빈칸에 들어간 순번을 <code>'3'</code>처럼 따옴표로 적은 이유는 바로 아래에서 본다. DB가 이 값들을 글자로
+            읽기 때문이다.
           </p>
           <h3>빈칸의 타입은 누가 정하나</h3>
           <p>
@@ -1523,15 +1523,14 @@ sql`case
   when ${remaining} = 0 then ${sql.raw('2')}
   else ${sql.raw('0')}
 end`</code></pre>
-          <pre><code class="language-sql">-- DB에 가는 SQL 글자
+          <pre><code class="language-sql">-- 빈칸에 값을 채워 쓴 모양. 주석의 $n이 빈칸으로 간 자리다
 case
   when "is_cancelled" then 3
-  when "starts_at" &lt;= $1 then 4
-  when $2 &lt; "sales_open_at" then 1
+  when "starts_at" &lt;= '2026-11-10 12:00+09' then 4      -- $1
+  when '2026-11-10 12:00+09' &lt; "sales_open_at" then 1  -- $2
   when coalesce("remaining", 0) = 0 then 2
   else 0
-end
--- DB에 가는 값 목록: [now, now]</code></pre>
+end</code></pre>
           <p>
             <a href="03-drizzle-쿼리-문법.html#sql-raw"><code>sql.raw</code></a>는 값을 빈칸으로 만들지 않고 SQL 글자에
             그대로 써 넣는다. 이제 SQL 글자에 <code>then 3</code>이 보이므로 DB는 짐작할 필요 없이 숫자(<code>integer</code>)로
