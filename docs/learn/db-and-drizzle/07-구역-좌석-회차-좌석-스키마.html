@@ -87,34 +87,235 @@
                 <tr>
                   <td>팔린 좌석만 줄로 저장한다(줄이 없으면 판매 가능)</td>
                   <td>
-                    줄 수는 적지만 "남은 좌석"을 구하려면 공연장 좌석 수에서 팔린 수를 빼야 해서 두 테이블을 맞춰 세야 한다. 스펙은
-                    "남은 좌석은 회차 좌석 테이블만 세서 구한다"고 정했다
+                    남은 좌석을 구하려면 공연장 좌석 수에서 팔린 수를 빼야 해서 두 테이블을 맞춰 세야 한다. 줄이 빠지면 판매 가능으로
+                    보인다
                   </td>
                 </tr>
                 <tr>
                   <td>회차에 남은 좌석 수를 숫자로 저장한다</td>
-                  <td>조회는 빠르지만, 좌석이 팔릴 때마다 회차 좌석과 이 숫자를 함께 고쳐야 하고 둘이 어긋날 수 있다</td>
+                  <td>좌석이 팔릴 때마다 회차 좌석과 이 숫자를 함께 고쳐야 하고, 둘이 어긋날 수 있다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>아래에서 같은 예시 데이터로 대안마다 무엇이 잘못되는지 본다.</p>
+
+          <h4 id="ps-example">예시 데이터</h4>
+          <p>
+            낙산 소극장에 좌석이 세 개만 있고, 회차가 둘이라고 하자. <strong>11-20 회차에서 좌석 10만 팔렸다.</strong> 11-21 회차는
+            아무것도 팔리지 않았다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>seats.id</th><th>자리</th><th></th><th>performances.id</th><th>회차</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>10</td><td>A구역 3열 5번</td><td></td><td>20</td><td>11-20 19:30</td></tr>
+                <tr><td>11</td><td>A구역 3열 6번</td><td></td><td>21</td><td>11-21 19:30</td></tr>
+                <tr><td>12</td><td>B구역 1열 1번</td><td></td><td></td><td></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>정답: 11-20 회차의 남은 좌석은 2석(11, 12), 11-21 회차는 3석이다.</p>
+
+          <h4 id="alt-seat-is-sold">대안 1: 좌석에 판매 여부를 둔다</h4>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>seats.id</th><th>자리</th><th>is_sold</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>10</td><td>A구역 3열 5번</td><td><strong>true</strong></td></tr>
+                <tr><td>11</td><td>A구역 3열 6번</td><td>false</td></tr>
+                <tr><td>12</td><td>B구역 1열 1번</td><td>false</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>질문</th><th>테이블이 주는 답</th><th>정답</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>11-20 회차에 좌석 10이 남았나?</td><td>아니다(true)</td><td>아니다</td></tr>
+                <tr><td>11-21 회차에 좌석 10이 남았나?</td><td><strong>아니다(true)</strong></td><td>남았다</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            <code>is_sold</code> 칸이 좌석마다 하나뿐이라 "어느 회차에서 팔렸는지"를 적을 곳이 없다. 11-20 회차에서 팔리는 순간 모든
+            회차에서 팔린 것이 된다. 회차가 늘어날수록 칸을 늘릴 수도 없다. 그래서 판매 여부는 좌석이 아니라 좌석과 회차의 짝마다
+            있어야 한다.
+          </p>
+
+          <h4 id="alt-sold-only">대안 2: 팔린 좌석만 줄로 저장한다</h4>
+          <p>팔린 짝만 적고, 줄이 없으면 판매 가능으로 본다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>sold_seats.performance_id</th><th>seat_id</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>20</td><td>10</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            줄이 1개뿐이라 저장 공간은 가장 적다. 판매 여부도 회차마다 맞다. 하지만 남은 좌석을 세는 방법이 달라진다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th></th><th>11-20 회차의 남은 좌석 구하기</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>대안 2</td>
+                  <td>
+                    ① 회차 → 공연 → 공연장 → 구역 → 좌석으로 JOIN해 공연장 좌석 수(3)를 센다<br />
+                    ② <code>sold_seats</code>에서 회차 20의 줄 수(1)를 센다<br />
+                    ③ 3 − 1 = 2
+                  </td>
+                </tr>
+                <tr>
+                  <td>지금 구조</td>
+                  <td><code>performance_seats</code>에서 회차 20의 판매 가능 줄 수를 센다 → 2</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>더 큰 문제는 데이터가 빠졌을 때다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>사고</th><th>대안 2에서 보이는 모습</th><th>지금 구조에서 보이는 모습</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>회차를 만들고 좌석 줄을 만들지 못했다</td>
+                  <td>모든 좌석이 판매 가능으로 보인다</td>
+                  <td>남은 좌석이 0이라 <strong>매진</strong>으로 보인다. 팔면 안 되는 좌석을 팔지는 않는다</td>
                 </tr>
               </tbody>
             </table>
           </div>
           <p>
-            회차마다 공연장 좌석 수만큼 회차 좌석을 미리 만들면, 판매 가능과 판매됨이 모두 줄로 있다. 남은 좌석은
-            <code>count(*) filter (where not is_sold)</code> 하나로 세고, 판매는 그 줄의 <code>is_sold</code>를 바꾸는 일이 된다.
-            예매 단계의 좌석 선점도 "이미 있는 회차 좌석 한 줄"을 대상으로 하면 된다. 대가는 줄 수다. 시드 기준 회차 189개 × 회차당
-            100~600석으로 회차 좌석이 57,200줄이다.
+            "줄이 없다"를 판매 가능으로 읽으면 실수가 판매 가능 쪽으로 새고, 판매되지 않음으로 읽으면 실수가 판매 안 함 쪽으로
+            샌다. 표를 파는 서비스에서는 뒤쪽이 덜 위험하다. 스펙도 "남은 좌석은 회차 좌석 테이블만 세서 구한다"고 정했다.
           </p>
+
+          <h4 id="alt-remaining-count">대안 3: 회차에 남은 좌석 수를 숫자로 저장한다</h4>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>performances.id</th><th>회차</th><th>remaining_seats</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>20</td><td>11-20 19:30</td><td>2</td></tr>
+                <tr><td>21</td><td>11-21 19:30</td><td>3</td></tr>
+              </tbody>
+            </table>
+          </div>
           <p>
-            판매 여부는 <code>is_sold</code> boolean이다. 값이 판매 가능과 판매됨 둘뿐이고, 회차 취소의 <code>is_cancelled</code>와 같은
-            모양이다. 좌석 선점은 판매 여부가 아니라 별개 개념(용어집의 좌석 선점)이라 지금 상태 값을 늘릴 이유가 없다.
+            목록에서 숫자 하나만 읽으면 되니 조회는 가장 빠르다. 하지만 어느 좌석이 팔렸는지는 여전히 회차 좌석 같은 테이블에
+            있어야 하므로, 같은 사실이 두 곳에 있게 된다. 좌석 11이 팔릴 때 두 곳을 함께 고쳐야 한다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>좌석 11 판매 처리</th><th>회차 좌석 (11-20, 좌석 11)</th><th>회차 20의 remaining_seats</th><th>결과</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>둘 다 고쳤다</td><td>판매됨</td><td>1</td><td>맞다</td></tr>
+                <tr><td>숫자를 깜빡했다(버그)</td><td>판매됨</td><td><strong>2</strong></td><td>목록은 2석, 실제는 1석</td></tr>
+                <tr><td>두 요청이 동시에 2를 읽고 각자 1을 썼다</td><td>좌석 11, 12 판매됨</td><td><strong>1</strong></td><td>목록은 1석, 실제는 0석인데 매진이 아니다</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            지금 구조는 남은 좌석을 저장하지 않고 조회할 때마다 회차 좌석을 센다. 사실이 한 곳에만 있어 어긋날 일이 없다. 목록이
+            느려지면 그때 저장을 검토한다(<a href="#check">스스로 확인하기</a> 5번 문제 참고).
+          </p>
+
+          <h4 id="chosen">고른 방식: 회차마다 좌석 수만큼 회차 좌석을 미리 만든다</h4>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>performance_seats.id</th><th>performance_id</th><th>seat_id</th><th>is_sold</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>1</td><td>20</td><td>10</td><td><strong>true</strong></td></tr>
+                <tr><td>2</td><td>20</td><td>11</td><td>false</td></tr>
+                <tr><td>3</td><td>20</td><td>12</td><td>false</td></tr>
+                <tr><td>4</td><td>21</td><td>10</td><td>false</td></tr>
+                <tr><td>5</td><td>21</td><td>11</td><td>false</td></tr>
+                <tr><td>6</td><td>21</td><td>12</td><td>false</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>하는 일</th><th>방법</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>회차의 남은 좌석 세기</td><td><code>count(*) filter (where not is_sold)</code>로 회차별로 센다. 회차 20 → 2, 회차 21 → 3</td></tr>
+                <tr><td>좌석 하나 팔기</td><td>그 회차 좌석 한 줄의 <code>is_sold</code>를 true로 바꾼다. 다른 곳은 고치지 않는다</td></tr>
+                <tr><td>좌석 선택 화면</td><td>회차 하나의 줄을 모두 읽으면 판매 가능과 판매됨이 다 나온다</td></tr>
+                <tr><td>뒤 단계의 좌석 선점, 티켓</td><td>"이미 있는 회차 좌석 한 줄"을 가리키면 된다</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            대가는 줄 수다. 회차 좌석은 <strong>회차 수 × 공연장 좌석 수</strong>만큼 생긴다. 예시는 2 × 3 = 6줄이고, 시드는 회차 189개 ×
+            회차당 100~600석으로 57,200줄이다. PostgreSQL에게 이 정도는 작은 테이블이고, 시드는 1만 줄씩 나눠 넣어 약 2초에 끝난다.
+          </p>
+
+          <h4 id="why-boolean">판매 여부를 boolean으로 둔 이유</h4>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th></th><th><code>is_sold boolean</code> (고른 방식)</th><th><code>status enum('available', 'sold')</code></th></tr>
+              </thead>
+              <tbody>
+                <tr><td>판매 가능</td><td><code>false</code></td><td><code>'available'</code></td></tr>
+                <tr><td>판매됨</td><td><code>true</code></td><td><code>'sold'</code></td></tr>
+                <tr><td>남은 좌석 세기</td><td><code>where not is_sold</code></td><td><code>where status = 'available'</code></td></tr>
+                <tr><td>값을 더할 때</td><td>컬럼 종류를 바꾸는 마이그레이션이 필요하다</td><td>enum에 값을 더하는 마이그레이션이 필요하다</td></tr>
+                <tr><td>비슷한 컬럼</td><td>회차 취소 <code>is_cancelled</code>와 같은 모양</td><td>없음</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            지금 값은 둘뿐이고, 셋째 값이 정해지지 않았다. 셋째 값 후보로 "선점됨"을 떠올릴 수 있지만, 용어집에서 좌석 선점은 판매
+            여부가 아니라 "결제가 끝나기 전까지 회차 좌석을 한 사용자에게 임시로 묶어 두는 일"로 따로 정의한 개념이다. 누가, 언제까지
+            묶었는지 같은 정보가 따라오므로 판매 여부 값 하나로 담기 어렵고, 어떻게 담을지는 예매 단계에서 정한다. 그때 필요하면
+            바꾼다.
           </p>
 
           <h3 id="why-venue">좌석 배치를 공연장이 갖는 이유</h3>
           <p>
             용어집은 공연장을 "좌석 배치를 소유한다. 공연과 별개로 존재하며, 시기에 따라 여러 공연이 거쳐 간다"로 정한다. 좌석은
-            건물에 있는 자리라 공연이 바뀌어도 그대로다. 좌석을 공연 밑에 두면 같은 공연장에 공연이 올라올 때마다 같은 좌석
-            100~600줄을 다시 만들어야 한다. 공연장 밑에 한 번 만들어 두고, 회차를 만들 때 그 공연장의 좌석을 가져다 회차 좌석을
-            만든다. 좌석 배치 편집기는 만들지 않고 시드로만 만든다.
+            건물에 있는 자리라 어떤 공연이 올라와도 그대로다.
+          </p>
+          <p>낙산 소극장(100석)에 공연 세 개가 차례로 올라온다고 하자.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th></th><th>좌석을 공연 밑에 둔다 (<code>seats.show_id</code>)</th><th>좌석을 공연장 밑에 둔다 (지금 구조)</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>좌석 줄 수</td><td>100 × 3 = 300줄. 같은 자리가 공연마다 다시 생긴다</td><td>100줄. 한 번만 만든다</td></tr>
+                <tr><td>새 공연이 올라올 때</td><td>좌석 100줄을 복사해 새로 만든다</td><td>아무것도 만들지 않는다</td></tr>
+                <tr><td>"A구역 3열 5번"이 몇 개인가</td><td>3개(공연마다 다른 id)</td><td>1개</td></tr>
+                <tr><td>공연장 리모델링으로 한 줄이 없어지면</td><td>공연마다 복사본을 찾아 고친다. 빠뜨린 공연은 없는 자리를 판다</td><td>공연장 좌석만 고친다</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            공연장 밑에 좌석을 한 번 만들어 두고, 회차를 만들 때 그 공연장의 좌석을 가져다 회차 좌석을 만든다. 공연에 따라 달라지는
+            것(판매 여부, 좌석 등급)은 좌석이 아니라 회차 좌석과 구역 등급 쪽에 둔다. 좌석 배치 편집기는 만들지 않고 시드로만 만든다.
           </p>
 
           <h3 id="why-section">공연장과 좌석 사이에 구역을 둔 이유</h3>
