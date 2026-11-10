@@ -547,7 +547,8 @@ Object.entries(Object.groupBy(performances, (p) =&gt; p.show_id)).map(([showId, 
           <p>
             <code>CASE</code>는 조건에 따라 다른 값을 고르는 <strong>식</strong>이다. 문장이 아니라 값이 되므로
             <code>SELECT</code>의 컬럼 자리, 집계 함수 안, <code>WHERE</code> 안 어디든 넣을 수 있다. 자바스크립트로는 즉시
-            실행하는 <code>if</code> / <code>else if</code> 함수, 또는 삼항 연산자를 이어 붙인 것과 같다.
+            실행하는 <code>if</code> / <code>else if</code> 함수, 또는 삼항 연산자를 이어 붙인 것과 같다. 아래 예시는 오늘이
+            2026-11-10이라고 보고 그 날짜를 직접 적었다. 실제 코드에서는 이 자리에 실행할 때의 시각이 들어간다.
           </p>
           <pre><code class="language-sql">case
   when is_cancelled              then 2

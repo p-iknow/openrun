@@ -501,7 +501,7 @@ const showPriority = sql`min(${priority})`; // 조각 안에 조각을 넣는다
     when "performances"."starts_at" &lt;= $1 then 3
     else 0
   end)
--- params: [2026-11-10T03:00:00.000Z]</code></pre>
+-- params: [2026-11-10T03:00:00.000Z]   ← now가 2026-11-10 12:00(한국 시각)일 때</code></pre>
           <h3><code>${...}</code>에 넣을 수 있는 것</h3>
           <p>
             <a href="#execute">execute 절의 표</a>에 하나가 더 있다. <strong>다른 SQL 조각</strong>을 넣으면 그 조각의 SQL이

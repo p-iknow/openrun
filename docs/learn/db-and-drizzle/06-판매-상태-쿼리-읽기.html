@@ -39,6 +39,13 @@
           <a href="03-drizzle-쿼리-문법.html">db-and-drizzle 03 문서</a>, <code>CASE</code>·<code>FILTER</code> 같은 SQL 개념은
           <a href="01-프론트엔드-개발자를-위한-DB-개념.html">db-and-drizzle 01 문서</a>에 있다.
         </p>
+        <div class="callout">
+          <strong>이 문서의 "지금"은 2026-11-10 12:00(한국 시각)으로 정해 둔다.</strong>
+          판매 상태는 조회하는 시각에 따라 답이 바뀐다. 그래서 문서에 나오는 "지금", 코드의 <code>now</code>, 표의 판매
+          상태는 모두 이 시각을 기준으로 한다. 날짜는 모두 2026년이라 표에서는 연도를 빼고 <code>11-10 12:00</code>처럼
+          쓴다. 다른 시각으로 생각해 보는 문제는 <a href="#check">스스로 확인하기</a>에서 "지금 시각이 ~이면"으로 따로
+          적는다.
+        </div>
 
         <section id="overview">
           <h2>한눈에 보기</h2>
@@ -135,7 +142,8 @@ export function showSalesStatusSubquery(db: Database, { now }: { now: Date }) {
         <section id="example">
           <h2>예시 데이터</h2>
           <p>
-            지금 시각은 <strong>11-10 12:00</strong>이다(모두 한국 시각, 연도 생략). 아래 표로 끝까지 따라간다.
+            지금 시각은 맨 위에서 정한 대로 <strong>2026-11-10 12:00</strong>(한국 시각)이다. 표에서는 연도를 빼고
+            <code>11-10 12:00</code>처럼 쓴다. 아래 표로 끝까지 따라간다.
           </p>
           <h3><code>shows</code></h3>
           <div class="table-wrap">
