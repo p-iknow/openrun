@@ -640,10 +640,13 @@ when ${performances.isCancelled} then ${priorityOf('cancelled')}</code></pre>
             지금까지는 회차 한 줄마다 순번을 구했다. 이제 같은 공연의 회차들을 한데 모아 순번 하나로 줄인다. 이 일은 쿼리
             맨 아래의 <code>.groupBy()</code>와 <code>select</code> 안의 <code>min()</code>이 함께 한다.
           </p>
-          <pre><code class="language-ts">return db
+          <pre><code class="language-ts">const priority = performancePriority(now);        // 회차 한 줄의 순번 (앞 절의 CASE)
+const showPriority = sql`min(${priority})`;      // 그 순번들 중 가장 작은 값
+const toStatus = sql.join(/* ... */);            // 순번 → 이름 (아래 ③)
+
+return db
   .select({
     showId: performances.showId,
-    // showPriority = min(회차 순번)
     salesStatus: sql`case ${showPriority} ${toStatus} end`.as('sales_status'),
   })
   .from(performances)           // 회차 테이블의 모든 줄(회차 10개)에서
