@@ -444,27 +444,101 @@ end`</code></pre>
 
         <section id="constants">
           <h2>순번과 이름을 SQL에 넣기</h2>
-          <pre><code class="language-ts">function priorityOf(status: ShowSalesStatus): SQL {
-  return sql.raw(String(SHOW_SALES_STATUSES.indexOf(status))); // 'cancelled' → SQL에 2
-}
-function literalOf(status: ShowSalesStatus): SQL {
-  return sql.raw(`'${status}'`); // 'on_sale' → SQL에 'on_sale'
-}</code></pre>
           <p>
-            <a href="03-drizzle-쿼리-문법.html#sql-raw"><code>sql.raw</code></a>는 문자열을 파라미터가 아니라 SQL 글자로 그대로
-            넣는다. 그래서 SQL에 <code>then $3</code>이 아니라 <code>then 2</code>가 보인다.
+            앞 절의 <code>CASE</code>는 <code>then</code> 뒤에 순번(숫자)을 돌려준다. 이 숫자를 TS 코드에서 SQL로 넣는 방법이
+            두 가지 있고, 어느 쪽이냐에 따라 <code>min</code>의 결과가 달라질 수 있다. 같은 <code>CASE</code>를 두 방법으로 써
+            보고 실제로 만들어지는 SQL을 비교한다.
           </p>
+
+          <h3>방법 1. 숫자를 그냥 넣기: 파라미터가 된다</h3>
+          <pre><code class="language-ts">// 쓰지 않은 방법
+sql`case
+  when ${performances.isCancelled} then ${2}
+  when ${performances.startsAt} &lt;= ${now} then ${3}
+  when ${now} &lt; ${performances.salesOpenAt} then ${1}
+  else ${0}
+end`</code></pre>
+          <pre><code class="language-sql">-- 만들어지는 SQL
+case
+  when "is_cancelled" then $1
+  when "starts_at" &lt;= $2 then $3
+  when $4 &lt; "sales_open_at" then $5
+  else $6
+end
+-- params: [2, now, 3, now, 1, 0]</code></pre>
+          <p>
+            <code>${...}</code>에 값을 넣으면 Drizzle은 그 값을 SQL 글자에 쓰지 않고 <code>$1</code> 같은 빈칸으로 남긴 뒤 값은
+            따로 보낸다(<a href="03-drizzle-쿼리-문법.html#sql-fragment">sql 조각</a>). 그래서 SQL에는 <code>2</code>가 없고
+            <code>then $1</code>만 있다.
+          </p>
+          <p>
+            문제는 PostgreSQL이 값을 받기 <strong>전에</strong> SQL만 보고 <code>CASE</code> 결과의 타입을 정한다는 점이다.
+            <code>then</code> 자리가 전부 빈칸(<code>$1</code>, <code>$3</code>, <code>$5</code>, <code>$6</code>)이라 숫자인지
+            글자인지 알 단서가 없고, 이럴 때는 <code>text</code>로 정한다. 그러면 바깥의 <code>min</code>이 숫자가 아니라
+            <strong>글자 순서</strong>로 비교한다.
+          </p>
+          <pre><code class="language-sql">min('0', '3')   → '0'    -- 지금은 숫자 순서와 같아서 우연히 맞는다
+min('10', '9')  → '10'   -- 순번이 10을 넘으면 틀린다. 글자 '1'이 '9'보다 앞이라서</code></pre>
+
+          <h3>방법 2. sql.raw로 넣기: SQL 글자가 된다</h3>
+          <pre><code class="language-ts">// 실제로 만들어지는 모양 (priorityOf가 sql.raw를 돌려준다)
+sql`case
+  when ${performances.isCancelled} then ${sql.raw('2')}
+  when ${performances.startsAt} &lt;= ${now} then ${sql.raw('3')}
+  when ${now} &lt; ${performances.salesOpenAt} then ${sql.raw('1')}
+  else ${sql.raw('0')}
+end`</code></pre>
+          <pre><code class="language-sql">-- 만들어지는 SQL
+case
+  when "is_cancelled" then 2
+  when "starts_at" &lt;= $1 then 3
+  when $2 &lt; "sales_open_at" then 1
+  else 0
+end
+-- params: [now, now]</code></pre>
+          <p>
+            <a href="03-drizzle-쿼리-문법.html#sql-raw"><code>sql.raw</code></a>는 문자열을 빈칸으로 남기지 않고 SQL 글자에
+            그대로 써 넣는다. 이제 <code>then 2</code>가 SQL에 보이므로 PostgreSQL은 결과가 <code>integer</code>라는 것을 알고,
+            <code>min</code>도 숫자로 비교한다. 실행할 때마다 바뀌는 <code>now</code>만 파라미터로 남는다.
+          </p>
+
+          <h3>'2'를 직접 쓰지 않고 함수로 만든 이유</h3>
+          <pre><code class="language-ts">// priorityOf('cancelled') → sql.raw('2')
+function priorityOf(status: ShowSalesStatus): SQL {
+  return sql.raw(String(SHOW_SALES_STATUSES.indexOf(status)));
+}
+// literalOf('on_sale') → sql.raw(&quot;'on_sale'&quot;)
+function literalOf(status: ShowSalesStatus): SQL {
+  return sql.raw(`'${status}'`);
+}
+
+// 쓰는 곳
+when ${performances.isCancelled} then ${priorityOf('cancelled')}</code></pre>
           <ul>
             <li>
-              <strong>파라미터로 넣으면 숫자가 문자가 된다.</strong> <code>CASE</code>의 결과 자리가 모두 파라미터면
-              PostgreSQL은 타입을 짐작할 단서가 없어 <code>text</code>로 정한다. 그러면 <code>min</code>이 글자 순서로 비교해서
-              <code>'10'</code>이 <code>'9'</code>보다 작아진다(<a href="03-drizzle-쿼리-문법.html#sql-raw">확인한 결과</a>).
+              <strong>숫자를 배열에서 꺼낸다.</strong> <code>priorityOf('cancelled')</code>는 배열에서
+              <code>'cancelled'</code>의 위치(2)를 찾아 <code>sql.raw('2')</code>를 만든다. 매진을 배열에 끼워 넣으면 숫자가
+              저절로 밀리므로 <code>CASE</code>를 고칠 필요가 없다. 코드도 숫자 대신 상태 이름으로 읽힌다.
             </li>
             <li>
-              <strong>상수라서 안전하다.</strong> 인자 타입이 <code>ShowSalesStatus</code>라 네 값 말고는 들어올 수 없다. 사용자
-              입력이 <code>sql.raw</code>에 닿을 길이 없다.
+              <strong><code>literalOf</code>는 이름을 넣는다.</strong> 순번을 이름으로 바꾸는 단계(<a href="#show">아래</a>)의
+              <code>when 0 then 'on_sale'</code>에서 <code>'on_sale'</code> 부분을 만든다. 이름은 원래 글자라
+              <code>text</code>가 되어도 문제가 없지만, 순번과 같은 방식으로 넣어 SQL을 읽을 때 값이 바로 보이게 했다.
             </li>
           </ul>
+
+          <h3>sql.raw를 써도 안전한 이유</h3>
+          <div class="callout warn">
+            <p>
+              <code>sql.raw</code>에 들어간 글자는 그대로 SQL이 된다. 사용자 입력을 넣으면
+              <a href="01-프론트엔드-개발자를-위한-DB-개념.html#parameter">SQL 인젝션</a>이다.
+            </p>
+          </div>
+          <p>
+            두 함수의 인자 타입은 <code>ShowSalesStatus</code>라서 <code>'on_sale'</code>, <code>'upcoming'</code>,
+            <code>'cancelled'</code>, <code>'ended'</code> 네 값 말고는 컴파일이 되지 않는다. 그래서
+            <code>sql.raw</code>에 들어가는 것은 코드에 적힌 상수뿐이고, 사용자 입력이 닿을 길이 없다.
+          </p>
         </section>
 
         <section id="show">
