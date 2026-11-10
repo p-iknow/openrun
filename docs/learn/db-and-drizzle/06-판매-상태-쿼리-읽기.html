@@ -711,6 +711,37 @@ return db
             나온다(<a href="01-프론트엔드-개발자를-위한-DB-개념.html#aggregate">집계 함수와 GROUP BY</a>).
             <code>showPriority</code>는 회차 순번 식(<code>priority</code>)을 <code>min()</code>으로 감싼 것이다.
           </p>
+          <p><code>${priority}</code> 자리에는 앞 절의 <code>CASE</code> 글자가 통째로 들어간다. DB가 받는 SQL은 이렇다(줄여 씀).</p>
+          <pre><code class="language-sql">select show_id,
+       min(                                  -- showPriority
+         case                                -- ┐
+           when is_cancelled then 2          -- │ priority
+           when starts_at &lt;= $1 then 3       -- │ (CASE 식이 min 괄호 안에 그대로)
+           when $2 &lt; sales_open_at then 1    -- │
+           else 0                            -- │
+         end                                 -- ┘
+       )
+from performances
+group by show_id</code></pre>
+          <p>DB가 하는 일을 JS로 쓰면 이렇다.</p>
+          <pre><code class="language-js">// group by show_id: 같은 공연의 회차끼리 묶는다
+const groups = Object.groupBy(performances, (row) =&gt; row.showId);
+
+for (const [showId, rows] of Object.entries(groups)) {
+  // case ... end: 묶음 안의 행마다 순번을 계산한다   ← priority
+  const priorities = rows.map((row) =&gt; {
+    if (row.isCancelled) return 2;
+    if (row.startsAt &lt;= now) return 3;
+    if (now &lt; row.salesOpenAt) return 1;
+    return 0;
+  });
+  // min(...): 그 순번들 중 가장 작은 값               ← showPriority
+  const showPriority = Math.min(...priorities);
+}</code></pre>
+          <p>
+            <code>priority</code>는 <code>rows.map</code> 안쪽 함수이고, <code>min(${priority})</code>는
+            <code>Math.min(...rows.map(그 함수))</code>다.
+          </p>
           <div class="table-wrap">
             <table>
               <thead>
