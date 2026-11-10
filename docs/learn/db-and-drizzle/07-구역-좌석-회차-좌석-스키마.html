@@ -63,137 +63,176 @@
               </ul>
             </li>
           </ul>
+
+          <h3 id="tables">지금 구조의 테이블</h3>
           <p>
-            이 모양은 이슈 #41의 스펙과 <code>GLOSSARY.md</code>의 용어 정의에서 나왔다. 아래는 각 단계를 왜 두었고, 어떤 대안을
-            쓰지 않았는지다.
+            이 절의 예시는 모두 아래 데이터를 쓴다. 낙산 소극장에 구역 둘, 좌석 셋만 있고 회차가 둘이다.
+            <strong>11-20 회차에서 좌석 10만 팔렸다.</strong> 굵은 글씨는 다른 테이블의 id를 가리키는 외래 키다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th colspan="2">venues (공연장)</th></tr><tr><th>id</th><th>name</th></tr></thead>
+              <tbody><tr><td>1</td><td>낙산 소극장</td></tr></tbody>
+            </table>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th colspan="3">sections (구역)</th></tr><tr><th>id</th><th>venue_id</th><th>name</th></tr></thead>
+              <tbody>
+                <tr><td>1</td><td><strong>1</strong></td><td>A구역</td></tr>
+                <tr><td>2</td><td><strong>1</strong></td><td>B구역</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th colspan="4">seats (좌석)</th></tr><tr><th>id</th><th>section_id</th><th>row</th><th>number</th></tr></thead>
+              <tbody>
+                <tr><td>10</td><td><strong>1</strong></td><td>3열</td><td>5</td></tr>
+                <tr><td>11</td><td><strong>1</strong></td><td>3열</td><td>6</td></tr>
+                <tr><td>12</td><td><strong>2</strong></td><td>1열</td><td>1</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th colspan="3">performances (회차, 이전 티켓에서 만듦)</th></tr><tr><th>id</th><th>show_id</th><th>starts_at</th></tr></thead>
+              <tbody>
+                <tr><td>20</td><td><strong>5</strong></td><td>11-20 19:30</td></tr>
+                <tr><td>21</td><td><strong>5</strong></td><td>11-21 19:30</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th colspan="4">performance_seats (회차 좌석)</th></tr><tr><th>id</th><th>performance_id</th><th>seat_id</th><th>is_sold</th></tr></thead>
+              <tbody>
+                <tr><td>1</td><td><strong>20</strong></td><td><strong>10</strong></td><td>true</td></tr>
+                <tr><td>2</td><td><strong>20</strong></td><td><strong>11</strong></td><td>false</td></tr>
+                <tr><td>3</td><td><strong>20</strong></td><td><strong>12</strong></td><td>false</td></tr>
+                <tr><td>4</td><td><strong>21</strong></td><td><strong>10</strong></td><td>false</td></tr>
+                <tr><td>5</td><td><strong>21</strong></td><td><strong>11</strong></td><td>false</td></tr>
+                <tr><td>6</td><td><strong>21</strong></td><td><strong>12</strong></td><td>false</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            공연 5는 낙산 소극장에서 열린다(<code>shows.venue_id = 1</code>). 회차 좌석 1번은 "회차 20의 좌석 10(A구역 3열 5번),
+            판매됨"이라고 읽는다. 정답: 11-20 회차의 남은 좌석은 2석, 11-21 회차는 3석이다.
+          </p>
+          <p>
+            이 모양은 이슈 #41의 스펙과 <code>GLOSSARY.md</code>의 용어 정의에서 나왔다. 아래는 각 테이블을 왜 두었고, 어떤 대안을
+            쓰지 않았는지다. 대안마다 <strong>위 테이블에서 무엇이 바뀌는지</strong>를 테이블 모양으로 보인다.
           </p>
 
           <h3 id="why-performance-seat">좌석과 회차 좌석을 나눈 이유</h3>
           <p>
             용어집은 좌석을 "공연장에 물리적으로 존재하는 자리이며, 판매 여부를 갖지 않는다", 회차 좌석을 "특정 회차에서 판매되는
-            좌석 하나이며, 예매의 최소 판매 단위"로 정한다. 같은 A구역 3열 5번이 11월 20일 회차에서는 팔렸고 11월 21일 회차에서는
-            비어 있을 수 있다. 판매 여부는 <strong>자리 + 회차</strong>마다 다르다. 이를 담는 방법으로 대안 두 가지를 따져 보고
-            회차 좌석을 골랐다. 같은 예시 데이터로 하나씩 본다.
+            좌석 하나이며, 예매의 최소 판매 단위"로 정한다. 좌석 10은 11-20 회차에서는 팔렸고 11-21 회차에서는 비어 있다. 판매 여부는
+            <strong>좌석 + 회차</strong>마다 다르다. 이를 담는 방법으로 대안 두 가지를 따져 보고 회차 좌석을 골랐다.
           </p>
-
-          <h4 id="ps-example">예시 데이터</h4>
-          <p>
-            낙산 소극장에 좌석이 세 개만 있고, 회차가 둘이라고 하자. <strong>11-20 회차에서 좌석 10만 팔렸다.</strong> 11-21 회차는
-            아무것도 팔리지 않았다.
-          </p>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr><th>seats.id</th><th>자리</th></tr>
-              </thead>
-              <tbody>
-                <tr><td>10</td><td>A구역 3열 5번</td></tr>
-                <tr><td>11</td><td>A구역 3열 6번</td></tr>
-                <tr><td>12</td><td>B구역 1열 1번</td></tr>
-              </tbody>
-            </table>
-          </div>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr><th>performances.id</th><th>회차</th></tr>
-              </thead>
-              <tbody>
-                <tr><td>20</td><td>11-20 19:30</td></tr>
-                <tr><td>21</td><td>11-21 19:30</td></tr>
-              </tbody>
-            </table>
-          </div>
-          <p>정답: 11-20 회차의 남은 좌석은 2석(11, 12), 11-21 회차는 3석이다.</p>
 
           <h4 id="alt-sold-only">대안 1: 팔린 좌석만 줄로 저장한다</h4>
           <p>
             <strong>문제: 남은 좌석을 구하려면 공연장 좌석 수에서 팔린 수를 빼야 해서 두 테이블을 맞춰 세야 하고, 줄이 빠지면 판매
-            가능으로 보인다.</strong> 팔린 짝만 적고, 줄이 없으면 판매 가능으로 보는 방식이다.
+            가능으로 보인다.</strong>
+          </p>
+          <p>
+            <code>performance_seats</code> 대신 <code>sold_seats</code>를 둔다. 팔린 짝만 줄로 적고, 줄이 없으면 판매 가능으로 본다.
+            <code>is_sold</code> 컬럼은 필요 없다. 나머지 테이블(<code>venues</code>, <code>sections</code>, <code>seats</code>,
+            <code>performances</code>)은 그대로다.
           </p>
           <div class="table-wrap">
             <table>
-              <thead>
-                <tr><th>sold_seats.performance_id</th><th>seat_id</th></tr>
-              </thead>
-              <tbody>
-                <tr><td>20</td><td>10</td></tr>
-              </tbody>
+              <thead><tr><th colspan="2">sold_seats (팔린 좌석)</th></tr><tr><th>performance_id</th><th>seat_id</th></tr></thead>
+              <tbody><tr><td><strong>20</strong></td><td><strong>10</strong></td></tr></tbody>
             </table>
           </div>
           <p>
-            줄이 1개뿐이라 저장 공간은 가장 적다. 판매 여부도 회차마다 맞다. 하지만 남은 좌석을 세는 방법이 달라진다.
+            지금 구조의 6줄이 1줄로 준다. 판매 여부도 회차마다 맞다. 하지만 남은 좌석을 세는 방법이 달라진다.
           </p>
           <div class="table-wrap">
             <table>
-              <thead>
-                <tr><th>방식</th><th>11-20 회차의 남은 좌석 구하기</th></tr>
-              </thead>
+              <thead><tr><th>방식</th><th>11-20 회차의 남은 좌석 구하기</th></tr></thead>
               <tbody>
                 <tr>
                   <td>대안 1</td>
                   <td>
-                    ① 회차 → 공연 → 공연장 → 구역 → 좌석으로 JOIN해 공연장 좌석 수(3)를 센다<br />
-                    ② <code>sold_seats</code>에서 회차 20의 줄 수(1)를 센다<br />
+                    ① <code>performances</code> → <code>shows</code> → <code>venues</code> → <code>sections</code> →
+                    <code>seats</code>로 JOIN해 공연장 좌석 수(3)를 센다<br />
+                    ② <code>sold_seats</code>에서 <code>performance_id = 20</code>인 줄 수(1)를 센다<br />
                     ③ 3 − 1 = 2
                   </td>
                 </tr>
                 <tr>
                   <td>지금 구조</td>
-                  <td><code>performance_seats</code>에서 회차 20의 판매 가능 줄 수를 센다 → 2</td>
+                  <td><code>performance_seats</code>에서 <code>performance_id = 20</code>이고 <code>is_sold = false</code>인 줄 수를 센다 → 2</td>
                 </tr>
               </tbody>
             </table>
           </div>
-          <p>더 큰 문제는 데이터가 빠졌을 때다.</p>
+          <p>더 큰 차이는 데이터가 빠졌을 때 드러난다. 새 회차 22를 만들면서 좌석 쪽 줄을 하나도 만들지 못했다고 하자.</p>
           <div class="table-wrap">
             <table>
-              <thead>
-                <tr><th>사고</th><th>대안 1에서 보이는 모습</th><th>지금 구조에서 보이는 모습</th></tr>
-              </thead>
+              <thead><tr><th>방식</th><th>회차 22의 줄</th><th>보이는 모습</th></tr></thead>
               <tbody>
                 <tr>
-                  <td>회차를 만들고 좌석 줄을 만들지 못했다</td>
-                  <td>모든 좌석이 판매 가능으로 보인다</td>
-                  <td>남은 좌석이 0이라 <strong>매진</strong>으로 보인다. 팔면 안 되는 좌석을 팔지는 않는다</td>
+                  <td>대안 1</td>
+                  <td><code>sold_seats</code>에 0줄. 원래 처음엔 0줄이 정상이다</td>
+                  <td>공연장 좌석 3 − 팔린 0 = 3석. 모두 <strong>판매 가능</strong>으로 보이고, 빠진 걸 알아챌 수 없다</td>
+                </tr>
+                <tr>
+                  <td>지금 구조</td>
+                  <td><code>performance_seats</code>에 0줄. 원래 3줄이어야 한다</td>
+                  <td>남은 좌석 0석이라 <strong>매진</strong>으로 보인다. 팔면 안 되는 좌석을 팔지는 않는다</td>
                 </tr>
               </tbody>
             </table>
           </div>
           <p>
-            "줄이 없다"를 판매 가능으로 읽으면 실수가 판매 가능 쪽으로 새고, 판매되지 않음으로 읽으면 실수가 판매 안 함 쪽으로
+            "줄이 없다"를 판매 가능으로 읽으면 실수가 판매하는 쪽으로 새고, 판매하지 않음으로 읽으면 실수가 판매하지 않는 쪽으로
             샌다. 표를 파는 서비스에서는 뒤쪽이 덜 위험하다. 스펙도 "남은 좌석은 회차 좌석 테이블만 세서 구한다"고 정했다.
           </p>
 
           <h4 id="alt-remaining-count">대안 2: 회차에 남은 좌석 수를 숫자로 저장한다</h4>
           <p>
             <strong>문제: 좌석이 팔릴 때마다 회차 좌석과 이 숫자를 함께 고쳐야 하고, 둘이 어긋날 수 있다.</strong>
-            <code>performances</code>에 <code>remaining_seats</code> 컬럼을 더하면 이렇게 된다.
+          </p>
+          <p>
+            <code>performances</code>에 <code>remaining_seats</code> 컬럼을 더한다. 어느 좌석이 팔렸는지는 여전히 알아야 하므로
+            <code>performance_seats</code>도 그대로 둔다. 같은 사실(회차 20에 2석 남음)이 두 테이블에 있게 된다.
           </p>
           <div class="table-wrap">
             <table>
-              <thead>
-                <tr><th>performances.id</th><th>회차</th><th>remaining_seats</th></tr>
-              </thead>
+              <thead><tr><th colspan="4">performances (회차) — 컬럼 추가</th></tr><tr><th>id</th><th>show_id</th><th>starts_at</th><th>remaining_seats</th></tr></thead>
               <tbody>
-                <tr><td>20</td><td>11-20 19:30</td><td>2</td></tr>
-                <tr><td>21</td><td>11-21 19:30</td><td>3</td></tr>
+                <tr><td>20</td><td><strong>5</strong></td><td>11-20 19:30</td><td><strong>2</strong></td></tr>
+                <tr><td>21</td><td><strong>5</strong></td><td>11-21 19:30</td><td><strong>3</strong></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th colspan="4">performance_seats (회차 좌석) — 그대로</th></tr><tr><th>id</th><th>performance_id</th><th>seat_id</th><th>is_sold</th></tr></thead>
+              <tbody>
+                <tr><td>1</td><td>20</td><td>10</td><td>true</td></tr>
+                <tr><td>2</td><td>20</td><td>11</td><td>false</td></tr>
+                <tr><td>3</td><td>20</td><td>12</td><td>false</td></tr>
+                <tr><td colspan="4">… 회차 21의 3줄</td></tr>
               </tbody>
             </table>
           </div>
           <p>
-            목록에서 숫자 하나만 읽으면 되니 조회는 가장 빠르다. 하지만 어느 좌석이 팔렸는지는 여전히 회차 좌석 같은 테이블에
-            있어야 하므로, 같은 사실이 두 곳에 있게 된다. 좌석 11이 팔릴 때 두 곳을 함께 고쳐야 한다.
+            목록에서 숫자 하나만 읽으면 되니 조회는 가장 빠르다. 대신 좌석 11을 팔 때 두 곳을 고쳐야 한다: 회차 좌석 2번의
+            <code>is_sold</code>를 true로, 회차 20의 <code>remaining_seats</code>를 1로.
           </p>
           <div class="table-wrap">
             <table>
-              <thead>
-                <tr><th>좌석 11 판매 처리</th><th>회차 좌석 (11-20, 좌석 11)</th><th>회차 20의 remaining_seats</th><th>결과</th></tr>
-              </thead>
+              <thead><tr><th>좌석 11 판매 처리</th><th>회차 좌석 2번 is_sold</th><th>회차 20 remaining_seats</th><th>결과</th></tr></thead>
               <tbody>
-                <tr><td>둘 다 고쳤다</td><td>판매됨</td><td>1</td><td>맞다</td></tr>
-                <tr><td>숫자를 깜빡했다(버그)</td><td>판매됨</td><td><strong>2</strong></td><td>목록은 2석, 실제는 1석</td></tr>
-                <tr><td>두 요청이 동시에 2를 읽고 각자 1을 썼다</td><td>좌석 11, 12 판매됨</td><td><strong>1</strong></td><td>목록은 1석, 실제는 0석인데 매진이 아니다</td></tr>
+                <tr><td>둘 다 고쳤다</td><td>true</td><td>1</td><td>맞다</td></tr>
+                <tr><td>숫자를 깜빡했다(버그)</td><td>true</td><td><strong>2</strong></td><td>목록은 2석, 실제는 1석</td></tr>
+                <tr><td>좌석 11, 12를 두 사람이 동시에 팔았다. 둘 다 2를 읽고 각자 1을 썼다</td><td>true (12도 true)</td><td><strong>1</strong></td><td>목록은 1석, 실제는 0석인데 매진이 아니다</td></tr>
               </tbody>
             </table>
           </div>
@@ -203,31 +242,18 @@
           </p>
 
           <h4 id="chosen">고른 방식: 회차마다 좌석 수만큼 회차 좌석을 미리 만든다</h4>
+          <p>
+            <a href="#tables">지금 구조의 테이블</a>의 <code>performance_seats</code>다. 회차 둘 × 좌석 셋 = 6줄이 판매 여부와 함께 모두
+            있다.
+          </p>
           <div class="table-wrap">
             <table>
-              <thead>
-                <tr><th>performance_seats.id</th><th>performance_id</th><th>seat_id</th><th>is_sold</th></tr>
-              </thead>
+              <thead><tr><th>하는 일</th><th>방법</th></tr></thead>
               <tbody>
-                <tr><td>1</td><td>20</td><td>10</td><td><strong>true</strong></td></tr>
-                <tr><td>2</td><td>20</td><td>11</td><td>false</td></tr>
-                <tr><td>3</td><td>20</td><td>12</td><td>false</td></tr>
-                <tr><td>4</td><td>21</td><td>10</td><td>false</td></tr>
-                <tr><td>5</td><td>21</td><td>11</td><td>false</td></tr>
-                <tr><td>6</td><td>21</td><td>12</td><td>false</td></tr>
-              </tbody>
-            </table>
-          </div>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr><th>하는 일</th><th>방법</th></tr>
-              </thead>
-              <tbody>
-                <tr><td>회차의 남은 좌석 세기</td><td><code>count(*) filter (where not is_sold)</code>로 회차별로 센다. 회차 20 → 2, 회차 21 → 3</td></tr>
-                <tr><td>좌석 하나 팔기</td><td>그 회차 좌석 한 줄의 <code>is_sold</code>를 true로 바꾼다. 다른 곳은 고치지 않는다</td></tr>
-                <tr><td>좌석 선택 화면</td><td>회차 하나의 줄을 모두 읽으면 판매 가능과 판매됨이 다 나온다</td></tr>
-                <tr><td>뒤 단계의 좌석 선점, 티켓</td><td>"이미 있는 회차 좌석 한 줄"을 가리키면 된다</td></tr>
+                <tr><td>회차의 남은 좌석 세기</td><td><code>performance_seats</code>를 <code>performance_id</code>로 묶어 <code>count(*) filter (where not is_sold)</code>. 회차 20 → 2, 회차 21 → 3</td></tr>
+                <tr><td>좌석 하나 팔기</td><td>회차 좌석 한 줄의 <code>is_sold</code>를 true로 바꾼다. 다른 테이블은 고치지 않는다</td></tr>
+                <tr><td>좌석 선택 화면</td><td><code>performance_id = 20</code>인 3줄을 읽으면 판매 가능과 판매됨이 다 나온다</td></tr>
+                <tr><td>뒤 단계의 좌석 선점, 티켓</td><td>회차 좌석 id(예: 2번)를 가리키면 된다</td></tr>
               </tbody>
             </table>
           </div>
@@ -237,17 +263,34 @@
           </p>
 
           <h4 id="why-boolean">판매 여부를 boolean으로 둔 이유</h4>
+          <p>
+            같은 <code>performance_seats</code>에서 판매 여부 컬럼의 종류만 다르다. 두 모양을 나란히 놓으면 이렇다.
+          </p>
           <div class="table-wrap">
             <table>
-              <thead>
-                <tr><th>항목</th><th><code>is_sold boolean</code> (고른 방식)</th><th><code>status enum('available', 'sold')</code></th></tr>
-              </thead>
+              <thead><tr><th colspan="4">is_sold boolean (고른 방식)</th></tr><tr><th>id</th><th>performance_id</th><th>seat_id</th><th>is_sold</th></tr></thead>
               <tbody>
-                <tr><td>판매 가능</td><td><code>false</code></td><td><code>'available'</code></td></tr>
-                <tr><td>판매됨</td><td><code>true</code></td><td><code>'sold'</code></td></tr>
+                <tr><td>1</td><td>20</td><td>10</td><td>true</td></tr>
+                <tr><td>2</td><td>20</td><td>11</td><td>false</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th colspan="4">status enum('available', 'sold')</th></tr><tr><th>id</th><th>performance_id</th><th>seat_id</th><th>status</th></tr></thead>
+              <tbody>
+                <tr><td>1</td><td>20</td><td>10</td><td>'sold'</td></tr>
+                <tr><td>2</td><td>20</td><td>11</td><td>'available'</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>항목</th><th><code>is_sold boolean</code></th><th><code>status enum</code></th></tr></thead>
+              <tbody>
                 <tr><td>남은 좌석 세기</td><td><code>where not is_sold</code></td><td><code>where status = 'available'</code></td></tr>
                 <tr><td>값을 더할 때</td><td>컬럼 종류를 바꾸는 마이그레이션이 필요하다</td><td>enum에 값을 더하는 마이그레이션이 필요하다</td></tr>
-                <tr><td>비슷한 컬럼</td><td>회차 취소 <code>is_cancelled</code>와 같은 모양</td><td>없음</td></tr>
+                <tr><td>비슷한 컬럼</td><td>회차 취소 <code>performances.is_cancelled</code>와 같은 모양</td><td>없음</td></tr>
               </tbody>
             </table>
           </div>
@@ -261,111 +304,123 @@
           <h3 id="why-venue">좌석 배치를 공연장이 갖는 이유</h3>
           <p>
             용어집은 공연장을 "좌석 배치를 소유한다. 공연과 별개로 존재하며, 시기에 따라 여러 공연이 거쳐 간다"로 정한다. 좌석은
-            건물에 있는 자리라 어떤 공연이 올라와도 그대로다.
+            건물에 있는 자리라 어떤 공연이 올라와도 그대로다. 그래서 <code>sections</code>는 <code>venue_id</code>로 공연장을
+            가리키고, <code>seats</code>는 구역을 거쳐 공연장에 속한다. 좌석 쪽 테이블 어디에도 공연이나 회차 id가 없다.
           </p>
           <p>
-            그래서 공연장 밑에 좌석을 한 번 만들어 두고, 회차를 만들 때 그 공연장의 좌석을 가져다 회차 좌석을 만든다. 공연에 따라
-            달라지는 것(판매 여부, 좌석 등급)은 좌석이 아니라 회차 좌석과 구역 등급 쪽에 둔다. 좌석 배치 편집기는 만들지 않고
-            시드로만 만든다.
+            공연과 좌석은 <strong>회차 좌석을 만들 때</strong> 처음 이어진다. 공연 5에 회차 22(11-22 19:30)를 더하면 이렇게 된다.
+          </p>
+          <ol class="steps blue">
+            <li>
+              <strong>회차를 만든다.</strong> <code>performances</code>에 (22, 공연 5, 11-22 19:30)을 넣는다.
+            </li>
+            <li>
+              <strong>그 공연장의 좌석을 찾는다.</strong> 공연 5의 <code>venue_id</code>는 1이다. <code>sections</code>에서
+              <code>venue_id = 1</code>인 구역 1, 2를 찾고, <code>seats</code>에서 그 구역의 좌석 10, 11, 12를 찾는다.
+            </li>
+            <li>
+              <strong>좌석마다 회차 좌석을 만든다.</strong> <code>performance_seats</code>에 세 줄을 넣는다.
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>id</th><th>performance_id</th><th>seat_id</th><th>is_sold</th></tr></thead>
+                  <tbody>
+                    <tr><td>7</td><td>22</td><td>10</td><td>false</td></tr>
+                    <tr><td>8</td><td>22</td><td>11</td><td>false</td></tr>
+                    <tr><td>9</td><td>22</td><td>12</td><td>false</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </li>
+          </ol>
+          <p>
+            <code>seats</code>는 한 줄도 늘지 않는다. 공연이 몇 개 올라오든 좌석 10은 하나이고, 공연마다 달라지는 것(판매 여부,
+            좌석 등급)은 좌석이 아니라 회차 좌석과 구역 등급 쪽에 둔다. 지금은 회차와 회차 좌석을 시드가 만들고, 좌석 배치 편집기는
+            만들지 않는다.
           </p>
 
           <h3 id="why-section">공연장과 좌석 사이에 구역을 둔 이유</h3>
           <p>
             용어집은 구역을 "공연장의 좌석을 나눈 묶음이며, 공연마다 좌석 등급을 지정하는 단위"로 정한다. 좌석 등급(VIP석, R석 같은
             이름과 가격)은 뒤 티켓에서 붙이는데, 같은 공연장이라도 공연마다 등급을 다르게 나눈다. 등급을 붙일 방법으로 대안 두
-            가지를 따져 보고 구역 테이블을 골랐다. 좌석 등급 표는 아직 없으므로, 아래 표의 등급 표는 뒤 티켓에서 생긴다고 가정한
-            모양이다.
+            가지를 따져 보고 구역 테이블을 골랐다.
           </p>
-
-          <h4 id="section-per-seat">대안 1: 좌석마다 등급을 지정한다</h4>
           <p>
-            <strong>문제: 공연마다 좌석 수만큼 등급 줄을 만들어야 한다.</strong> 등급은 보통 "1층 앞쪽은 VIP"처럼 묶음 단위로 정하는데,
-            좌석 하나하나에 적으면 같은 등급이 수백 번 반복된다. 서울 그랜드 씨어터(600석, 구역 4개)에 공연 하나를 올린다고 하자.
+            좌석 등급 테이블은 아직 없다. 아래에 나오는 등급 테이블은 뒤 티켓에서 생긴다고 가정한 모양이다. 지금 구조라면 등급은
+            "공연 × 구역"마다 한 줄이 된다.
           </p>
           <div class="table-wrap">
             <table>
-              <thead>
-                <tr><th>항목</th><th>좌석마다 등급 (<code>show_id, seat_id, grade</code>)</th><th>구역마다 등급 (<code>show_id, section_id, grade</code>)</th></tr>
-              </thead>
+              <thead><tr><th colspan="3">section_grades (공연별 구역 등급, 가정) — 지금 구조</th></tr><tr><th>show_id</th><th>section_id</th><th>grade</th></tr></thead>
               <tbody>
-                <tr>
-                  <td>등급 줄</td>
-                  <td>
-                    (공연 5, 좌석 1, VIP석)<br />
-                    (공연 5, 좌석 2, VIP석)<br />
-                    … 150줄이 모두 VIP석<br />
-                    (공연 5, 좌석 151, R석)<br />
-                    … 합계 <strong>600줄</strong>
-                  </td>
-                  <td>
-                    (공연 5, A구역, VIP석)<br />
-                    (공연 5, B구역, R석)<br />
-                    (공연 5, C구역, R석)<br />
-                    (공연 5, D구역, S석)<br />
-                    합계 <strong>4줄</strong>
-                  </td>
-                </tr>
-                <tr>
-                  <td>A구역을 R석으로 바꾸면</td>
-                  <td>150줄을 고친다. 몇 줄 빠지면 A구역 안에 VIP석이 섞인다</td>
-                  <td>1줄을 고친다</td>
-                </tr>
+                <tr><td><strong>5</strong></td><td><strong>1</strong> (A구역)</td><td>VIP석</td></tr>
+                <tr><td><strong>5</strong></td><td><strong>2</strong> (B구역)</td><td>R석</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h4 id="section-per-seat">대안 1: 좌석마다 등급을 지정한다</h4>
+          <p>
+            <strong>문제: 공연마다 좌석 수만큼 등급 줄을 만들어야 한다.</strong>
+          </p>
+          <p>
+            <code>sections</code>는 있어도 없어도 되고, 등급 테이블이 구역 대신 좌석을 가리킨다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th colspan="3">seat_grades (공연별 좌석 등급) — 대안 1</th></tr><tr><th>show_id</th><th>seat_id</th><th>grade</th></tr></thead>
+              <tbody>
+                <tr><td><strong>5</strong></td><td><strong>10</strong></td><td>VIP석</td></tr>
+                <tr><td><strong>5</strong></td><td><strong>11</strong></td><td>VIP석</td></tr>
+                <tr><td><strong>5</strong></td><td><strong>12</strong></td><td>R석</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            예시는 좌석이 셋뿐이라 차이가 작아 보인다. 등급은 보통 "1층 앞쪽은 VIP"처럼 묶음 단위로 정하므로, 좌석 하나하나에 적으면
+            같은 등급이 반복된다. 서울 그랜드 씨어터(600석, 구역 4개, 구역당 150석)에 공연 하나를 올리면 이렇다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>항목</th><th>대안 1: <code>seat_grades</code></th><th>지금 구조: <code>section_grades</code></th></tr></thead>
+              <tbody>
+                <tr><td>공연 하나의 등급 줄</td><td>600줄. A구역 150줄이 모두 VIP석</td><td>4줄</td></tr>
+                <tr><td>A구역을 R석으로 바꾸면</td><td>150줄을 고친다. 몇 줄 빠지면 A구역 안에 VIP석이 섞인다</td><td>1줄을 고친다</td></tr>
               </tbody>
             </table>
           </div>
 
           <h4 id="section-as-text">대안 2: 구역을 좌석의 글자 컬럼으로 둔다</h4>
           <p>
-            <strong>문제: 등급 표에서 구역을 이름 글자로 가리켜야 해서, 이름에 오타가 있어도 DB가 막지 못하고(외래 키를 걸 대상이
-            없다), 구역 이름을 바꾸면 좌석과 등급 표의 이름을 모두 고쳐야 한다.</strong> 구역 테이블 없이 <code>seats</code>에
-            <code>section</code> 글자 컬럼을 두는 방식이다. 낙산 소극장(공연장 id 1)의 좌석 세 개로 지금 구조와 나란히 그려 보면 이렇다.
+            <strong>문제: 등급 테이블에서 구역을 이름 글자로 가리켜야 해서, 이름에 오타가 있어도 DB가 막지 못하고(외래 키를 걸 대상이
+            없다), 구역 이름을 바꾸면 좌석과 등급 테이블의 이름을 모두 고쳐야 한다.</strong>
+          </p>
+          <p>
+            <code>sections</code> 테이블을 없애고, <code>seats</code>가 공연장 id와 구역 이름 글자를 직접 갖는다. 등급 테이블도 구역
+            id 대신 구역 이름을 적는다. 테이블이 셋(<code>venues</code>, <code>seats</code>, 등급)에서 끝난다.
           </p>
           <div class="table-wrap">
             <table>
-              <thead>
-                <tr><th>테이블</th><th>글자 컬럼 (테이블 2개)</th><th>구역 테이블 (테이블 3개, 지금 구조)</th></tr>
-              </thead>
+              <thead><tr><th colspan="5">seats (좌석) — 대안 2</th></tr><tr><th>id</th><th>venue_id</th><th>section</th><th>row</th><th>number</th></tr></thead>
               <tbody>
-                <tr>
-                  <td>구역</td>
-                  <td>따로 없음</td>
-                  <td>
-                    <code>sections</code><br />
-                    (1, 공연장 1, A구역)<br />
-                    (2, 공연장 1, B구역)
-                  </td>
-                </tr>
-                <tr>
-                  <td>좌석</td>
-                  <td>
-                    <code>seats(id, venue_id, section, row, number)</code><br />
-                    (10, 1, <strong>A구역</strong>, 3열, 5)<br />
-                    (11, 1, <strong>A구역</strong>, 3열, 6)<br />
-                    (12, 1, <strong>B구역</strong>, 1열, 1)
-                  </td>
-                  <td>
-                    <code>seats(id, section_id, row, number)</code><br />
-                    (10, <strong>1</strong>, 3열, 5)<br />
-                    (11, <strong>1</strong>, 3열, 6)<br />
-                    (12, <strong>2</strong>, 1열, 1)
-                  </td>
-                </tr>
-                <tr>
-                  <td>좌석 등급 표</td>
-                  <td>
-                    (공연 5, <strong>A구역</strong>, VIP석)<br />
-                    (공연 5, <strong>B구역</strong>, R석)
-                  </td>
-                  <td>
-                    (공연 5, 구역 <strong>1</strong>, VIP석)<br />
-                    (공연 5, 구역 <strong>2</strong>, R석)
-                  </td>
-                </tr>
+                <tr><td>10</td><td><strong>1</strong></td><td>A구역</td><td>3열</td><td>5</td></tr>
+                <tr><td>11</td><td><strong>1</strong></td><td>A구역</td><td>3열</td><td>6</td></tr>
+                <tr><td>12</td><td><strong>1</strong></td><td>B구역</td><td>1열</td><td>1</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th colspan="3">section_grades (공연별 구역 등급) — 대안 2</th></tr><tr><th>show_id</th><th>section</th><th>grade</th></tr></thead>
+              <tbody>
+                <tr><td><strong>5</strong></td><td>A구역</td><td>VIP석</td></tr>
+                <tr><td><strong>5</strong></td><td>B구역</td><td>R석</td></tr>
               </tbody>
             </table>
           </div>
           <p>
-            글자 컬럼 방식도 등급 표에서 구역을 이름으로 가리킬 수는 있다. 문제는 그 이름이 맞는지 DB가 확인해 주지 않는다는 점이다.
+            지금 구조(<a href="#tables">지금 구조의 테이블</a>의 <code>sections</code>, <code>seats</code>와 위 <code>section_grades</code>)와
+            비교하면, 구역을 가리키는 칸이 숫자 id(외래 키)에서 이름 글자로 바뀌었다. 등급 테이블은 이름으로도 구역을 가리킬 수는
+            있다. 문제는 그 이름이 맞는지 DB가 확인해 주지 않는다는 점이다.
           </p>
 
           <h4 id="section-typo">문제 1: 오타를 막지 못한다</h4>
@@ -378,7 +433,7 @@
               <tbody>
                 <tr>
                   <td>글자 컬럼</td>
-                  <td>(공연 5, <strong>A 구역</strong>, VIP석)</td>
+                  <td><code>section_grades</code>에 show_id 5, section <strong>A 구역</strong>, grade VIP석</td>
                   <td>
                     들어간다. 좌석에 "A 구역"이 없으니 A구역 좌석 10, 11은 등급이 없는 채로 남는다. 가격을 모르는 좌석이 생기고,
                     누군가 화면을 보고 알아챌 때까지 모른다
@@ -386,7 +441,7 @@
                 </tr>
                 <tr>
                   <td>구역 테이블</td>
-                  <td>(공연 5, 구역 <strong>3</strong>, VIP석) ← 없는 구역 id</td>
+                  <td><code>section_grades</code>에 show_id 5, section_id <strong>3</strong>, grade VIP석 (구역 3은 없다)</td>
                   <td>
                     <a href="01-프론트엔드-개발자를-위한-DB-개념.html#fk">외래 키</a>가 거부한다. 넣는 순간 에러가 난다
                   </td>
@@ -408,14 +463,14 @@
                   <td>글자 컬럼</td>
                   <td>
                     좌석 150줄의 <code>section</code><br />
-                    + 그 공연장에 올라온 모든 공연의 등급 표에서 "A구역"인 줄
+                    + 그 공연장에 올라온 모든 공연의 등급 테이블에서 "A구역"인 줄
                   </td>
-                  <td>좌석은 "1층 A구역"인데 등급 표는 "A구역"이라 연결이 끊긴다. 문제 1과 같은 상태가 된다</td>
+                  <td>좌석은 "1층 A구역"인데 등급 테이블은 "A구역"이라 연결이 끊긴다. 문제 1과 같은 상태가 된다</td>
                 </tr>
                 <tr>
                   <td>구역 테이블</td>
                   <td><code>sections</code>의 1줄(<code>name</code>)</td>
-                  <td>빠질 곳이 없다. 좌석과 등급 표는 이름이 아니라 구역 id 1을 들고 있어 그대로다</td>
+                  <td>빠질 곳이 없다. 좌석과 등급 테이블은 이름이 아니라 구역 id 1을 들고 있어 그대로다</td>
                 </tr>
               </tbody>
             </table>
