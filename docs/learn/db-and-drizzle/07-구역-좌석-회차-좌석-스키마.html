@@ -134,13 +134,158 @@
                 </tr>
                 <tr>
                   <td><code>seats</code>에 <code>section</code> 글자 컬럼만 둔다</td>
-                  <td>구역이 테이블이 아니라서 "이 공연에서 A구역은 VIP석"을 가리킬 대상(구역 id)이 없다</td>
+                  <td>
+                    등급 표에서 구역을 이름 글자로 가리켜야 한다. 이름에 오타가 있어도 DB가 막지 못하고(외래 키를 걸 대상이 없다),
+                    구역 이름을 바꾸면 좌석과 등급 표의 이름을 모두 고쳐야 한다. 아래에서 표로 비교한다
+                  </td>
                 </tr>
               </tbody>
             </table>
           </div>
           <p>
             구역을 테이블로 두면 등급 지정은 "공연 × 구역" 몇 줄로 끝난다. 그래서 좌석 등급이 없는 지금도 구역 테이블을 먼저 만들었다.
+          </p>
+
+          <h4 id="section-as-text">글자 컬럼과 구역 테이블 비교</h4>
+          <p>
+            두 방식을 낙산 소극장(공연장 id 1)의 좌석 세 개로 그려 보면 이렇다. 좌석 등급 표는 아직 없고, 뒤 티켓에서 생긴다고
+            가정한 모양이다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th></th><th>글자 컬럼 (테이블 2개)</th><th>구역 테이블 (테이블 3개, 지금 구조)</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>구역</td>
+                  <td>따로 없음</td>
+                  <td>
+                    <code>sections</code><br />
+                    (1, 공연장 1, A구역)<br />
+                    (2, 공연장 1, B구역)
+                  </td>
+                </tr>
+                <tr>
+                  <td>좌석</td>
+                  <td>
+                    <code>seats(id, venue_id, section, row, number)</code><br />
+                    (10, 1, <strong>A구역</strong>, 3열, 5)<br />
+                    (11, 1, <strong>A구역</strong>, 3열, 6)<br />
+                    (12, 1, <strong>B구역</strong>, 1열, 1)
+                  </td>
+                  <td>
+                    <code>seats(id, section_id, row, number)</code><br />
+                    (10, <strong>1</strong>, 3열, 5)<br />
+                    (11, <strong>1</strong>, 3열, 6)<br />
+                    (12, <strong>2</strong>, 1열, 1)
+                  </td>
+                </tr>
+                <tr>
+                  <td>좌석 등급 표</td>
+                  <td>
+                    (공연 5, <strong>A구역</strong>, VIP석)<br />
+                    (공연 5, <strong>B구역</strong>, R석)
+                  </td>
+                  <td>
+                    (공연 5, 구역 <strong>1</strong>, VIP석)<br />
+                    (공연 5, 구역 <strong>2</strong>, R석)
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            글자 컬럼 방식도 등급 표에서 구역을 이름으로 가리킬 수는 있다. 문제는 그 이름이 맞는지 DB가 확인해 주지 않는다는 점이다.
+          </p>
+
+          <h4 id="section-typo">문제 1: 오타를 막지 못한다</h4>
+          <p>운영자가 등급을 넣다가 "A구역"을 "A 구역"(띄어쓰기)으로 적었다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th></th><th>넣으려는 등급</th><th>결과</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>글자 컬럼</td>
+                  <td>(공연 5, <strong>A 구역</strong>, VIP석)</td>
+                  <td>
+                    들어간다. 좌석에 "A 구역"이 없으니 A구역 좌석 10, 11은 등급이 없는 채로 남는다. 가격을 모르는 좌석이 생기고,
+                    누군가 화면을 보고 알아챌 때까지 모른다
+                  </td>
+                </tr>
+                <tr>
+                  <td>구역 테이블</td>
+                  <td>(공연 5, 구역 <strong>3</strong>, VIP석) ← 없는 구역 id</td>
+                  <td>
+                    <a href="01-프론트엔드-개발자를-위한-DB-개념.html#fk">외래 키</a>가 거부한다. 넣는 순간 에러가 난다
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>좌석을 넣을 때도 같다. 글자 컬럼이면 "A구억" 같은 오타로 혼자 다른 구역인 좌석이 생겨도 DB는 받는다.</p>
+
+          <h4 id="section-rename">문제 2: 이름을 바꾸면 여러 곳을 고쳐야 한다</h4>
+          <p>"A구역"을 "1층 A구역"으로 바꾼다. 600석 공연장이면 A구역 좌석이 150줄이다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th></th><th>고칠 곳</th><th>하나라도 빠지면</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>글자 컬럼</td>
+                  <td>
+                    좌석 150줄의 <code>section</code><br />
+                    + 그 공연장에 올라온 모든 공연의 등급 표에서 "A구역"인 줄
+                  </td>
+                  <td>좌석은 "1층 A구역"인데 등급 표는 "A구역"이라 연결이 끊긴다. 문제 1과 같은 상태가 된다</td>
+                </tr>
+                <tr>
+                  <td>구역 테이블</td>
+                  <td><code>sections</code>의 1줄(<code>name</code>)</td>
+                  <td>빠질 곳이 없다. 좌석과 등급 표는 이름이 아니라 구역 id 1을 들고 있어 그대로다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h4 id="section-list">문제 3: 구역 목록과 구역 규칙을 둘 곳이 없다</h4>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>하고 싶은 일</th><th>글자 컬럼</th><th>구역 테이블</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>공연장의 구역 목록 보기(등급 지정 화면의 선택지)</td>
+                  <td>좌석 600줄에서 <code>select distinct section</code>으로 매번 뽑는다</td>
+                  <td><code>sections</code>에서 <code>venue_id = 1</code>인 줄. 4줄이다</td>
+                </tr>
+                <tr>
+                  <td>좌석이 아직 없는 구역 두기</td>
+                  <td>못 한다. 좌석이 있어야 구역 이름이 존재한다</td>
+                  <td>된다. 구역 줄만 먼저 만들 수 있다</td>
+                </tr>
+                <tr>
+                  <td>한 공연장에 구역 이름이 겹치지 않게 막기(<a href="#sections">구역 유니크 제약</a>)</td>
+                  <td>걸 테이블이 없다. 좌석마다 이름이 반복되니 이름 유니크는 걸 수 없다</td>
+                  <td><code>unique(venue_id, name)</code></td>
+                </tr>
+                <tr>
+                  <td>구역에 정보 더하기(층, 표시 순서 등)</td>
+                  <td>좌석마다 같은 값을 반복해 적어야 한다</td>
+                  <td><code>sections</code>에 컬럼 하나를 더한다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            세 문제는 뿌리가 같다. 글자 컬럼은 같은 사실("이 공연장에 A구역이 있다")을 좌석 줄마다, 등급 줄마다 반복해서 적는다.
+            반복된 사본끼리 어긋나도 DB가 모른다. 구역 테이블은 그 사실을 한 줄에만 적고, 나머지는 id로 그 줄을 가리킨다. 이렇게
+            같은 사실을 한 곳에만 두도록 테이블을 나누는 것을 <strong>정규화</strong>라고 한다.
           </p>
 
           <h3 id="why-module">테이블을 둔 모듈</h3>
