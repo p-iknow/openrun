@@ -72,7 +72,7 @@ export class ShowsService {
         ...show,
         period: { start: toIso(start), end: toIso(end) },
         salesOpenAt: salesOpenAt?.toISOString() ?? null,
-        posterUrl: buildPosterUrl(posterPath, { baseUrl: this.posterBaseUrl }),
+        posterUrl: buildPosterUrl({ baseUrl: this.posterBaseUrl, posterPath }),
       })),
       page: PAGE,
       size: PAGE_SIZE,

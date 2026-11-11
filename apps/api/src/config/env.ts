@@ -4,20 +4,23 @@
 export function readDatabaseUrl(
   source: NodeJS.ProcessEnv = process.env,
 ): string {
-  return getOrThrow(source, { name: 'DATABASE_URL' });
+  return getOrThrow({ source, name: 'DATABASE_URL' });
 }
 
 /** 포스터 경로 앞에 붙여 포스터의 완전한 URL을 만드는 주소. 예: `http://localhost:3001/posters` */
 export function readPosterBaseUrl(
   source: NodeJS.ProcessEnv = process.env,
 ): string {
-  return getOrThrow(source, { name: 'POSTER_BASE_URL' });
+  return getOrThrow({ source, name: 'POSTER_BASE_URL' });
 }
 
-function getOrThrow(
-  source: NodeJS.ProcessEnv,
-  { name }: { name: string },
-): string {
+function getOrThrow({
+  source,
+  name,
+}: {
+  source: NodeJS.ProcessEnv;
+  name: string;
+}): string {
   const value = source[name];
   if (!value) {
     throw new Error(`필수 환경 변수가 없습니다: ${name}`);
