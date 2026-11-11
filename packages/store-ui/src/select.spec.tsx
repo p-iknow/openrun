@@ -59,6 +59,21 @@ describe('Select', () => {
     expect(attr(input, { attribute: 'value' })).toBe('closing');
   });
 
+  it('inline이면 라벨을 화면에서 숨기고 트리거에는 고른 값만 보인다', () => {
+    const html = renderToStaticMarkup(
+      <Select
+        label="정렬"
+        items={sortItems}
+        defaultValue="popular"
+        variant="inline"
+      />,
+    );
+
+    const label = /<[a-z]+\b[^>]*>정렬<\/[a-z]+>/.exec(html)?.[0] ?? '';
+    expect(attr(label, { attribute: 'class' })).toContain('sr-only');
+    expect(trigger(html).text).toBe('인기순');
+  });
+
   it('비활성이면 트리거를 누를 수 없다', () => {
     const html = renderToStaticMarkup(
       <Select label="정렬" items={sortItems} disabled />,

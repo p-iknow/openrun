@@ -50,3 +50,14 @@ export const Selected: Story = {
 export const Disabled: Story = {
   args: { defaultValue: 'popular', disabled: true },
 };
+
+/** 목록 위 줄 오른쪽에 놓는 작은 글자 드롭다운. 라벨은 화면에서 숨기고, 목록은 트리거의 오른쪽 끝에 맞춰 연다. */
+export const Inline: Story = {
+  args: { variant: 'inline', defaultValue: 'latest' },
+  render: (args) => (
+    <div className="flex max-w-[480px] items-center justify-between">
+      <p className="text-body font-semibold">공연 18개</p>
+      <Select {...args} />
+    </div>
+  ),
+};

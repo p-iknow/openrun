@@ -28,6 +28,8 @@ import { seats, sections, venues } from '../src/db/schema/venues.js';
 // 이 시각 뒤에 시작하는 회차는 판매 중이다.
 const DEFAULT_NOW = '2026-02-01T00:00:00Z';
 const DEFAULT_SALES_OPEN_AT = '2026-01-01T01:00:00Z';
+// 공연 등록 일시를 주지 않으면 쓰는 값. DB 기본값(now())은 테스트마다 달라지므로 늘 직접 넣는다.
+const DEFAULT_CREATED_AT = '2025-12-01T00:00:00Z';
 // 공연장 하나의 좌석 수.
 const VENUE_SEAT_COUNT = 20;
 // 포스터 URL은 이 값과 포스터 경로를 합친다. 끝의 /는 있어도 없어도 같은 URL이 나온다.
@@ -53,12 +55,14 @@ describe('GET /shows', () => {
     venueId,
     title,
     posterPath = 'poster.png',
+    createdAt = DEFAULT_CREATED_AT,
     performanceStarts = [],
     performances: performanceInputs = [],
   }: {
     venueId: number;
     title: string;
     posterPath?: string;
+    createdAt?: string;
     performanceStarts?: string[];
     performances?: PerformanceInput[];
   }): Promise<number> {
@@ -72,6 +76,7 @@ describe('GET /shows', () => {
         runningMinutes: 150,
         description: '소개',
         posterPath,
+        createdAt: new Date(createdAt),
       })
       .returning({ id: shows.id });
     if (!show) {
@@ -226,6 +231,66 @@ describe('GET /shows', () => {
     });
   });
 
+  it('sort가 newest이면 등록 일시가 늦은 순으로, 같으면 나중에 등록한(id가 큰) 순으로 정렬한다', async () => {
+    const venueId = await insertVenue('예술의전당');
+    await insertShow({
+      venueId,
+      title: '먼저 등록',
+      createdAt: '2026-01-01T00:00:00Z',
+      performanceStarts: ['2026-03-01T10:00:00Z'],
+    });
+    await insertShow({
+      venueId,
+      title: '같은 시각 A',
+      createdAt: '2026-01-05T00:00:00Z',
+      performanceStarts: ['2026-05-01T10:00:00Z'],
+    });
+    await insertShow({
+      venueId,
+      title: '같은 시각 B',
+      createdAt: '2026-01-05T00:00:00Z',
+      performanceStarts: ['2026-04-01T10:00:00Z'],
+    });
+    await insertShow({
+      venueId,
+      title: '나중에 등록',
+      createdAt: '2026-01-10T00:00:00Z',
+      performanceStarts: ['2026-06-01T10:00:00Z'],
+    });
+
+    const response = await request(app.getHttpServer()).get(
+      '/shows?sort=newest',
+    );
+
+    expect(
+      response.body.items.map((item: { title: string }) => item.title),
+    ).toEqual(['나중에 등록', '같은 시각 B', '같은 시각 A', '먼저 등록']);
+  });
+
+  it('sort가 start_date이면 기본 정렬과 같다', async () => {
+    const venueId = await insertVenue('예술의전당');
+    await insertShow({
+      venueId,
+      title: '늦게 시작',
+      createdAt: '2026-01-01T00:00:00Z',
+      performanceStarts: ['2026-05-01T10:00:00Z'],
+    });
+    await insertShow({
+      venueId,
+      title: '먼저 시작',
+      createdAt: '2026-01-10T00:00:00Z',
+      performanceStarts: ['2026-03-01T10:00:00Z'],
+    });
+
+    const response = await request(app.getHttpServer()).get(
+      '/shows?sort=start_date',
+    );
+
+    expect(
+      response.body.items.map((item: { title: string }) => item.title),
+    ).toEqual(['먼저 시작', '늦게 시작']);
+  });
+
   it('첫 회차 일시가 이른 순으로, 같으면 id 순으로 정렬한다', async () => {
     const venueId = await insertVenue('예술의전당');
     await insertShow({
@@ -360,6 +425,92 @@ describe('GET /shows', () => {
         detail: '요청 값이 올바르지 않습니다.',
         code: 'VALIDATION_FAILED',
         errors: [{ field: 'page', detail: '1 이상의 정수여야 합니다.' }],
+      });
+    });
+  });
+
+  describe('제목 검색', () => {
+    // 제목마다 공연을 하나씩, 넣는 순서대로 첫 회차 일시가 이르게 넣는다.
+    async function insertShowsTitled(titles: string[]) {
+      const venueId = await insertVenue('예술의전당');
+      for (const [index, title] of titles.entries()) {
+        await insertShow({
+          venueId,
+          title,
+          performanceStarts: [
+            `2026-03-${String(index + 1).padStart(2, '0')}T10:00:00Z`,
+          ],
+        });
+      }
+    }
+
+    async function searchTitles(q: string) {
+      const response = await request(app.getHttpServer())
+        .get('/shows')
+        .query({ q });
+      return {
+        status: response.status,
+        titles: response.body.items?.map(
+          (item: { title: string }) => item.title,
+        ),
+        totalCount: response.body.totalCount,
+      };
+    }
+
+    it('제목의 일부와 대소문자를 구분하지 않고 맞는 공연만 결과와 전체 개수에 담는다', async () => {
+      await insertShowsTitled([
+        'Hamilton',
+        '뮤지컬 해밀턴',
+        'HAMLET',
+        '오페라의 유령',
+      ]);
+
+      expect(await searchTitles('haM')).toEqual({
+        status: 200,
+        titles: ['Hamilton', 'HAMLET'],
+        totalCount: 2,
+      });
+      expect(await searchTitles('해밀')).toMatchObject({
+        titles: ['뮤지컬 해밀턴'],
+      });
+    });
+
+    it.each([
+      // 이스케이프하지 않으면 %는 아무 글자열, _는 아무 한 글자, \는 다음 글자를 그대로 찾는 뜻이 된다.
+      { char: '%', q: '100%', expected: ['100% 라이브'] },
+      { char: '_', q: 'a_b', expected: ['a_b 쇼'] },
+      { char: '\\', q: 'c\\d', expected: ['c\\d 쇼'] },
+    ])('$char 글자를 그대로 찾는다', async ({ q, expected }) => {
+      await insertShowsTitled([
+        '100% 라이브',
+        '1000 라이브',
+        'a_b 쇼',
+        'axb 쇼',
+        'c\\d 쇼',
+        'cd 쇼',
+      ]);
+
+      expect(await searchTitles(q)).toMatchObject({ titles: expected });
+    });
+
+    it('앞뒤 공백을 지우고 찾는다', async () => {
+      await insertShowsTitled(['달빛 정원', '햇빛 정원']);
+
+      expect(await searchTitles('  달빛 ')).toMatchObject({
+        titles: ['달빛 정원'],
+      });
+    });
+
+    it.each([
+      { name: '빈 값', q: '' },
+      { name: '공백뿐인 값', q: '   ' },
+    ])('$name: 검색하지 않고 모든 공연을 돌려준다', async ({ q }) => {
+      await insertShowsTitled(['달빛 정원', '햇빛 정원']);
+
+      expect(await searchTitles(q)).toEqual({
+        status: 200,
+        titles: ['달빛 정원', '햇빛 정원'],
+        totalCount: 2,
       });
     });
   });

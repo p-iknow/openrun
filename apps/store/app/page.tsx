@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { connection } from 'next/server';
 import { createServerApiClient } from '../src/api-client';
@@ -6,9 +7,11 @@ import { selectShowCards } from '../src/shows/select-show-cards';
 import { ShowCard, ShowCardList } from '../src/shows/show-card';
 import { ShowListPagination } from '../src/shows/show-list-pagination';
 import {
-  normalizeShowListQuery,
   getLastPageRedirectHref,
+  getShowListHref,
+  normalizeShowListQuery,
 } from '../src/shows/show-list-query';
+import { ShowSortSelect } from '../src/shows/show-sort-select';
 
 export default async function HomePage({ searchParams }: PageProps<'/'>) {
   // 이 페이지는 빌드 때 미리 그리지 않고 요청마다 렌더링한다. 그래서 빌드에 API와 DB가 필요 없다.
@@ -28,17 +31,36 @@ export default async function HomePage({ searchParams }: PageProps<'/'>) {
     redirect(lastPageHref);
   }
   const cards = selectShowCards(showPage);
+  const hasTitleQuery = query.q !== null;
 
   return (
     <main>
       <h1 className="mb-lg text-heading font-bold">공연</h1>
-      <p className="mb-md text-body-sm text-text-secondary">
-        공연 {showPage.totalCount}개
-      </p>
+      {/* 예매 사이트처럼 결과 수와 정렬을 목록 바로 위 한 줄에 둔다. 제목 검색은 헤더에 있다. */}
+      <div className="mb-md flex items-center justify-between gap-md">
+        <p className="font-semibold">공연 {showPage.totalCount}개</p>
+        {/* 정렬은 비제어라, 뒤로 가기나 초기화 링크로 주소가 바뀌면 key로 새로 그려 주소의 값을 다시 채운다. */}
+        <ShowSortSelect key={query.sort} query={query} />
+      </div>
       {cards.length === 0 ? (
-        <p className="py-2xl text-center text-text-secondary">
-          공연이 없습니다.
-        </p>
+        <div className="py-2xl text-center">
+          {hasTitleQuery ? (
+            <>
+              <p className="text-text-secondary">
+                조건에 맞는 공연이 없습니다.
+              </p>
+              {/* 결과를 좁히는 조건만 지운다. 정렬은 결과를 줄이지 않으므로 그대로 둔다. */}
+              <Link
+                href={getShowListHref({ ...query, q: null, page: 1 })}
+                className="mt-md inline-block font-semibold text-primary-strong hover:underline"
+              >
+                조건 초기화
+              </Link>
+            </>
+          ) : (
+            <p className="text-text-secondary">공연이 없습니다.</p>
+          )}
+        </div>
       ) : (
         <>
           <ShowCardList>

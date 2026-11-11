@@ -15,6 +15,9 @@ const learnFolders = [
       { file: '05-hydration-자세히.html', title: '05 hydration 자세히', tags: ['nextjs'] },
       { file: '06-next-image가-해결하는-문제와-동작-방식.html', title: '06 next/image가 해결하는 문제와 동작 방식', tags: ['nextjs'] },
       { file: '07-redirect와-notFound-흐름을-끊는-함수.html', title: '07 redirect와 notFound: 흐름을 끊는 함수', tags: ['nextjs'] },
+      { file: '08-useSearchParams와-Suspense-경계.html', title: '08 useSearchParams와 Suspense 경계', tags: ['nextjs'] },
+      { file: '09-검색-폼-제출과-비제어-입력.html', title: '09 검색 폼: 제출, 비제어 입력과 key', tags: ['nextjs'] },
+      { file: '10-숨은-입력-칸으로-쿼리-보존하기.html', title: '10 숨은 입력 칸으로 쿼리 보존하기', tags: ['nextjs'] },
     ],
   },
   {
@@ -47,6 +50,7 @@ const learnFolders = [
       { file: '06-판매-상태-쿼리-읽기.html', title: '06 판매 상태 쿼리 읽기', tags: ['drizzle', 'database'] },
       { file: '07-구역-좌석-회차-좌석-스키마.html', title: '07 구역·좌석·회차 좌석 스키마', tags: ['drizzle', 'database'] },
       { file: '08-마이그레이션.html', title: '08 마이그레이션', tags: ['drizzle', 'database'] },
+      { file: '09-공연-제목-검색-쿼리-읽기.html', title: '09 공연 제목 검색 쿼리 읽기', tags: ['drizzle', 'database'] },
     ],
   },
   {
@@ -58,6 +62,13 @@ const learnFolders = [
       { file: '02-cn과-tailwind-merge-확장.html', title: '02 cn과 tailwind-merge 확장', tags: ['design-system'] },
       { file: '03-라이브러리-빌드와-use-client-경계.html', title: "03 라이브러리 빌드와 'use client' 경계", tags: ['design-system', 'nextjs'] },
       { file: '04-useRender로-요소-바꿔-끼우기.html', title: '04 useRender로 요소 바꿔 끼우기', tags: ['base-ui', 'design-system'] },
+    ],
+  },
+  {
+    folder: 'store-logic',
+    title: '스토어 로직',
+    documents: [
+      { file: '00-공연-목록-쿼리-정리와-주소-만들기.html', title: '00 공연 목록 쿼리: 정리하고 주소 만들기', tags: ['url-state'] },
     ],
   },
   {
