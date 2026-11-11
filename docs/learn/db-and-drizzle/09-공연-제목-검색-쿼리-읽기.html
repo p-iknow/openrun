@@ -80,15 +80,20 @@ function escapeLikePattern(value: string): string {
           <div class="table-wrap">
             <table>
               <thead>
-                <tr><th>요청</th><th><code>q</code></th><th><code>where</code> 절</th></tr>
+                <tr><th>요청</th><th>서비스가 받은 <code>q</code></th><th><code>where</code> 절 (값을 채워 쓴 모습)</th></tr>
               </thead>
               <tbody>
-                <tr><td><code>/shows?q=정원</code></td><td><code>'정원'</code></td><td><code>("sales_status" &lt;&gt; $7 and "shows"."title" ilike $8)</code>, <code>$8</code>은 <code>'%정원%'</code></td></tr>
-                <tr><td><code>/shows</code></td><td><code>undefined</code></td><td><code>"sales_status" &lt;&gt; $7</code></td></tr>
-                <tr><td><code>/shows?q=%20%20</code></td><td><code>''</code></td><td><code>"sales_status" &lt;&gt; $7</code></td></tr>
+                <tr><td><code>/shows?q=정원</code></td><td><code>'정원'</code></td><td><code>sales_status &lt;&gt; 'ended' and title ilike '%정원%'</code></td></tr>
+                <tr><td><code>/shows</code></td><td>없음 (<code>undefined</code>)</td><td><code>sales_status &lt;&gt; 'ended'</code></td></tr>
+                <tr><td>공백만 보냄 (<code>/shows?q=%20%20</code>)</td><td>빈 글자 (<code>''</code>)</td><td><code>sales_status &lt;&gt; 'ended'</code></td></tr>
               </tbody>
             </table>
           </div>
+          <p>
+            읽기 쉽도록 값을 SQL 안에 채워 썼다. 실제로 DB에 가는 SQL에는 값 자리에 <code>$7</code>, <code>$8</code> 같은 번호가 있고, 값
+            <code>'ended'</code>, <code>'%정원%'</code>는 따로 간다(<a href="01-프론트엔드-개발자를-위한-DB-개념.html#parameter">파라미터</a>).
+            번호가 7부터인 것은 앞의 판매 상태 서브쿼리가 <code>$1</code>~<code>$6</code>(현재 시각)을 먼저 쓰기 때문이다.
+          </p>
           <p>
             조건 검사를 <code>q !== undefined</code>가 아니라 <code>q ?</code>로 쓴 이유는 셋째 줄이다. 공백만 보낸 <code>q</code>는 스키마의
             <code>.trim()</code>을 거쳐 빈 글자 <code>''</code>가 된다. 빈 글자는 거짓으로 읽히므로 검색하지 않는다. 티켓의 "빈 검색어는

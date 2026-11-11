@@ -248,14 +248,18 @@ const listCondition = and(
           <div class="table-wrap">
             <table>
               <thead>
-                <tr><th><code>q</code></th><th>만들어지는 SQL</th></tr>
+                <tr><th><code>q</code></th><th>만들어지는 조건 (값을 채워 쓴 모습)</th></tr>
               </thead>
               <tbody>
-                <tr><td><code>'정원'</code></td><td><code>("sales_status" &lt;&gt; $1 and "shows"."title" ilike $2)</code></td></tr>
-                <tr><td><code>null</code></td><td><code>"sales_status" &lt;&gt; $1</code></td></tr>
+                <tr><td><code>'정원'</code></td><td><code>(sales_status &lt;&gt; 'ended' and title ilike '%정원%')</code></td></tr>
+                <tr><td><code>undefined</code></td><td><code>sales_status &lt;&gt; 'ended'</code></td></tr>
               </tbody>
             </table>
           </div>
+          <p>
+            실제 SQL에서는 값 자리가 <code>$1</code>, <code>$2</code> 같은 번호이고, <code>'ended'</code>와 <code>'%정원%'</code>는
+            <a href="01-프론트엔드-개발자를-위한-DB-개념.html#parameter">파라미터</a>로 따로 간다.
+          </p>
           <p>
             <code>and(...)</code>와 <code>or(...)</code>는 인자 중 <code>undefined</code>를 빼고 남은 조건만 잇는다. 그래서 검색어가 있을 때만 붙는
             조건을 <code>조건 ? 식 : undefined</code>로 바로 넘길 수 있다. 쿼리를 <code>if</code>로 두 벌 쓰지 않아도 된다. 남은 조건이 하나면
