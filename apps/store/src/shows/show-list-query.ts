@@ -22,7 +22,7 @@ export function normalizeShowListQuery(searchParams: SearchParams): {
   redirectTo: string | null;
 } {
   const query = { page: parsePage(searchParams.page) };
-  const href = showListHref(query);
+  const href = getShowListHref(query);
   return {
     query,
     redirectTo: href === toHref(toSearch(searchParams)) ? null : href,
@@ -30,7 +30,7 @@ export function normalizeShowListQuery(searchParams: SearchParams): {
 }
 
 /** 목록 쿼리로 주소를 만든다. 기본값은 주소에서 뺀다. 페이지 링크는 현재 쿼리에서 `page`만 바꿔 넘긴다. */
-export function showListHref(query: ShowListQuery): string {
+export function getShowListHref(query: ShowListQuery): string {
   const search = new URLSearchParams();
   if (query.page !== DEFAULT_PAGE) {
     search.set('page', String(query.page));
@@ -42,7 +42,7 @@ export function showListHref(query: ShowListQuery): string {
  * API는 마지막 페이지를 넘는 요청에 빈 항목으로 응답한다. 그때 다른 쿼리는 그대로 두고 마지막 페이지 주소를 돌려준다.
  * 공연이 없으면(전체 페이지 수 0) 1페이지를 마지막 페이지로 본다.
  */
-export function lastPageRedirectHref({
+export function getLastPageRedirectHref({
   query,
   totalPages,
 }: {
@@ -52,7 +52,7 @@ export function lastPageRedirectHref({
 }): string | null {
   const lastPage = Math.max(DEFAULT_PAGE, totalPages);
   return query.page > lastPage
-    ? showListHref({ ...query, page: lastPage })
+    ? getShowListHref({ ...query, page: lastPage })
     : null;
 }
 
