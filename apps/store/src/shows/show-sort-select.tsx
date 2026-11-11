@@ -27,6 +27,7 @@ export function ShowSortSelect({ query }: { query: ShowListQuery }) {
   return (
     <Select
       label="정렬"
+      variant="inline"
       items={SORT_ITEMS}
       defaultValue={query.sort}
       onValueChange={(value) => {

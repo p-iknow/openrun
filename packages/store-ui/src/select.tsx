@@ -15,9 +15,16 @@ export interface SelectItem {
   label: string;
 }
 
+export type SelectVariant = 'field' | 'inline';
+
 export interface SelectProps {
-  /** 늘 보이는 라벨. 트리거 버튼의 접근 가능한 이름이 된다. */
+  /** 트리거 버튼의 접근 가능한 이름. `field`이면 트리거 위에 늘 보이고, `inline`이면 화면에서 숨긴다. */
   label: string;
+  /**
+   * `field`는 폼 안의 입력 칸 모양(라벨, 테두리, 높이 52px)이다.
+   * `inline`은 목록 위 줄에 놓는 작은 글자 드롭다운이다. 고른 값이 무엇을 정하는지 드러날 때(예: 정렬 `최근 등록 순`) 쓴다.
+   */
+  variant?: SelectVariant;
   items: SelectItem[];
   /** 폼으로 제출할 때 쓰는 이름. 고른 값이 숨은 입력에 담긴다. 예: 정렬이면 `sort`. */
   name?: string;
@@ -32,6 +39,7 @@ export interface SelectProps {
 
 export function Select({
   label,
+  variant = 'field',
   items,
   name,
   placeholder,
@@ -51,20 +59,38 @@ export function Select({
       }}
       disabled={disabled}
     >
-      <div className="flex flex-col gap-sm">
-        <BaseSelect.Label className="text-body-sm font-semibold text-text-secondary data-disabled:text-text-tertiary">
+      <div className={cn(variant === 'field' && 'flex flex-col gap-sm')}>
+        <BaseSelect.Label
+          className={cn(
+            variant === 'field'
+              ? 'text-body-sm font-semibold text-text-secondary data-disabled:text-text-tertiary'
+              : 'sr-only',
+          )}
+        >
           {label}
         </BaseSelect.Label>
         <BaseSelect.Trigger
           className={cn(
-            'flex h-[52px] w-full items-center justify-between gap-sm rounded-button border border-border-input bg-surface px-lg text-left text-body text-text transition-colors select-none',
-            'hover:not-data-disabled:not-data-popup-open:border-border-input-hover',
+            'flex items-center gap-sm text-left text-text transition-colors select-none',
             // outline 색은 평소에 정해 둔다. 포커스 때 정하면 transition-colors가 글자색(검정)에서 파랑으로 넘어가며 깜빡인다.
-            'outline-primary focus-visible:border-primary focus-visible:outline-1 focus-visible:-outline-offset-2',
-            'data-popup-open:border-primary data-popup-open:outline-1 data-popup-open:-outline-offset-2',
+            'outline-primary',
             // 흰 바탕에서도 text-tertiary는 대비가 약 3:1이라, 4.5:1을 넘는 text-secondary를 쓴다.
             'data-placeholder:text-text-secondary',
-            'data-disabled:cursor-not-allowed data-disabled:border-border data-disabled:bg-surface-muted data-disabled:text-text-tertiary',
+            'data-disabled:cursor-not-allowed data-disabled:text-text-tertiary',
+            variant === 'field'
+              ? [
+                  'h-[52px] w-full justify-between rounded-button border border-border-input bg-surface px-lg text-body',
+                  'hover:not-data-disabled:not-data-popup-open:border-border-input-hover',
+                  'focus-visible:border-primary focus-visible:outline-1 focus-visible:-outline-offset-2',
+                  'data-popup-open:border-primary data-popup-open:outline-1 data-popup-open:-outline-offset-2',
+                  'data-disabled:border-border data-disabled:bg-surface-muted',
+                ]
+              : [
+                  // 글자만 보이는 드롭다운이다. 누를 자리는 높이 40px로 넉넉히 두고, 가리키면 옅은 바탕으로 누를 수 있음을 알린다.
+                  'h-[40px] gap-xs rounded-badge px-sm text-body-sm font-semibold',
+                  'hover:not-data-disabled:bg-surface-muted data-popup-open:bg-surface-muted',
+                  'focus-visible:outline-2 focus-visible:outline-offset-0',
+                ],
           )}
         >
           <BaseSelect.Value placeholder={placeholder} className="truncate" />
@@ -77,7 +103,8 @@ export function Select({
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
-              className="size-[20px]"
+              // inline은 글자가 작아 화살표도 글자 크기에 맞춘다.
+              className={variant === 'field' ? 'size-[20px]' : 'size-[16px]'}
             >
               <path d="M5 7.5l5 5 5-5" />
             </svg>
@@ -89,6 +116,8 @@ export function Select({
         <BaseSelect.Positioner
           alignItemWithTrigger={false}
           sideOffset={4}
+          // inline은 보통 줄의 오른쪽 끝에 놓이므로 목록의 오른쪽 끝을 트리거에 맞춰 화면 밖으로 나가지 않게 한다.
+          align={variant === 'field' ? 'start' : 'end'}
           className="z-10 outline-none"
         >
           <BaseSelect.Popup className="max-h-(--available-height) min-w-(--anchor-width) overflow-y-auto rounded-card bg-surface p-xs shadow-floating outline-none">

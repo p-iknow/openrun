@@ -36,16 +36,17 @@ export default async function HomePage({ searchParams }: PageProps<'/'>) {
 
   return (
     <main>
-      <h1 className="mb-lg text-heading font-bold">공연</h1>
       {/* 검색 칸과 정렬은 비제어라, 뒤로 가기나 초기화 링크로 주소가 바뀌면 key로 새로 그려 주소의 값을 다시 채운다. */}
-      <ShowListSearchForm key={query.q ?? ''} query={query} />
-      <div className="mt-lg mb-md flex items-end justify-between gap-md">
-        <p className="text-body-sm text-text-secondary">
-          공연 {showPage.totalCount}개
-        </p>
-        <div className="w-[180px]">
-          <ShowSortSelect key={query.sort} query={query} />
+      <div className="mb-xl flex flex-col gap-lg sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-heading font-bold">공연</h1>
+        <div className="sm:w-[400px]">
+          <ShowListSearchForm key={query.q ?? ''} query={query} />
         </div>
+      </div>
+      {/* 예매 사이트처럼 결과 수와 정렬을 목록 바로 위 한 줄에 둔다. */}
+      <div className="mb-md flex items-center justify-between gap-md">
+        <p className="font-semibold">공연 {showPage.totalCount}개</p>
+        <ShowSortSelect key={query.sort} query={query} />
       </div>
       {cards.length === 0 ? (
         <div className="py-2xl text-center">

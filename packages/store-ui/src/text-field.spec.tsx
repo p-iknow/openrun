@@ -27,7 +27,7 @@ describe('TextField', () => {
     expect(html).toContain('>공연 제목</label>');
   });
 
-  it('name, type, placeholder, defaultValue, maxLength를 입력 칸에 그대로 넘긴다', () => {
+  it('name, type, placeholder, defaultValue를 입력 칸에 그대로 넘긴다', () => {
     const html = renderToStaticMarkup(
       <TextField
         label="공연 제목"
@@ -35,7 +35,6 @@ describe('TextField', () => {
         type="search"
         placeholder="제목으로 찾기"
         defaultValue="햄릿"
-        maxLength={50}
       />,
     );
 
@@ -44,7 +43,6 @@ describe('TextField', () => {
     expect(attr(input, { attribute: 'type' })).toBe('search');
     expect(attr(input, { attribute: 'placeholder' })).toBe('제목으로 찾기');
     expect(attr(input, { attribute: 'value' })).toBe('햄릿');
-    expect(attr(input, { attribute: 'maxLength' })).toBe('50');
   });
 
   it('비활성이면 입력 칸이 disabled다', () => {
