@@ -7,7 +7,7 @@ import { ShowCard, ShowCardList } from '../src/shows/show-card';
 import { ShowListPagination } from '../src/shows/show-list-pagination';
 import {
   normalizeShowListQuery,
-  selectPastLastPageRedirect,
+  lastPageRedirectHref,
 } from '../src/shows/show-list-query';
 
 export default async function HomePage({ searchParams }: PageProps<'/'>) {
@@ -20,7 +20,7 @@ export default async function HomePage({ searchParams }: PageProps<'/'>) {
   }
 
   const showPage = await fetchShows({ client: createServerApiClient(), query });
-  const lastPageHref = selectPastLastPageRedirect({
+  const lastPageHref = lastPageRedirectHref({
     query,
     totalPages: showPage.totalPages,
   });

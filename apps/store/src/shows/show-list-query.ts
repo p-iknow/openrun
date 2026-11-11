@@ -42,7 +42,7 @@ export function showListHref(query: ShowListQuery): string {
  * API는 마지막 페이지를 넘는 요청에 빈 항목으로 응답한다. 그때 다른 쿼리는 그대로 두고 마지막 페이지 주소를 돌려준다.
  * 공연이 없으면(전체 페이지 수 0) 1페이지를 마지막 페이지로 본다.
  */
-export function selectPastLastPageRedirect({
+export function lastPageRedirectHref({
   query,
   totalPages,
 }: {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   normalizeShowListQuery,
-  selectPastLastPageRedirect,
+  lastPageRedirectHref,
 } from './show-list-query';
 
 describe('normalizeShowListQuery', () => {
@@ -53,10 +53,10 @@ describe('normalizeShowListQuery', () => {
   });
 });
 
-describe('selectPastLastPageRedirect', () => {
+describe('lastPageRedirectHref', () => {
   it('마지막 페이지 안이면 리다이렉트하지 않는다', () => {
     expect(
-      selectPastLastPageRedirect({
+      lastPageRedirectHref({
         query: { page: 3 },
         totalPages: 3,
       }),
@@ -65,7 +65,7 @@ describe('selectPastLastPageRedirect', () => {
 
   it('마지막 페이지를 넘으면 마지막 페이지로 리다이렉트한다', () => {
     expect(
-      selectPastLastPageRedirect({
+      lastPageRedirectHref({
         query: { page: 9 },
         totalPages: 3,
       }),
@@ -74,13 +74,13 @@ describe('selectPastLastPageRedirect', () => {
 
   it('공연이 없으면 1페이지만 두고, 그보다 뒤면 1페이지로 리다이렉트한다', () => {
     expect(
-      selectPastLastPageRedirect({
+      lastPageRedirectHref({
         query: { page: 1 },
         totalPages: 0,
       }),
     ).toBeNull();
     expect(
-      selectPastLastPageRedirect({
+      lastPageRedirectHref({
         query: { page: 2 },
         totalPages: 0,
       }),
