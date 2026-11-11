@@ -19,18 +19,21 @@ export default async function HomePage({ searchParams }: PageProps<'/'>) {
     redirect(redirectTo);
   }
 
-  const page = await fetchShows({ client: createServerApiClient(), query });
-  const lastPageHref = selectPastLastPageRedirect({ query, page });
+  const showPage = await fetchShows({ client: createServerApiClient(), query });
+  const lastPageHref = selectPastLastPageRedirect({
+    query,
+    totalPages: showPage.totalPages,
+  });
   if (lastPageHref !== null) {
     redirect(lastPageHref);
   }
-  const cards = selectShowCards(page);
+  const cards = selectShowCards(showPage);
 
   return (
     <main>
       <h1 className="mb-lg text-heading font-bold">공연</h1>
       <p className="mb-md text-body-sm text-text-secondary">
-        공연 {page.totalCount}개
+        공연 {showPage.totalCount}개
       </p>
       {cards.length === 0 ? (
         <p className="py-2xl text-center text-text-secondary">
@@ -44,7 +47,10 @@ export default async function HomePage({ searchParams }: PageProps<'/'>) {
             ))}
           </ShowCardList>
           <div className="mt-2xl">
-            <ShowListPagination query={query} totalPages={page.totalPages} />
+            <ShowListPagination
+              query={query}
+              totalPages={showPage.totalPages}
+            />
           </div>
         </>
       )}

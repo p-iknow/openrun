@@ -44,13 +44,14 @@ export function showListHref(query: ShowListQuery): string {
  */
 export function selectPastLastPageRedirect({
   query,
-  page,
+  totalPages,
 }: {
   query: ShowListQuery;
-  page: { page: number; totalPages: number };
+  /** API 응답의 전체 페이지 수 */
+  totalPages: number;
 }): string | null {
-  const lastPage = Math.max(DEFAULT_PAGE, page.totalPages);
-  return page.page > lastPage
+  const lastPage = Math.max(DEFAULT_PAGE, totalPages);
+  return query.page > lastPage
     ? showListHref({ ...query, page: lastPage })
     : null;
 }

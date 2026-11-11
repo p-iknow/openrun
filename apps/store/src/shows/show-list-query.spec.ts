@@ -58,7 +58,7 @@ describe('selectPastLastPageRedirect', () => {
     expect(
       selectPastLastPageRedirect({
         query: { page: 3 },
-        page: { page: 3, totalPages: 3 },
+        totalPages: 3,
       }),
     ).toBeNull();
   });
@@ -67,7 +67,7 @@ describe('selectPastLastPageRedirect', () => {
     expect(
       selectPastLastPageRedirect({
         query: { page: 9 },
-        page: { page: 9, totalPages: 3 },
+        totalPages: 3,
       }),
     ).toBe('/?page=3');
   });
@@ -76,13 +76,13 @@ describe('selectPastLastPageRedirect', () => {
     expect(
       selectPastLastPageRedirect({
         query: { page: 1 },
-        page: { page: 1, totalPages: 0 },
+        totalPages: 0,
       }),
     ).toBeNull();
     expect(
       selectPastLastPageRedirect({
         query: { page: 2 },
-        page: { page: 2, totalPages: 0 },
+        totalPages: 0,
       }),
     ).toBe('/');
   });
