@@ -15,6 +15,7 @@ const learnFolders = [
       { file: '05-hydration-자세히.html', title: '05 hydration 자세히', tags: ['nextjs'] },
       { file: '06-next-image가-해결하는-문제와-동작-방식.html', title: '06 next/image가 해결하는 문제와 동작 방식', tags: ['nextjs'] },
       { file: '07-redirect와-notFound-흐름을-끊는-함수.html', title: '07 redirect와 notFound: 흐름을 끊는 함수', tags: ['nextjs'] },
+      { file: '08-useSearchParams와-Suspense-경계.html', title: '08 useSearchParams와 Suspense 경계', tags: ['nextjs'] },
     ],
   },
   {

@@ -27,7 +27,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               openrun
             </Link>
             <div className="flex-1 sm:max-w-[400px]">
-              {/* useSearchParams는 정적으로 그리는 화면(404 등)에서 Suspense가 필요하다. 그동안 빈 검색 칸을 보인다. */}
+              {/* 레이아웃은 404처럼 빌드 때 미리 그리는 화면에도 쓰이는데, 그때는 주소의 쿼리를 알 수 없다.
+                  그래서 useSearchParams를 쓰는 HeaderSearch는 그런 화면에서 서버가 그리지 않고 브라우저가 그린다.
+                  Suspense는 브라우저로 넘길 범위를 HeaderSearch 하나로 좁힌다. 없으면 화면 전체를 미리 그리지 못해 빌드가 실패한다.
+                  미리 그린 HTML에는 생김새가 같은 빈 검색 칸(fallback)을 넣는다. 요청마다 그리는 공연 목록에서는 서버가 검색어까지 채워 그린다. */}
               <Suspense
                 fallback={
                   <ShowListSearchForm
