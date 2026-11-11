@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  getSearchFormHiddenFields,
   getShowListHref,
+  getSortChangeHref,
   normalizeShowListQuery,
   getLastPageRedirectHref,
   type ShowListQuery,
@@ -134,6 +136,37 @@ describe('getShowListHref', () => {
     expect(getShowListHref(DEFAULT_QUERY)).toBe('/');
     expect(getShowListHref({ page: 3, q: 'a&b', sort: 'newest' })).toBe(
       '/?q=a%26b&sort=newest&page=3',
+    );
+  });
+});
+
+describe('getSortChangeHref', () => {
+  it('검색어는 두고 정렬을 바꾸며 page를 빼서 1페이지로 돌아간다', () => {
+    expect(
+      getSortChangeHref({
+        query: { page: 3, q: '정원', sort: 'start_date' },
+        value: 'newest',
+      }),
+    ).toBe('/?q=%EC%A0%95%EC%9B%90&sort=newest');
+  });
+
+  it('모르는 정렬값이면 주소를 만들지 않는다', () => {
+    expect(
+      getSortChangeHref({ query: DEFAULT_QUERY, value: 'popular' }),
+    ).toBeNull();
+  });
+});
+
+describe('getSearchFormHiddenFields', () => {
+  it('지금 정렬은 함께 보내고, 검색어와 page는 보내지 않는다', () => {
+    expect(
+      getSearchFormHiddenFields({ page: 3, q: '정원', sort: 'newest' }),
+    ).toEqual([['sort', 'newest']]);
+  });
+
+  it('기본 정렬이면 보낼 필드가 없다', () => {
+    expect(getSearchFormHiddenFields({ ...DEFAULT_QUERY, page: 2 })).toEqual(
+      [],
     );
   });
 });

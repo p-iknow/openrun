@@ -61,8 +61,37 @@ export function getShowListHref(query: ShowListQuery): string {
   return toHref(getShowListSearchParams(query));
 }
 
-/** 목록 쿼리를 주소의 쿼리 문자열 값으로 바꾼다. 검색 폼은 이 값으로 함께 제출할 숨은 필드를 만든다. */
-export function getShowListSearchParams(query: ShowListQuery): URLSearchParams {
+/**
+ * 정렬 Select에서 고른 값으로 옮겨 갈 주소를 만든다. 검색어는 두고 page는 빼서 1페이지로 돌아간다.
+ * 고른 값이 정렬 선택지가 아니면 `null`이다.
+ */
+export function getSortChangeHref({
+  query,
+  value,
+}: {
+  query: ShowListQuery;
+  /** Select가 넘긴 값 */
+  value: string;
+}): string | null {
+  const sort = findShowSort(value);
+  return sort === undefined
+    ? null
+    : getShowListHref({ ...query, sort, page: DEFAULT_PAGE });
+}
+
+/**
+ * 제목 검색 GET 폼이 검색어와 함께 보낼 숨은 필드의 [이름, 값] 목록이다.
+ * 폼을 제출하면 쿼리 문자열이 폼 값으로 통째로 바뀌므로 지금 정렬을 함께 보낸다. page는 보내지 않아 1페이지로 돌아간다.
+ */
+export function getSearchFormHiddenFields(
+  query: ShowListQuery,
+): [name: string, value: string][] {
+  return [
+    ...getShowListSearchParams({ ...query, q: null, page: DEFAULT_PAGE }),
+  ];
+}
+
+function getShowListSearchParams(query: ShowListQuery): URLSearchParams {
   const search = new URLSearchParams();
   if (query.q !== null) {
     search.set('q', query.q);
@@ -114,7 +143,11 @@ function parseTitleQuery(value: string | string[] | undefined): string | null {
 }
 
 function parseSort(value: string | string[] | undefined): ShowSort {
-  return SHOW_SORTS.find((sort) => sort === value) ?? DEFAULT_SORT;
+  return (typeof value === 'string' && findShowSort(value)) || DEFAULT_SORT;
+}
+
+function findShowSort(value: string): ShowSort | undefined {
+  return SHOW_SORTS.find((sort) => sort === value);
 }
 
 function toSearch(searchParams: SearchParams): URLSearchParams {

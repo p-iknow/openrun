@@ -32,7 +32,7 @@ export default async function HomePage({ searchParams }: PageProps<'/'>) {
     redirect(lastPageHref);
   }
   const cards = selectShowCards(showPage);
-  const hasCondition = query.q !== null;
+  const hasTitleQuery = query.q !== null;
 
   return (
     <main>
@@ -49,7 +49,7 @@ export default async function HomePage({ searchParams }: PageProps<'/'>) {
       </div>
       {cards.length === 0 ? (
         <div className="py-2xl text-center">
-          {hasCondition ? (
+          {hasTitleQuery ? (
             <>
               <p className="text-text-secondary">
                 조건에 맞는 공연이 없습니다.
