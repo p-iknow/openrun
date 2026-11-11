@@ -6,10 +6,12 @@ import {
   type ShowListQuery,
 } from './show-list-query';
 
-// 제목 검색은 GET 폼 제출로 적용한다. 입력하는 도중에는 주소가 바뀌지 않고, Enter나 돋보기 버튼을 누를 때 바뀐다.
-// next/form은 action이 문자열이면 폼 값으로 쿼리 문자열을 만들어 클라이언트 내비게이션으로 옮긴다.
-// 지금 정렬은 숨은 필드로 함께 보내고 page는 보내지 않는다(getSearchFormHiddenFields).
-// 검색 칸은 비제어라 주소의 검색어가 바뀌어도 그대로다. 부르는 쪽(HeaderSearch)이 key로 검색어를 넘겨 새로 그리게 한다.
+// 제목 검색 폼. API를 직접 부르지 않고 주소(/?q=정원)만 바꾼다. 바뀐 주소로 page.tsx가 서버에서 API를 불러 목록을 그린다.
+// GET 폼이라 Enter나 돋보기 버튼으로 제출할 때 브라우저가 name 있는 입력 칸을 모아 쿼리 문자열을 만든다. 입력하는 도중에는 주소가 바뀌지 않는다.
+// next/form은 이 이동을 새로고침 없는 화면 이동으로 바꾼다.
+// 제출하면 쿼리 문자열이 폼 값으로 통째로 바뀌므로, 지금 정렬은 숨은 입력 칸으로 함께 보낸다. page는 보내지 않아 결과의 1페이지로 간다.
+// 검색 칸은 헤더(레이아웃)에 있어 화면을 옮겨도 새로 만들어지지 않고, defaultValue는 처음 만들 때만 쓰인다.
+// 그래서 뒤로 가기나 초기화 링크로 주소의 검색어가 바뀌면 부르는 쪽(HeaderSearch)이 key를 바꿔 폼을 새로 만들게 한다.
 export function ShowListSearchForm({ query }: { query: ShowListQuery }) {
   const hiddenFields = getSearchFormHiddenFields(query);
 

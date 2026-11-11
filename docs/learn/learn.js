@@ -16,6 +16,7 @@ const learnFolders = [
       { file: '06-next-image가-해결하는-문제와-동작-방식.html', title: '06 next/image가 해결하는 문제와 동작 방식', tags: ['nextjs'] },
       { file: '07-redirect와-notFound-흐름을-끊는-함수.html', title: '07 redirect와 notFound: 흐름을 끊는 함수', tags: ['nextjs'] },
       { file: '08-useSearchParams와-Suspense-경계.html', title: '08 useSearchParams와 Suspense 경계', tags: ['nextjs'] },
+      { file: '09-검색-폼-GET-폼과-비제어-입력.html', title: '09 검색 폼: GET 폼, 숨은 입력 칸, 비제어 입력과 key', tags: ['nextjs'] },
     ],
   },
   {
