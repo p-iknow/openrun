@@ -70,7 +70,7 @@ return &lt;ShowListSearchForm key={query.q ?? ''} query={query} /&gt;;  {/* ④ 
                 <tr><td>①</td><td><code>preventDefault</code></td><td>브라우저가 폼 값만으로 주소를 만들어 이동하는 기본 동작을 막는다</td></tr>
                 <tr><td>②</td><td><code>getSearchSubmitHref</code> + <code>router.push</code></td><td>지금 쿼리(정렬)와 새 검색어로 주소를 만들어 새로고침 없이 옮겨 간다</td></tr>
                 <tr><td>③</td><td>비제어 입력</td><td>입력하는 동안 React가 글자를 관리하지 않는다. 처음 값만 <code>defaultValue</code>로 채운다</td></tr>
-                <tr><td>④</td><td><code>key</code></td><td>뒤로 가기 등으로 주소의 검색어가 바뀌면 폼을 새로 만들어 검색 칸을 다시 채운다</td></tr>
+                <tr><td>④</td><td><code>key</code></td><td>뒤로 가기 등으로 주소의 검색어가 바뀌면 폼을 새로 만들어(리마운트) 검색 칸을 다시 채운다</td></tr>
               </tbody>
             </table>
           </div>
@@ -159,7 +159,7 @@ return &lt;ShowListSearchForm key={query.q ?? ''} query={query} /&gt;;  {/* ④ 
             </table>
           </div>
           <p>
-            <code>defaultValue</code>는 "칸을 <strong>처음 만들 때</strong> 써 넣을 글자"다. 칸이 만들어진 뒤로는 사용자가 지우고 쓰는 글자를 브라우저가 관리하고,
+            <code>defaultValue</code>는 "칸을 <strong>처음 만들 때</strong>(마운트할 때) 써 넣을 글자"다. 칸이 만들어진 뒤로는 사용자가 지우고 쓰는 글자를 브라우저가 관리하고,
             React는 신경 쓰지 않는다.
           </p>
           <div class="callout">
@@ -173,11 +173,11 @@ return &lt;ShowListSearchForm key={query.q ?? ''} query={query} /&gt;;  {/* ④ 
         <section id="stays">
           <h2>헤더의 검색 칸은 화면을 옮겨도 남아 있다</h2>
           <p>
-            검색 칸은 <strong>레이아웃의 헤더</strong>에 있다. Next는 같은 레이아웃 아래에서 화면을 옮길 때 레이아웃을 새로 만들지 않고 페이지 부분만 바꾼다.
+            검색 칸은 <strong>레이아웃의 헤더</strong>에 있다. Next는 같은 레이아웃 아래에서 화면을 옮길 때 레이아웃을 새로 만들지 않고(리마운트하지 않고) 페이지 부분만 바꾼다.
             그래서 검색 칸은 처음 만든 그 칸이 계속 남는다. 같은 종이를 계속 들고 있는 셈이다.
           </p>
           <p>
-            주소가 바뀌면 <code>HeaderSearch</code>는 <code>useSearchParams()</code>로 새 검색어를 읽어 <code>defaultValue</code>로 넘긴다. 하지만 칸이 이미
+            주소가 바뀌면 <code>HeaderSearch</code>는 <code>useSearchParams()</code>로 새 검색어를 읽어 <code>defaultValue</code>로 넘긴다. 다시 렌더링(리렌더)은 되지만, 칸이 이미
             있으니 무시된다. <code>key</code>를 빼고 개발 서버에서 실제로 해 보면 이렇게 된다.
           </p>
           <div class="table-wrap">
@@ -199,26 +199,46 @@ return &lt;ShowListSearchForm key={query.q ?? ''} query={query} /&gt;;  {/* ④ 
         </section>
 
         <section id="key">
-          <h2>key를 바꿔 폼을 새로 만든다</h2>
+          <h2>key를 바꿔 폼을 새로 만든다(리마운트)</h2>
           <pre><code class="language-tsx">&lt;ShowListSearchForm key={query.q ?? ''} query={query} /&gt;</code></pre>
           <p>
             React는 <code>key</code>를 "이 컴포넌트가 누구인지"를 나타내는 이름표로 본다. 리스트를 그릴 때 항목마다 주는 그 <code>key</code>와 같은 것이다. 같은
             자리에 그리는 컴포넌트의 이름표가 바뀌면 React는 "다른 것이 왔다"고 보고, <strong>예전 폼을 DOM에서 지우고 새 폼을 처음부터 만든다</strong>. 새로
             만드니 <code>defaultValue</code>가 다시 적용된다. 손에 든 종이를 버리고 새로 인쇄한 종이를 받는 것이다.
           </p>
+          <p>React에서는 이것을 <strong>리마운트(remount)</strong>라고 부른다. 리렌더와는 다른 일이다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>용어</th><th>뜻</th><th>상태와 DOM</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>마운트</td><td>컴포넌트를 처음 만들어 화면(DOM)에 붙인다</td><td>새로 생긴다. <code>defaultValue</code>가 이때 쓰인다</td></tr>
+                <tr><td>언마운트</td><td>컴포넌트를 화면에서 떼고 버린다</td><td>사라진다</td></tr>
+                <tr><td>리마운트</td><td>언마운트한 뒤 다시 마운트한다. <code>key</code>가 바뀌면 일어난다</td><td>처음 상태로 돌아간다</td></tr>
+                <tr><td>리렌더</td><td>이미 마운트된 컴포넌트를 다시 실행해 바뀐 부분만 고친다</td><td>그대로 남는다. 새 <code>defaultValue</code>는 무시된다</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout">
+            <p>
+              <code>key</code>는 리렌더를 일으키는 장치가 아니라 "이건 다른 컴포넌트다"라고 알려 리마운트시키는 이름표다. 앞 절에서 검색 칸이 안 바뀐 것도
+              리렌더는 됐지만 리마운트가 아니었기 때문이다. React 공식 문서는 이 방법을 "key로 상태 초기화하기(resetting state with a key)"라고 부른다.
+            </p>
+          </div>
           <div class="table-wrap">
             <table>
               <thead>
                 <tr><th>순서</th><th>주소</th><th><code>key</code></th><th>React가 하는 일</th><th>검색 칸</th></tr>
               </thead>
               <tbody>
-                <tr><td>② "햄릿" 검색</td><td><code>/?q=햄릿</code></td><td><code>"햄릿"</code></td><td>이름표가 바뀜 → 새로 만듦</td><td>햄릿</td></tr>
-                <tr><td>③ 뒤로 가기</td><td><code>/?q=정원</code></td><td><code>"정원"</code></td><td>이름표가 바뀜 → 새로 만듦</td><td><strong>정원</strong></td></tr>
+                <tr><td>② "햄릿" 검색</td><td><code>/?q=햄릿</code></td><td><code>"햄릿"</code></td><td>이름표가 바뀜 → 리마운트</td><td>햄릿</td></tr>
+                <tr><td>③ 뒤로 가기</td><td><code>/?q=정원</code></td><td><code>"정원"</code></td><td>이름표가 바뀜 → 리마운트</td><td><strong>정원</strong></td></tr>
               </tbody>
             </table>
           </div>
           <p>
-            개발 서버에서 검색 칸 DOM 요소를 붙잡아 두고 비교해 보면, ②와 ③에서 모두 이전과 <strong>다른 요소</strong>로 바뀌어 있다. 폼을 새로 만들었다는 뜻이다.
+            개발 서버에서 검색 칸 DOM 요소를 붙잡아 두고 비교해 보면, ②와 ③에서 모두 이전과 <strong>다른 요소</strong>로 바뀌어 있다. 폼이 리마운트됐다는 뜻이다.
           </p>
           <p>
             <code>key</code>는 검색어만으로 정한다. 정렬은 검색 칸에 보이는 값이 아니고, 제출할 때 <code>query</code> prop에서 그때의 정렬을 읽으므로 폼을 다시
@@ -238,7 +258,7 @@ useEffect(() =&gt; setText(query.q ?? ''), [query.q]); // 뒤로 가기 대응
             <li>주소가 바뀌었을 때 state를 맞추는 <code>useEffect</code>가 필요하고, 한 번은 예전 글자로 그렸다가 다시 그리게 된다.</li>
             <li>티켓은 <code>store-ui</code> 컴포넌트를 <code>defaultValue</code>로 채우는 비제어로 쓰라고 정했다.</li>
           </ul>
-          <p>그래서 브라우저에 맡기는 비제어 입력으로 두고, 주소의 검색어가 바뀌는 순간에만 <code>key</code>로 새로 만든다.</p>
+          <p>그래서 브라우저에 맡기는 비제어 입력으로 두고, 주소의 검색어가 바뀌는 순간에만 <code>key</code>로 새로 만든다(리마운트).</p>
         </section>
 
         <section id="ours">
