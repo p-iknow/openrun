@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>10 장르·판매 상태 필터 쿼리 읽기</title>
+    <link rel="stylesheet" href="../learn.css" />
+    <script src="../vendor/highlightjs/highlight.min.js" defer></script>
+    <script src="../learn.js" defer></script>
+  </head>
+  <body>
+    <div class="layout">
+      <nav aria-label="목차">
+        <strong>목차</strong>
+        <ol>
+          <li><a href="#overview">한눈에 보기</a></li>
+          <li><a href="#in-array">inArray가 만드는 조건</a></li>
+          <li><a href="#empty">빈 배열이면 조건을 뺀다</a></li>
+          <li><a href="#or-and">같은 이름은 OR, 다른 조건은 AND</a></li>
+          <li><a href="#sales-status">판매 상태는 서브쿼리 필드로 거른다</a></li>
+          <li><a href="#tests">테스트가 확인하는 것</a></li>
+          <li><a href="#check">스스로 확인하기</a></li>
+        </ol>
+      </nav>
+
+      <main>
+        <h1>10 장르·판매 상태 필터 쿼리 읽기</h1>
+        <p class="lead">
+          <code>GET /shows?genre=musical&amp;genre=play&amp;status=on_sale</code>이 고른 장르와 판매 상태의 공연만 돌려주는 과정을 따라간다. 중심은
+          <code>findPage()</code>(<code>apps/api/src/shows/shows.service.ts</code>)의 <code>inArray</code> 두 줄이다. IN 개념은
+          <a href="01-프론트엔드-개발자를-위한-DB-개념.html#in">db-and-drizzle 01 문서</a>, <code>inArray</code>와 <code>and</code> 문법은
+          <a href="03-drizzle-쿼리-문법.html#in-array">db-and-drizzle 03 문서</a>, 반복 쿼리를 배열로 받는 스키마는
+          <a href="../zod/01-반복-쿼리를-배열로-받기.html">zod 01 문서</a>에 있다.
+        </p>
+
+        <section id="overview">
+          <h2>한눈에 보기</h2>
+          <div class="flow">
+            <div class="lane blue">
+              <div class="lane-title">고른 필터가 SQL이 되기까지</div>
+              <ol class="chain">
+                <li><span>주소의 <code>genre=musical&amp;genre=play</code></span></li>
+                <li><span>zod 스키마가 값을 배열로 맞추고 고를 수 있는 값인지 검사한다 → <code>['musical', 'play']</code></span></li>
+                <li><span>배열이 비지 않았으면 <code>inArray</code>로 IN 조건을 만든다</span></li>
+                <li><span><code>and()</code>가 판매 종료 제외, 검색어, 장르, 판매 상태 조건을 잇는다</span></li>
+                <li><span>목록 쿼리와 개수 쿼리의 <code>where</code>에 함께 넣는다</span></li>
+              </ol>
+            </div>
+          </div>
+          <pre><code class="language-ts">// apps/api/src/shows/shows.service.ts
+async findPage({ page, size, sort, q, genre, status }: ShowListQuery): Promise&lt;ShowPageDto&gt; {
+  ...
+  const listCondition = and(
+    ne(salesStatus.salesStatus, 'ended'),
+    q ? ilike(shows.title, `%${escapeLikePattern(q)}%`) : undefined,
+    // 고른 값이 없으면 거르지 않는다. 같은 이름 안의 값은 OR(IN), 다른 조건과는 AND다.
+    genre.length &gt; 0 ? inArray(shows.genre, genre) : undefined,
+    status.length &gt; 0 ? inArray(salesStatus.salesStatus, status) : undefined,
+  );
+  ...
+}</code></pre>
+          <p>
+            서비스가 받는 <code>genre</code>와 <code>status</code>는 늘 배열이다. 쿼리 스키마(<code>apps/api/src/shows/show-list-query.ts</code>)가 한 번 보낸 값도
+            배열로 감싸고, 보내지 않으면 <code>[]</code>를 넣는다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>요청</th><th>서비스가 받은 <code>genre</code></th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>/shows</code></td><td><code>[]</code></td></tr>
+                <tr><td><code>/shows?genre=musical</code></td><td><code>['musical']</code></td></tr>
+                <tr><td><code>/shows?genre=musical&amp;genre=play</code></td><td><code>['musical', 'play']</code></td></tr>
+                <tr><td><code>/shows?genre=opera</code></td><td>서비스까지 오지 않고 400으로 응답한다</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="in-array">
+          <h2>inArray가 만드는 조건</h2>
+          <pre><code class="language-ts">inArray(shows.genre, ['musical', 'play']);
+// "shows"."genre" in ($1, $2), params: ['musical', 'play']</code></pre>
+          <p>
+            "공연의 장르가 <code>musical</code>이거나 <code>play</code>다"라는 뜻이다. <code>IN</code>은 같은 컬럼의 <code>=</code>를 <code>OR</code>로 이은 것과
+            같다(<a href="01-프론트엔드-개발자를-위한-DB-개념.html#in">IN</a>).
+          </p>
+          <pre><code class="language-sql">"shows"."genre" in ('musical', 'play')
+-- 같은 뜻
+"shows"."genre" = 'musical' or "shows"."genre" = 'play'</code></pre>
+          <pre><code class="language-ts">// 자바스크립트로 치면
+shows.filter((show) =&gt; ['musical', 'play'].includes(show.genre));</code></pre>
+          <p>
+            배열의 값은 SQL에 이어 붙지 않고 <a href="01-프론트엔드-개발자를-위한-DB-개념.html#parameter">파라미터</a>로 간다. 값의 타입도 검사하므로
+            <code>Genre</code>에 없는 글자를 넘기면 컴파일 오류다. 스키마가 이미 값을 <code>Genre[]</code>로 좁혀 두었기 때문에 서비스는 그대로 넘긴다.
+          </p>
+        </section>
+
+        <section id="empty">
+          <h2>빈 배열이면 조건을 뺀다</h2>
+          <p>
+            필터를 하나도 고르지 않은 요청(<code>/shows</code>)은 "장르로 거르지 않는다"여야 한다. 그런데 빈 배열을 <code>inArray</code>에 그대로 넘기면 반대가 된다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>코드</th><th><code>genre = []</code>일 때 <code>where</code> 절</th><th>결과</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>inArray(shows.genre, genre)</code></td>
+                  <td><code>(sales_status &lt;&gt; 'ended' and false)</code></td>
+                  <td>0건</td>
+                </tr>
+                <tr>
+                  <td><code>genre.length &gt; 0 ? inArray(...) : undefined</code></td>
+                  <td><code>sales_status &lt;&gt; 'ended'</code></td>
+                  <td>판매 종료가 아닌 공연 모두</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            빈 목록에는 어떤 값도 들어 있지 않으므로 Drizzle은 빈 배열을 <code>false</code>로 바꾼다(<a href="03-drizzle-쿼리-문법.html#in-array-empty"
+              >빈 배열을 넘기면</a
+            >). <code>and</code> 안에 <code>false</code>가 있으면 모든 행이 빠진다. 그래서 길이를 먼저 보고, 비었으면 <code>undefined</code>를 넘겨
+            <code>and</code>가 그 조건을 건너뛰게 한다(<a href="03-drizzle-쿼리-문법.html#and-optional">and와 있을 수도 없을 수도 있는 조건</a>). 검색어
+            <code>q ? ilike(...) : undefined</code>와 같은 모양이다.
+          </p>
+          <div class="callout">
+            <p>
+              <code>[]</code>는 자바스크립트에서 참(truthy)이다. <code>genre ? inArray(...) : undefined</code>로 쓰면 빈 배열도 조건이 붙어 0건이 된다.
+              그래서 <code>q ?</code>처럼 쓰지 않고 <code>genre.length &gt; 0</code>을 본다.
+            </p>
+          </div>
+        </section>
+
+        <section id="or-and">
+          <h2>같은 이름은 OR, 다른 조건은 AND</h2>
+          <p>주석의 "같은 이름 안의 값은 OR(IN), 다른 조건과는 AND다"는 이렇게 읽는다.</p>
+          <ul>
+            <li><strong>같은 이름 안은 OR.</strong> <code>genre=musical&amp;genre=play</code>는 "뮤지컬이거나 연극"이다. 한 <code>inArray</code>의 배열에 들어간다.</li>
+            <li><strong>다른 조건과는 AND.</strong> 장르, 판매 상태, 검색어, 판매 종료 제외는 <code>and()</code>로 이어지므로 모두 맞아야 한다.</li>
+          </ul>
+          <pre><code class="language-sql">-- /shows?genre=musical&amp;genre=concert&amp;status=upcoming
+where sales_status &lt;&gt; 'ended'
+  and shows.genre in ('musical', 'concert')   -- 뮤지컬이거나 콘서트이면서
+  and sales_status in ('upcoming')            -- 판매 예정인 공연</code></pre>
+          <p>
+            그래서 같은 묶음(장르)에서 여러 개를 고르면 결과가 넓어지고, 다른 묶음(판매 상태)을 더 고르면 결과가 좁아진다. 같은 이름 안을 AND로 묶으면 "뮤지컬이면서 연극인 공연"이라 공연 하나에 장르가 하나뿐인 이 모델에서는 늘 0건이 된다.
+          </p>
+          <p>
+            <code>listCondition</code> 하나를 목록 쿼리와 개수 쿼리에 함께 넘기므로, 필터를 고르면 목록과 전체 개수(<code>totalCount</code>)가 같이 줄어든다. 이유는
+            <a href="09-공연-제목-검색-쿼리-읽기.html#condition">db-and-drizzle 09 문서</a>의 검색어 조건과 같다.
+          </p>
+        </section>
+
+        <section id="sales-status">
+          <h2>판매 상태는 서브쿼리 필드로 거른다</h2>
+          <p>
+            장르는 <code>shows</code> 테이블의 컬럼이지만, 공연 판매 상태는 저장하지 않고 회차에서 계산한다. <code>showSalesStatusSubquery</code>가 공연마다
+            판매 상태를 계산하는 서브쿼리를 만들고, 목록 쿼리는 그것을 JOIN한다(<a href="06-판매-상태-쿼리-읽기.html#service">db-and-drizzle 06 문서</a>).
+          </p>
+          <pre><code class="language-ts">inArray(salesStatus.salesStatus, status);
+// "sales_status" in ($1), params: ['on_sale']</code></pre>
+          <p>
+            <code>salesStatus.salesStatus</code>는 서브쿼리가 <code>.as('sales_status')</code>로 이름 붙인 필드다. <code>inArray</code>의 첫 인자에는 테이블 컬럼뿐 아니라
+            이런 필드도 넣을 수 있다. <code>ne(salesStatus.salesStatus, 'ended')</code>가 같은 필드를 쓰는 것과 같다.
+          </p>
+          <p>
+            고를 수 있는 판매 상태는 <code>on_sale</code>, <code>upcoming</code> 둘뿐이다. 판매 종료 공연은 <code>ne(..., 'ended')</code>가 늘 빼므로 목록에 없고,
+            그래서 선택지도 아니다. <code>status=ended</code>를 보내면 스키마가 400으로 응답한다.
+          </p>
+        </section>
+
+        <section id="tests">
+          <h2>테스트가 확인하는 것</h2>
+          <p>
+            <code>apps/api/test/shows.int.spec.ts</code>의 <code>장르와 판매 상태 필터</code> 묶음은 실제 PostgreSQL에 아래 네 공연을 넣고
+            <code>GET /shows?...</code>를 부른다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>제목</th><th>장르</th><th>판매 상태</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>뮤지컬 판매 중</td><td><code>musical</code></td><td><code>on_sale</code></td></tr>
+                <tr><td>연극 판매 중</td><td><code>play</code></td><td><code>on_sale</code></td></tr>
+                <tr><td>콘서트 판매 예정</td><td><code>concert</code></td><td><code>upcoming</code></td></tr>
+                <tr><td>뮤지컬 판매 예정</td><td><code>musical</code></td><td><code>upcoming</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>쿼리</th><th>나오는 공연</th><th>확인하는 것</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>genre=musical</code></td><td>뮤지컬 판매 중, 뮤지컬 판매 예정</td><td>값 하나</td></tr>
+                <tr><td><code>genre=play&amp;genre=concert</code></td><td>연극 판매 중, 콘서트 판매 예정</td><td>같은 이름 안은 OR</td></tr>
+                <tr><td><code>status=on_sale&amp;status=upcoming</code></td><td>4개 모두</td><td>판매 상태도 OR</td></tr>
+                <tr><td><code>genre=musical&amp;genre=concert&amp;status=upcoming</code></td><td>콘서트 판매 예정, 뮤지컬 판매 예정</td><td>장르와 판매 상태는 AND</td></tr>
+                <tr><td><code>q=판매 중&amp;genre=musical</code></td><td>뮤지컬 판매 중</td><td>검색어와도 AND</td></tr>
+                <tr><td><code>genre=opera</code>, <code>status=ended</code></td><td>400</td><td>고를 수 없는 값</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            결과의 제목과 함께 <code>totalCount</code>도 확인해, 조건이 목록 쿼리와 개수 쿼리 모두에 들어갔는지 본다.
+          </p>
+        </section>
+
+        <section id="check">
+          <h2>스스로 확인하기</h2>
+
+          <div class="quiz">
+            <p class="quiz-q">1. 길이 검사를 지우면 어떤 요청의 결과가 바뀌고, 무엇이 나오는가?</p>
+            <p class="quiz-context"><a href="#empty">빈 배열이면 조건을 뺀다</a>. 장르 줄만 바꾼다.</p>
+            <pre><code class="language-diff">-  genre.length &gt; 0 ? inArray(shows.genre, genre) : undefined,
++  inArray(shows.genre, genre),</code></pre>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  장르를 고르지 않은 모든 요청(<code>/shows</code>, <code>/shows?status=on_sale</code>, <code>/shows?q=정원</code> 등)이 바뀐다.
+                  <code>genre</code>가 <code>[]</code>라서 <code>inArray</code>가 <code>false</code>를 만들고, <code>and</code> 전체가 거짓이 되어 목록이 비고
+                  <code>totalCount</code>가 0이 된다. 장르를 고른 요청은 그대로다.
+                </p>
+              </div>
+            </details>
+          </div>
+
+          <div class="quiz">
+            <p class="quiz-q">2. 아래 요청에서 나오는 공연은 무엇인가?</p>
+            <p class="quiz-context"><a href="#or-and">같은 이름은 OR, 다른 조건은 AND</a>. 데이터는 <a href="#tests">테스트가 확인하는 것</a>의 네 공연이다.</p>
+            <pre><code>/shows?genre=play&amp;genre=concert&amp;status=on_sale</code></pre>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  "연극이거나 콘서트"이면서 "판매 중"인 공연이다. 연극 판매 중은 둘 다 맞고, 콘서트 판매 예정은 판매 상태가 맞지 않는다. 결과는 연극 판매 중
+                  하나, <code>totalCount</code>는 1이다.
+                </p>
+              </div>
+            </details>
+          </div>
+
+          <div class="quiz">
+            <p class="quiz-q">3. 길이 검사를 아래처럼 바꾸면 무엇이 틀리는가?</p>
+            <p class="quiz-context"><a href="#empty">빈 배열이면 조건을 뺀다</a>의 강조 상자.</p>
+            <pre><code class="language-diff">-  genre.length &gt; 0 ? inArray(shows.genre, genre) : undefined,
++  genre ? inArray(shows.genre, genre) : undefined,</code></pre>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  빈 배열 <code>[]</code>도 참이라 늘 <code>inArray</code>가 붙는다. 1번과 같이 장르를 고르지 않은 요청이 모두 0건이 된다. 검색어의
+                  <code>q ?</code>는 빈 글자 <code>''</code>가 거짓이라 맞게 동작하지만, 배열은 다르다.
+                </p>
+              </div>
+            </details>
+          </div>
+
+          <details>
+            <summary>4. 장르 조건을 <code>or()</code>로 따로 만들지 않고 <code>inArray</code> 하나로 쓰는 이유는?</summary>
+            <p>
+              <code>or(eq(shows.genre, 'musical'), eq(shows.genre, 'play'))</code>도 같은 뜻이지만, 고른 개수만큼 <code>eq</code>를 만들어야 한다.
+              <code>inArray</code>는 배열을 그대로 받으므로 고른 값이 몇 개든 한 줄로 끝난다.
+            </p>
+          </details>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

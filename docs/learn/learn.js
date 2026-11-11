@@ -54,6 +54,7 @@ const learnFolders = [
       { file: '07-구역-좌석-회차-좌석-스키마.html', title: '07 구역·좌석·회차 좌석 스키마', tags: ['drizzle', 'database'] },
       { file: '08-마이그레이션.html', title: '08 마이그레이션', tags: ['drizzle', 'database'] },
       { file: '09-공연-제목-검색-쿼리-읽기.html', title: '09 공연 제목 검색 쿼리 읽기', tags: ['drizzle', 'database'] },
+      { file: '10-장르-판매-상태-필터-쿼리-읽기.html', title: '10 장르·판매 상태 필터 쿼리 읽기', tags: ['drizzle', 'database'] },
     ],
   },
   {

@@ -20,6 +20,7 @@
           <li><a href="#eq">eq</a></li>
           <li><a href="#ne">ne와 조건 재사용</a></li>
           <li><a href="#ilike">like, ilike</a></li>
+          <li><a href="#in-array">inArray, notInArray</a></li>
           <li><a href="#and-optional">and와 있을 수도 없을 수도 있는 조건</a></li>
           <li><a href="#order-by">orderBy, asc, desc</a></li>
           <li><a href="#limit-offset">limit, offset</a></li>
@@ -235,6 +236,47 @@ ilike(shows.title, '%정원%'); // "shows"."title" ilike $1, params: ['%정원%'
             <a href="01-프론트엔드-개발자를-위한-DB-개념.html#like-escape">이스케이프</a>하는 일도 호출하는 쪽이 한다. 이 저장소의 사례는
             <a href="09-공연-제목-검색-쿼리-읽기.html">db-and-drizzle 09 문서</a>에 있다.
           </p>
+        </section>
+
+        <section id="in-array">
+          <h2>inArray, notInArray</h2>
+          <pre><code class="language-ts">import { inArray, notInArray } from 'drizzle-orm';
+
+inArray(shows.genre, ['musical', 'play']); // "shows"."genre" in ($1, $2), params: ['musical', 'play']
+notInArray(shows.genre, ['musical']); // "shows"."genre" not in ($1), params: ['musical']</code></pre>
+          <p>
+            "컬럼 값이 배열 안의 값 중 하나다"라는 <a href="01-프론트엔드-개발자를-위한-DB-개념.html#in">IN</a> 조건을 만든다. 첫 인자는 비교할 컬럼,
+            둘째 인자는 값 배열이다. 배열의 값은 하나씩 <a href="01-프론트엔드-개발자를-위한-DB-개념.html#parameter">파라미터</a>(<code>$1</code>,
+            <code>$2</code>, ...)로 간다. 첫 인자에는 테이블 컬럼뿐 아니라 <a href="#subquery">서브쿼리</a>가 <code>.as()</code>로 이름 붙인 필드도
+            넣을 수 있다.
+          </p>
+          <p>
+            <a href="#eq"><code>eq</code></a>처럼 값의 타입도 검사한다. <code>shows.genre</code>는 <code>'musical' | 'play' | ...</code>인
+            <code>pgEnum</code> 컬럼이므로 <code>inArray(shows.genre, ['opera'])</code>는 컴파일 오류다.
+          </p>
+          <h3 id="in-array-empty">빈 배열을 넘기면</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>코드</th><th>만들어지는 SQL</th><th>결과</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>inArray(shows.genre, [])</code></td><td><code>false</code></td><td>모든 행이 빠진다</td></tr>
+                <tr><td><code>notInArray(shows.genre, [])</code></td><td><code>true</code></td><td>모든 행이 남는다</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            PostgreSQL은 빈 괄호 <code>in ()</code>를 받지 않으므로, Drizzle은 빈 배열이면 같은 뜻의 <code>false</code>, <code>true</code>를 대신 넣는다.
+            오류는 나지 않지만 <code>and(...)</code> 안에 <code>false</code>가 하나라도 있으면 결과가 0건이 된다.
+          </p>
+          <div class="callout warn">
+            <p>
+              "고른 값이 없으면 거르지 않는다"를 만들려면 빈 배열을 <code>inArray</code>에 넘기지 말고 조건을 <code>undefined</code>로 빼야 한다.
+              <code>values.length &gt; 0 ? inArray(col, values) : undefined</code>로 쓰고 <a href="#and-optional"><code>and</code></a>에 넘긴다. 이
+              저장소의 사례는 <a href="10-장르-판매-상태-필터-쿼리-읽기.html">db-and-drizzle 10 문서</a>에 있다.
+            </p>
+          </div>
         </section>
 
         <section id="and-optional">
