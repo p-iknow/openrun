@@ -27,7 +27,7 @@ const STATUS_MESSAGE = `${SHOW_LIST_SALES_STATUSES.join(', ')} 중 하나여야 
 
 // 같은 이름을 여러 번 보낸 쿼리(?genre=musical&genre=play)는 배열로, 한 번 보낸 쿼리는 글자로 들어온다.
 // 둘 다 배열로 맞춘 뒤 검증한다. 값이 없으면 undefined로 두어 default를 적용한다.
-function toArray(value: unknown): unknown {
+function wrapInArray(value: unknown): unknown {
   return value === undefined ? undefined : [value].flat();
 }
 
@@ -62,7 +62,7 @@ export const showListQuerySchema = z.object({
       description: `공연 제목 검색어. 앞뒤 공백을 지우고, 빈 값이면 검색하지 않는다. 대소문자를 구분하지 않는 부분 일치이며 %, _, \\도 글자 그대로 찾는다. 최대 ${MAX_QUERY_LENGTH}자.`,
     }),
   genre: z
-    .preprocess(toArray, z.array(z.enum(GENRES, GENRE_MESSAGE)))
+    .preprocess(wrapInArray, z.array(z.enum(GENRES, GENRE_MESSAGE)))
     .default([])
     .meta({
       description:
@@ -70,7 +70,7 @@ export const showListQuerySchema = z.object({
     }),
   status: z
     .preprocess(
-      toArray,
+      wrapInArray,
       z.array(z.enum(SHOW_LIST_SALES_STATUSES, STATUS_MESSAGE)),
     )
     .default([])

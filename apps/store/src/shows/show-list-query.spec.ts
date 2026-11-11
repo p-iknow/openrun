@@ -4,6 +4,7 @@ import {
   getGenreChangeHref,
   getSearchSubmitHref,
   getStatusChangeHref,
+  hasNarrowingCondition,
   getShowListQueryFromSearch,
   getShowListHref,
   getSortChangeHref,
@@ -228,11 +229,19 @@ describe('getShowListQueryFromSearch', () => {
 });
 
 describe('getShowListHref', () => {
-  it('기본값은 빼고 q, sort, page 순서로 주소를 만든다', () => {
+  it('기본값은 빼고 q, genre, status, sort, page 순서로 주소를 만든다', () => {
     expect(getShowListHref(DEFAULT_QUERY)).toBe('/');
     expect(
-      getShowListHref({ ...DEFAULT_QUERY, page: 3, q: 'a&b', sort: 'newest' }),
-    ).toBe('/?q=a%26b&sort=newest&page=3');
+      getShowListHref({
+        page: 3,
+        q: 'a&b',
+        genre: ['play'],
+        status: ['on_sale', 'upcoming'],
+        sort: 'newest',
+      }),
+    ).toBe(
+      '/?q=a%26b&genre=play&status=on_sale&status=upcoming&sort=newest&page=3',
+    );
   });
 });
 
@@ -295,6 +304,30 @@ describe('getStatusChangeHref', () => {
         value: ['upcoming', 'ended'],
       }),
     ).toBe('/?genre=play&status=upcoming');
+  });
+});
+
+describe('hasNarrowingCondition', () => {
+  it.each([
+    { name: '조건이 없을 때', query: DEFAULT_QUERY, expected: false },
+    {
+      name: '정렬과 page만 있을 때',
+      query: { ...DEFAULT_QUERY, sort: 'newest' as const, page: 2 },
+      expected: false,
+    },
+    { name: '검색어', query: { ...DEFAULT_QUERY, q: '정원' }, expected: true },
+    {
+      name: '장르',
+      query: { ...DEFAULT_QUERY, genre: ['play' as const] },
+      expected: true,
+    },
+    {
+      name: '판매 상태',
+      query: { ...DEFAULT_QUERY, status: ['upcoming' as const] },
+      expected: true,
+    },
+  ])('$name: $expected', ({ query, expected }) => {
+    expect(hasNarrowingCondition(query)).toBe(expected);
   });
 });
 

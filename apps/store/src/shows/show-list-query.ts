@@ -167,6 +167,14 @@ export function getStatusChangeHref({
 }
 
 /**
+ * 결과를 좁히는 조건(검색어, 장르, 판매 상태)이 하나라도 있는지 본다. 정렬과 page는 결과를 줄이지 않는다.
+ * 결과가 없을 때 "조건 초기화" 링크를 보일지 고를 때 쓴다. 지우는 조건은 `getConditionResetHref`와 같다.
+ */
+export function hasNarrowingCondition(query: ShowListQuery): boolean {
+  return query.q !== null || query.genre.length > 0 || query.status.length > 0;
+}
+
+/**
  * 결과가 없을 때 보여 주는 "조건 초기화" 링크의 주소를 만든다.
  * 결과를 좁히는 조건(검색어, 장르, 판매 상태)만 지운다. 정렬은 결과를 줄이지 않으므로 그대로 둔다.
  */

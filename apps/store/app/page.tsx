@@ -10,6 +10,7 @@ import { ShowFilterChips } from '../src/shows/show-filter-chips';
 import {
   getConditionResetHref,
   getLastPageRedirectHref,
+  hasNarrowingCondition,
   normalizeShowListQuery,
 } from '../src/shows/show-list-query';
 import { ShowSortSelect } from '../src/shows/show-sort-select';
@@ -32,8 +33,6 @@ export default async function HomePage({ searchParams }: PageProps<'/'>) {
     redirect(lastPageHref);
   }
   const cards = selectShowCards(showPage);
-  const hasCondition =
-    query.q !== null || query.genre.length > 0 || query.status.length > 0;
 
   return (
     <main>
@@ -50,7 +49,7 @@ export default async function HomePage({ searchParams }: PageProps<'/'>) {
       </div>
       {cards.length === 0 ? (
         <div className="py-2xl text-center">
-          {hasCondition ? (
+          {hasNarrowingCondition(query) ? (
             <>
               <p className="text-text-secondary">
                 조건에 맞는 공연이 없습니다.
