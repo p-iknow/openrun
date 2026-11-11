@@ -1,0 +1,771 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>06 next/image가 해결하는 문제와 동작 방식</title>
+    <link rel="stylesheet" href="../learn.css" />
+    <script src="../vendor/highlightjs/highlight.min.js" defer></script>
+    <script src="../learn.js" defer></script>
+  </head>
+  <body>
+    <div class="layout">
+      <nav aria-label="목차">
+        <strong>목차</strong>
+        <ol>
+          <li><a href="#problem">해결하려는 문제</a></li>
+          <li><a href="#overview">한눈에 보기</a></li>
+          <li><a href="#html">컴포넌트가 만드는 HTML</a></li>
+          <li><a href="#srcset">srcset을 만드는 규칙</a></li>
+          <li><a href="#pick">브라우저가 파일을 고르는 방법</a></li>
+          <li><a href="#size">크기 정하기: width·height, fill, 정적 import</a></li>
+          <li><a href="#timing">언제 받나: loading, preload, placeholder</a></li>
+          <li><a href="#optimizer">최적화 서버 /_next/image</a></li>
+          <li><a href="#cache">캐시와 캐시 버스팅</a></li>
+          <li><a href="#security">보안: 허용 목록과 SSRF</a></li>
+          <li><a href="#other">최적화를 끄거나 맡기기</a></li>
+        </ol>
+        <strong>마무리</strong>
+        <ol>
+          <li><a href="#ours">우리 프로젝트에서는</a></li>
+          <li><a href="#check">스스로 확인하기</a></li>
+          <li><a href="#more">더 읽을거리</a></li>
+        </ol>
+      </nav>
+
+      <main>
+        <h1>06 next/image가 해결하는 문제와 동작 방식</h1>
+        <p class="lead">
+          <code>next/image</code>는 <code>&lt;img&gt;</code> 태그를 대신 그려 주는 컴포넌트와, 이미지를 줄이고 바꿔 주는 서버
+          기능(<code>/_next/image</code>) 두 부분으로 되어 있다. 먼저 일반 <code>&lt;img&gt;</code>로는 어떤 문제가 생기는지 보고,
+          컴포넌트가 어떤 HTML을 만들고, 브라우저가 그중 어떤 파일을 고르고, 서버가 그 파일을 어떻게 만들어 캐시하는지 차례로
+          본다. 내용은 Next 16.4.5의 문서와 소스 코드를 기준으로 했고, 예시는 공연 카드의
+          포스터(<code>apps/store/src/shows/show-card.tsx</code>)다.
+        </p>
+
+        <section id="problem">
+          <h2>해결하려는 문제</h2>
+          <p>포스터를 일반 <code>&lt;img&gt;</code>로 그리면 이렇게 된다.</p>
+          <pre><code class="language-tsx">&lt;img src="http://localhost:3001/posters/show-01-3fa2b1c9.png" alt="" /&gt;</code></pre>
+          <p>코드는 짧지만, 휴대폰으로 공연 목록을 여는 순간 다섯 가지 문제가 한꺼번에 생긴다.</p>
+
+          <h3>1. 화면보다 훨씬 큰 파일을 받는다</h3>
+          <p>
+            포스터 원본은 600×800 PNG로 약 70KB다. 모바일 카드에서는 96px 폭으로 그려지는데도 브라우저는 원본 전체를 받는다. 같은
+            포스터를 폭 256의 WebP로 줄이면 약 5KB다. 한 페이지에 카드가 20장이면 원본은 약 1.4MB, 줄인 파일은 약 100KB다. 느린 모바일
+            회선에서는 이 차이가 그대로 기다리는 시간과 데이터 요금이 된다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>파일</th>
+                  <th>크기 (시드 포스터 한 장을 실제로 변환해 잰 값)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>원본 PNG 600×800</td>
+                  <td>71KB</td>
+                </tr>
+                <tr>
+                  <td>WebP 폭 640 (원본이 600이라 600으로)</td>
+                  <td>12KB</td>
+                </tr>
+                <tr>
+                  <td>WebP 폭 384</td>
+                  <td>7.7KB</td>
+                </tr>
+                <tr>
+                  <td>WebP 폭 256</td>
+                  <td>4.9KB</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>2. 오래된 이미지 형식을 쓴다</h3>
+          <p>
+            PNG와 JPEG는 오래된 형식이다. 요즘 브라우저는 같은 화질을 더 작게 담는 WebP와 AVIF를 읽는다. 하지만 업로드되는 원본은 대부분
+            PNG나 JPEG이고, 모든 브라우저가 새 형식을 읽는다고 장담할 수도 없다.
+          </p>
+
+          <h3>3. 이미지가 도착하면 화면이 밀린다</h3>
+          <p>
+            브라우저는 이미지를 받기 전까지 그 크기를 모른다. 그래서 처음에는 높이 0으로 그렸다가, 이미지가 오면 그만큼 아래 내용을 밀어
+            낸다. 공연 제목을 누르려던 손가락 아래로 다른 카드가 미끄러져 들어온다. 이 흔들림을 CLS(Cumulative Layout Shift)라고 하고,
+            구글이 페이지 품질을 재는 핵심 지표(Core Web Vitals) 중 하나다.
+          </p>
+
+          <h3>4. 보이지도 않는 이미지까지 처음에 받는다</h3>
+          <p>
+            스크롤해야 보이는 아래쪽 카드 이미지도 페이지를 열자마자 함께 받는다. 그 사이 첫 화면에 꼭 필요한 글꼴, 스크립트, 위쪽 이미지가
+            회선을 나눠 써서 느려진다.
+          </p>
+
+          <h3>5. 직접 고치려면 일이 많다</h3>
+          <p>위 문제는 HTML 기능만으로도 고칠 수 있다. 다만 직접 하면 이만큼 써야 하고, 이미지마다 반복해야 한다.</p>
+          <pre><code class="language-html">&lt;picture&gt;
+  &lt;source type="image/webp"
+          srcset="show-01-256.webp 256w, show-01-384.webp 384w, show-01-640.webp 640w"
+          sizes="(min-width: 1024px) 280px, (min-width: 640px) 33vw, 96px" /&gt;
+  &lt;img src="show-01-640.png"
+       srcset="show-01-256.png 256w, show-01-384.png 384w, show-01-640.png 640w"
+       sizes="(min-width: 1024px) 280px, (min-width: 640px) 33vw, 96px"
+       width="600" height="800" loading="lazy" decoding="async" alt="" /&gt;
+&lt;/picture&gt;</code></pre>
+          <p>
+            그리고 이 HTML이 가리키는 파일 여섯 개를 누군가 미리 만들어 둬야 한다. 포스터가 새로 올라올 때마다 여러 폭, 여러 형식으로
+            변환하는 작업을 따로 돌리고, 폭 목록을 바꾸면 기존 이미지를 전부 다시 만들어야 한다.
+          </p>
+
+          <h3>next/image가 하는 일</h3>
+          <p><code>next/image</code>는 다섯 문제를 이렇게 나눠 맡는다. 개발자는 <code>&lt;Image&gt;</code> 한 줄만 쓴다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>문제</th>
+                  <th>next/image의 방법</th>
+                  <th>맡는 쪽</th>
+                  <th>자세히</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>1. 큰 파일</td>
+                  <td>
+                    여러 폭의 후보를 <code>srcset</code>으로 자동으로 적고, 브라우저가 화면에 맞는 것을 고른다. 그 폭의 파일은 서버가
+                    요청 때 줄여 만든다
+                  </td>
+                  <td><span class="badge blue">컴포넌트</span> <span class="badge green">서버</span></td>
+                  <td><a href="#srcset">srcset 규칙</a>, <a href="#pick">고르는 방법</a></td>
+                </tr>
+                <tr>
+                  <td>2. 옛 형식</td>
+                  <td>
+                    브라우저가 보낸 <code>Accept</code> 헤더를 보고 WebP를 읽을 수 있으면 WebP로 바꿔 준다. 못 읽으면 원본 형식 그대로
+                    준다
+                  </td>
+                  <td><span class="badge green">서버</span></td>
+                  <td><a href="#optimizer">최적화 서버</a></td>
+                </tr>
+                <tr>
+                  <td>3. 화면 밀림</td>
+                  <td>
+                    <code>width</code>·<code>height</code>, <code>fill</code>, 정적 import 중 하나를 쓰지 않으면 오류를 낸다. 이미지가
+                    오기 전에 자리가 정해진다
+                  </td>
+                  <td><span class="badge blue">컴포넌트</span></td>
+                  <td><a href="#size">크기 정하기</a></td>
+                </tr>
+                <tr>
+                  <td>4. 안 보이는 이미지</td>
+                  <td><code>loading="lazy"</code>가 기본값이라 화면 가까이 올 때 받는다. 중요한 이미지만 <code>preload</code>로 앞당긴다</td>
+                  <td><span class="badge blue">컴포넌트</span></td>
+                  <td><a href="#timing">언제 받나</a></td>
+                </tr>
+                <tr>
+                  <td>5. 손이 많이 감</td>
+                  <td>
+                    파일을 미리 만들지 않는다. 처음 요청이 올 때 만들어 디스크에 캐시하고, 다음부터는 캐시에서 준다. 폭 목록을 바꿔도
+                    다시 만들 것이 없다
+                  </td>
+                  <td><span class="badge green">서버</span></td>
+                  <td><a href="#cache">캐시</a></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout">
+            <p>
+              핵심은 일을 둘로 나눈 것이다. <strong>컴포넌트</strong>는 HTML 표준 기능(<code>srcset</code>, <code>sizes</code>,
+              <code>loading</code>, <code>width</code>·<code>height</code>)을 빠짐없이 채운 <code>&lt;img&gt;</code>를 만든다.
+              <strong>서버</strong>는 그 HTML이 요청하는 파일을 그때그때 만들어 준다. 브라우저 입장에서는 평범한 <code>&lt;img&gt;</code>
+              하나라서 자바스크립트 없이도 동작한다.
+            </p>
+          </div>
+          <p>
+            대가도 있다. 처음 요청은 서버가 이미지를 줄이느라 느리고, 서버의 CPU와 디스크를 쓴다. 누구나 부를 수 있는 공개 API가 하나
+            생기므로 남용을 막는 설정이 필요하다(<a href="#security">보안</a>). 캐시를 지우는 방법이 없어서 이미지 내용이 바뀌면 주소를
+            바꿔야 한다(<a href="#cache">캐시 버스팅</a>).
+          </p>
+        </section>
+
+        <section id="overview">
+          <h2>한눈에 보기</h2>
+          <div class="flow">
+            <div class="lane blue">
+              <div class="lane-title">렌더링 (서버 컴포넌트)</div>
+              <ol class="chain">
+                <li><span>&lt;Image src sizes fill&gt; 실행</span></li>
+                <li><span>폭 목록으로 srcset 만들기</span></li>
+                <li><span>&lt;img srcset sizes loading="lazy"&gt; HTML</span></li>
+              </ol>
+            </div>
+            <div class="lane green">
+              <div class="lane-title">브라우저</div>
+              <ol class="chain">
+                <li><span>sizes로 이미지가 그려질 폭 계산</span></li>
+                <li><span>폭 × 화면 배율에 맞는 파일 고르기</span></li>
+                <li><span>화면 가까이 오면 요청</span></li>
+              </ol>
+            </div>
+            <div class="lane blue">
+              <div class="lane-title">최적화 서버 /_next/image</div>
+              <ol class="chain">
+                <li><span>url, w, q 검사</span></li>
+                <li><span>캐시에 있으면 바로 응답</span></li>
+                <li><span>없으면 원본 받아 줄이고 WebP로 바꿔 저장</span></li>
+              </ol>
+            </div>
+          </div>
+          <p>
+            위의 세 단계가 아래 절의 순서다. 컴포넌트가 만드는 HTML, 브라우저의 선택, 최적화 서버와 캐시를 차례로 본다.
+          </p>
+        </section>
+
+        <section id="html">
+          <h2>컴포넌트가 만드는 HTML</h2>
+          <p>카드의 포스터 코드는 이렇다.</p>
+          <pre><code class="language-tsx">const POSTER_SIZES = '(min-width: 1024px) 280px, (min-width: 640px) 33vw, 96px';
+
+&lt;Image src={card.posterUrl} alt="" fill sizes={POSTER_SIZES} className="object-cover" /&gt;</code></pre>
+          <p>서버 컴포넌트가 실행되면 HTML에는 대략 이런 태그가 들어간다(주소는 줄였다).</p>
+          <pre><code class="language-html">&lt;img
+  alt=""
+  loading="lazy"
+  decoding="async"
+  data-nimg="fill"
+  class="object-cover"
+  style="position:absolute;height:100%;width:100%;left:0;top:0;right:0;bottom:0;color:transparent"
+  sizes="(min-width: 1024px) 280px, (min-width: 640px) 33vw, 96px"
+  srcset="/_next/image?url=http%3A%2F%2Flocalhost%3A3001%2Fposters%2Fshow-01-3fa2b1c9.png&amp;w=256&amp;q=75 256w,
+          /_next/image?url=...&amp;w=384&amp;q=75 384w,
+          /_next/image?url=...&amp;w=640&amp;q=75 640w,
+          ...
+          /_next/image?url=...&amp;w=3840&amp;q=75 3840w"
+  src="/_next/image?url=...&amp;w=3840&amp;q=75"
+/&gt;</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>속성</th>
+                  <th>뜻</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>srcset</code></td>
+                  <td>
+                    같은 이미지의 여러 폭 후보. <code>256w</code>는 "이 파일은 폭이 256px"이라는 뜻이다. 각 후보의 주소가 원본이
+                    아니라 <code>/_next/image</code>다.
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>sizes</code></td>
+                  <td>화면 폭마다 이 이미지가 그려질 폭. 브라우저가 CSS를 읽기 전에 후보를 고르려고 쓴다</td>
+                </tr>
+                <tr>
+                  <td><code>src</code></td>
+                  <td><code>srcset</code>을 모르는 옛 브라우저용. 가장 큰 후보를 넣는다</td>
+                </tr>
+                <tr>
+                  <td><code>loading="lazy"</code></td>
+                  <td>기본값. 화면 가까이 올 때까지 요청을 미룬다</td>
+                </tr>
+                <tr>
+                  <td><code>decoding="async"</code></td>
+                  <td>이미지를 푸는 작업이 글자 그리기를 막지 않게 한다</td>
+                </tr>
+                <tr>
+                  <td><code>style</code></td>
+                  <td><code>fill</code>이라서 부모를 꽉 채우는 absolute 배치가 붙는다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            이 모든 것이 서버에서 HTML로 만들어진다. 브라우저에서 따로 실행되는 자바스크립트 없이 일반
+            <code>&lt;img&gt;</code> 기능(<code>srcset</code>, <code>sizes</code>, <code>loading</code>)만으로 동작한다.
+          </p>
+        </section>
+
+        <section id="srcset">
+          <h2>srcset을 만드는 규칙</h2>
+          <p>후보 폭은 설정의 두 목록을 합쳐서 고른다. 아래는 Next 16의 기본값이다.</p>
+          <pre><code class="language-ts">deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840] // 화면 폭 기준
+imageSizes:  [32, 48, 64, 96, 128, 256, 384]                // 화면보다 작은 이미지 기준
+// 둘을 합쳐 정렬한 것이 전체 후보: 32, 48, ..., 384, 640, ..., 3840</code></pre>
+          <p>어떤 후보를 <code>srcset</code>에 넣을지는 props에 따라 다르다(<code>get-img-props.js</code>의 <code>getWidths</code>).</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>props</th>
+                  <th>srcset</th>
+                  <th>어울리는 경우</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>width={200}</code>, <code>sizes</code> 없음</td>
+                  <td><code>1x</code>, <code>2x</code> 두 개(200 이상, 400 이상인 가장 작은 후보)</td>
+                  <td>아이콘, 아바타처럼 크기가 고정된 이미지</td>
+                </tr>
+                <tr>
+                  <td><code>fill</code>, <code>sizes</code> 없음</td>
+                  <td><code>deviceSizes</code>만, <code>sizes="100vw"</code>로 간주</td>
+                  <td>화면 폭을 꽉 채우는 배경 이미지</td>
+                </tr>
+                <tr>
+                  <td><code>sizes</code> 있음</td>
+                  <td>전체 후보에서 너무 작은 것만 뺀 목록</td>
+                  <td>카드 그리드처럼 화면에 따라 폭이 바뀌는 이미지</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            <code>sizes</code>가 있을 때 "너무 작은 것"은 이렇게 정한다. <code>sizes</code> 문자열에서 <code>vw</code> 값을 찾아
+            가장 작은 비율을 구하고, <code>deviceSizes</code>의 가장 작은 값(640)에 곱한다. 그보다 작은 후보는 뺀다.
+          </p>
+          <pre><code class="language-ts">// 우리 sizes에서 vw 값은 33vw 하나 → 640 × 0.33 = 211.2
+// 211.2 이상인 후보만 남는다
+srcset 폭 = [256, 384, 640, 750, 828, 1080, 1200, 1920, 2048, 3840]</code></pre>
+          <div class="callout warn">
+            <p>
+              <code>96px</code>, <code>280px</code>처럼 px로 적은 값은 이 계산에 쓰이지 않는다. 그래서 모바일에서 96px로 그려지는
+              포스터인데도 96, 128 후보는 빠지고 가장 작은 후보가 256이다. 큰 손해는 아니지만, <code>sizes</code>가
+              <code>srcset</code> 후보까지 바꾼다는 점은 알아 둔다.
+            </p>
+          </div>
+        </section>
+
+        <section id="pick">
+          <h2>브라우저가 파일을 고르는 방법</h2>
+          <ol class="steps blue">
+            <li>
+              <strong>그려질 폭 계산</strong>
+              <code>sizes</code>를 앞에서부터 읽어 처음 맞는 조건의 값을 쓴다. 화면 폭 390px이면 앞의 두 조건이 맞지 않아
+              <code>96px</code>이다.
+            </li>
+            <li>
+              <strong>화면 배율 곱하기</strong>
+              휴대폰은 화면 배율(DPR)이 보통 2~3이라 CSS 1px에 실제 픽셀이 2~3개다. 96px × 3 = 288px만큼의 픽셀이 필요하다.
+            </li>
+            <li>
+              <strong>그 이상인 후보 고르기</strong>
+              288 이상인 가장 작은 후보 <code>384w</code>를 고른다. 정확한 선택은 브라우저마다 조금씩 다르다. 캐시에 이미 더 큰
+              파일이 있으면 그것을 쓰기도 한다.
+            </li>
+          </ol>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>화면</th>
+                  <th>sizes 결과</th>
+                  <th>필요한 픽셀(DPR 2 기준)</th>
+                  <th>받는 파일</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>모바일 390px</td>
+                  <td>96px</td>
+                  <td>192</td>
+                  <td><code>w=256</code></td>
+                </tr>
+                <tr>
+                  <td>태블릿 768px (3열)</td>
+                  <td>33vw ≈ 253px</td>
+                  <td>507</td>
+                  <td><code>w=640</code></td>
+                </tr>
+                <tr>
+                  <td>데스크톱 1440px (4열)</td>
+                  <td>280px</td>
+                  <td>560</td>
+                  <td><code>w=640</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout">
+            <p>
+              브라우저는 CSS를 받기 전에, HTML을 읽는 순간 이미지 요청을 시작할 수 있다. 그 시점에는 그리드가 몇 열인지 모르므로
+              <code>sizes</code>로 미리 알려 줘야 한다. <code>sizes</code>를 빼면 이미지가 화면 폭만큼(<code>100vw</code>) 크다고 보고
+              모바일에서도 1080px 같은 큰 파일을 받는다. 그래서 그리드 열 수를 바꾸면 <code>sizes</code>도 함께 고친다.
+            </p>
+          </div>
+        </section>
+
+        <section id="size">
+          <h2>크기 정하기: width·height, fill, 정적 import</h2>
+          <p>
+            이미지가 오기 전에 자리를 정해 두지 않으면, 이미지가 도착할 때 아래 내용이 밀린다(CLS). <code>next/image</code>는 세 방법
+            중 하나를 꼭 쓰게 한다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>방법</th>
+                  <th>자리를 정하는 쪽</th>
+                  <th>언제</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>width</code>, <code>height</code></td>
+                  <td>
+                    <code>&lt;img width height&gt;</code> 속성. 브라우저가 이 비율로 자리를 잡는다. 실제 그려지는 크기는 CSS가 정한다
+                  </td>
+                  <td>원본 크기를 알 때</td>
+                </tr>
+                <tr>
+                  <td><code>fill</code></td>
+                  <td>
+                    부모 요소. 이미지는 absolute로 부모를 채우므로 부모에 <code>position</code>과 크기가 있어야 한다
+                  </td>
+                  <td>원본 크기를 모르거나, 틀에 맞춰 잘라야 할 때. 포스터가 이 경우다</td>
+                </tr>
+                <tr>
+                  <td>정적 import (<code>import hero from './hero.png'</code>)</td>
+                  <td>빌드가 파일을 읽어 <code>width</code>, <code>height</code>를 자동으로 채운다</td>
+                  <td>저장소 안에 있는 고정 이미지</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            정적 import는 빌드가 파일 내용으로 만든 해시를 주소에 넣고(<code>/_next/static/media/hero.4f2a1c.png</code>),
+            1년짜리 <code>immutable</code> 캐시 헤더로 내보낸다. 아래 <a href="#cache">캐시 버스팅</a>을 Next가 대신 해 주는 셈이다.
+            포스터는 시드가 실행 중에 만드는 파일이라 이 방법을 쓸 수 없다. 틀을 잡는 Tailwind 조합은
+            <a href="../style/00-tailwind-배치-패턴.html#fill-parent">style 00 문서</a>에 있다.
+          </p>
+        </section>
+
+        <section id="timing">
+          <h2>언제 받나: loading, preload, placeholder</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>prop</th>
+                  <th>기본값</th>
+                  <th>하는 일</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>loading</code></td>
+                  <td><code>"lazy"</code></td>
+                  <td>
+                    화면에서 일정 거리 안으로 들어올 때 요청한다. 스크롤 아래의 카드 이미지는 처음에 받지 않는다.
+                    <code>"eager"</code>는 바로 받는다
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>preload</code></td>
+                  <td><code>false</code></td>
+                  <td>
+                    <code>&lt;head&gt;</code>에 <code>&lt;link rel="preload"&gt;</code>를 넣어 HTML 본문을 읽기 전부터 받는다. 화면에서
+                    가장 큰 요소(LCP)인 첫 화면 대표 이미지에만 쓴다. Next 16에서 <code>priority</code>를 대신한다
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>fetchPriority</code></td>
+                  <td>없음</td>
+                  <td>
+                    <code>"high"</code>면 브라우저가 다른 요청보다 먼저 받는다. 문서는 대부분 <code>preload</code>보다
+                    <code>loading="eager"</code>나 이것을 권한다
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>placeholder</code></td>
+                  <td><code>"empty"</code></td>
+                  <td>
+                    로드 전에 보일 그림. <code>"blur"</code>는 <code>blurDataURL</code>(아주 작은 흐린 이미지)을 깔아 둔다. 정적
+                    import면 빌드가 자동으로 만든다
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            공연 목록은 카드가 많아 어느 하나가 대표 이미지라고 하기 어렵다. 그래서 모두 기본값(lazy)으로 두고,
+            <code>placeholder</code> 대신 틀의 배경색을 자리 표시자로 쓴다.
+          </p>
+        </section>
+
+        <section id="optimizer">
+          <h2>최적화 서버 /_next/image</h2>
+          <p>
+            <code>srcset</code>의 주소는 모두 <code>/_next/image?url=…&amp;w=…&amp;q=…</code>다. 이 주소를 받은 Next 서버가 하는 일은
+            다음과 같다(<code>next/dist/server/image-optimizer.js</code>).
+          </p>
+          <ol class="steps blue">
+            <li>
+              <strong>요청 검사</strong>
+              <code>url</code>이 허용 목록(<code>/</code>로 시작하면 <code>localPatterns</code>, 아니면 <code>remotePatterns</code>)에
+              맞는지, <code>w</code>가 <code>deviceSizes</code>·<code>imageSizes</code>에 있는 값인지, <code>q</code>가
+              <code>qualities</code>(기본 <code>[75]</code>)에 있는지 본다. 하나라도 어긋나면 400이다.
+            </li>
+            <li>
+              <strong>출력 형식 정하기</strong>
+              브라우저가 보낸 <code>Accept</code> 헤더에 <code>image/webp</code>가 있으면 WebP로 만든다(기본
+              <code>formats: ['image/webp']</code>). 없으면 원본 형식 그대로 둔다.
+            </li>
+            <li>
+              <strong>캐시 찾기</strong>
+              원본 주소, 폭, 품질, 출력 형식으로 키를 만들어 <code>.next/cache/images</code>에서 찾는다. 있으면 바로 응답한다.
+            </li>
+            <li>
+              <strong>원본 받기</strong>
+              상대 주소(<code>/posters/a.png</code>)는 네트워크를 거치지 않고 서버 안에서 그 경로를 처리해 받는다. 절대 주소는 HTTP로
+              받아 오며, 이때 호스트가 사설 IP로 풀리면 거절하고 리다이렉트는 3번까지 따라간다.
+            </li>
+            <li>
+              <strong>줄이고 바꾸기</strong>
+              받은 내용이 실제 이미지인지 확인하고, sharp로 폭 <code>w</code>에 맞게 줄이고(원본보다 크게 키우지는 않는다) 품질
+              <code>q</code>의 WebP로 바꾼다. SVG는 기본으로 거절하고(<code>dangerouslyAllowSVG</code>), 움직이는 GIF·PNG·WebP는 줄이지 않고 원본을 돌려준다.
+            </li>
+            <li>
+              <strong>저장하고 응답</strong>
+              결과를 디스크 캐시에 쓰고 응답한다. <code>Vary: Accept</code>(형식마다 따로 캐시),
+              <code>Content-Disposition: attachment</code>(주소를 직접 열면 내려받게 해 악성 파일이 페이지처럼 열리지 않게 함),
+              <code>X-Nextjs-Cache: MISS</code> 헤더가 붙는다.
+            </li>
+          </ol>
+          <details class="fold">
+            <summary>선택 읽기: 우리 포스터 하나가 받는 응답</summary>
+            <div class="fold-body">
+              <p>
+                포스터 원본은 600×800 PNG다. 데스크톱에서 <code>w=640</code>을 요청하면 원본보다 크게 키우지 않으므로 폭 600의 WebP가
+                온다. 모바일의 <code>w=256</code>은 256×341 WebP다. 화면에 따라 받는 크기가 몇 배씩 차이 난다.
+              </p>
+              <pre><code>HTTP/1.1 200 OK
+Content-Type: image/webp
+Cache-Control: public, max-age=14400, must-revalidate
+Vary: Accept
+Content-Disposition: attachment; filename="show-01-3fa2b1c9.webp"
+X-Nextjs-Cache: MISS</code></pre>
+              <p>개발 서버(<code>next dev</code>)에서는 <code>max-age=0</code>이라 브라우저가 매번 다시 확인한다.</p>
+            </div>
+          </details>
+        </section>
+
+        <section id="cache">
+          <h2>캐시와 캐시 버스팅</h2>
+          <p>최적화 결과는 두 곳에 캐시된다.</p>
+          <ul>
+            <li>
+              <strong>Next 서버의 디스크(<code>.next/cache/images</code>):</strong> 유효 기간은 <code>minimumCacheTTL</code>(기본 4시간)과
+              원본 응답의 <code>Cache-Control</code> max-age 중 큰 값이다. 디스크 용량이 넘치면 오래 안 쓴 것부터 지운다.
+            </li>
+            <li><strong>브라우저:</strong> 응답의 <code>Cache-Control</code>을 따라 따로 캐시한다.</li>
+          </ul>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th><code>X-Nextjs-Cache</code></th>
+                  <th>상황</th>
+                  <th>응답</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><span class="badge blue">MISS</span></td>
+                  <td>처음 요청</td>
+                  <td>원본을 받아 만든 새 결과</td>
+                </tr>
+                <tr>
+                  <td><span class="badge green">HIT</span></td>
+                  <td>기간 안에 다시 요청</td>
+                  <td>디스크에 있던 결과</td>
+                </tr>
+                <tr>
+                  <td><span class="badge blue">STALE</span></td>
+                  <td>기간이 지난 뒤 요청</td>
+                  <td>일단 옛 결과를 주고, 뒤에서 원본을 다시 받아 새로 만든다. 다음 요청부터 새 결과</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            캐시의 키는 <strong>주소</strong>다. 원본 파일의 내용이 바뀌어도 주소가 같으면 서버도 브라우저도 바뀐 걸 모른다. 그리고 문서에
+            적힌 대로 이 캐시를 지우는 API가 없다. 남은 방법은 <code>src</code>를 바꾸거나 캐시 폴더를 직접 지우는 것뿐이다.
+          </p>
+          <div class="callout">
+            <p>
+              <strong>캐시 버스팅(cache busting):</strong> 내용이 바뀌면 주소도 바뀌게 만들어 캐시를 피하는 방법이다. 가장 흔한 형태는
+              파일 이름에 내용의 해시를 넣는 것이다. 내용이 바뀌면 새 주소라 새로 받고, 내용이 같으면 같은 주소라 캐시를 그대로 쓴다.
+              빌드 결과물의 <code>main.4f2a1c.js</code>, Next의 정적 import 이미지가 모두 이 방법이다.
+            </p>
+          </div>
+          <p>
+            시드가 그리는 포스터에는 공연 기간이 찍혀서 시드를 돌린 날마다 내용이 바뀐다. 그래서 시드는 포스터 경로에 PNG 내용의 해시
+            8자리를 붙인다(<code>show-01-3fa2b1c9.png</code>). 경로가 <code>show-01.png</code>로 고정이면 다음 날 시드 뒤에도 카드에
+            어제 날짜의 포스터가 보인다.
+          </p>
+        </section>
+
+        <section id="security">
+          <h2>보안: 허용 목록과 SSRF</h2>
+          <p>
+            <code>/_next/image</code>는 누구나 주소를 바꿔 부를 수 있는 공개 API다. 설정의 허용 목록은 대부분 이 API가 남용되지 않게
+            막는 장치다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>설정</th>
+                  <th>막는 것</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>remotePatterns</code></td>
+                  <td>
+                    아무 외부 이미지나 우리 서버 자원으로 줄여 주는 것. 프로토콜, 호스트, 포트, 경로까지 맞아야 한다. 컴포넌트의
+                    <code>src</code>가 여기에 없으면 렌더링 때 바로 오류가 난다
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>localPatterns</code></td>
+                  <td>상대 주소 중 의도하지 않은 경로를 줄이는 것</td>
+                </tr>
+                <tr>
+                  <td><code>w</code>는 크기 목록, <code>qualities</code></td>
+                  <td>
+                    <code>w=1</code>부터 <code>w=3840</code>까지, 품질 1~100을 모두 요청해 변형을 수천 개 만들게 하는 공격(CPU와 디스크
+                    소모). 그래서 Next 16부터 <code>qualities</code>가 필수다
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>dangerouslyAllowLocalIP</code> (기본 <code>false</code>)</td>
+                  <td>SSRF. 아래 설명</td>
+                </tr>
+                <tr>
+                  <td><code>dangerouslyAllowSVG</code> (기본 <code>false</code>)</td>
+                  <td>스크립트가 든 SVG가 우리 도메인에서 열리는 것</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            <strong>SSRF(Server-Side Request Forgery)</strong>는 서버를 시켜 서버만 닿을 수 있는 곳에 요청하게 만드는 공격이다. 최적화
+            서버는 내부망 안에서 원본을 받아 오므로, 허용 범위가 넓으면 이런 요청이 가능해진다.
+          </p>
+          <pre><code>/_next/image?url=http://169.254.169.254/latest/meta-data/&amp;w=64&amp;q=75   ← 클라우드 서버 정보
+/_next/image?url=http://10.0.0.5:8080/admin/purge&amp;w=64&amp;q=75          ← 내부 관리 API</code></pre>
+          <p>
+            응답이 이미지가 아니면 돌려주지 않아 내용을 그대로 빼내기는 어렵다. 하지만 오류의 차이로 내부에 무엇이 있는지 알아내거나,
+            GET으로 동작하는 내부 API를 실행시킬 수 있다. Next 16은 호스트가 사설 IP(<code>10.x</code>, <code>127.x</code>,
+            <code>169.254.x</code> 등)로 풀리면 거절한다. 리다이렉트는 <code>remotePatterns</code>를 다시 검사하지 않지만, 따라간 주소도
+            사설 IP 검사는 다시 받는다. <code>dangerouslyAllowLocalIP</code>는 이 마지막 방어선을 끄는 옵션이다.
+          </p>
+        </section>
+
+        <section id="other">
+          <h2>최적화를 끄거나 맡기기</h2>
+          <ul>
+            <li>
+              <strong><code>unoptimized</code>:</strong> <code>/_next/image</code>를 거치지 않고 원본 주소를 그대로 쓴다.
+              <code>srcset</code>도 만들지 않는다. 1KB 미만 이미지, SVG, 움직이는 GIF처럼 줄여도 이득이 없을 때 쓴다.
+            </li>
+            <li>
+              <strong><code>loader</code> / <code>loaderFile</code>:</strong> <code>srcset</code>의 주소를 만드는 함수를 바꾼다.
+              Cloudinary, imgix, CloudFront 같은 이미지 CDN이 줄이기를 맡고, Next 서버는 이미지 일을 하지 않는다. 트래픽이 많은
+              서비스는 보통 이쪽을 쓴다.
+            </li>
+          </ul>
+        </section>
+
+        <section id="ours">
+          <h2>우리 프로젝트에서는</h2>
+          <ul>
+            <li>
+              API가 포스터의 완전한 URL(<code>POSTER_BASE_URL</code> + 포스터 경로)을 주므로 <code>src</code>가 절대 주소다. 그래서
+              최적화 서버가 원본을 HTTP로 받고, 개발에서는 그 호스트가 <code>localhost</code>라 사설 IP 차단에 걸린다.
+              <code>apps/store/next.config.ts</code>는 <code>POSTER_BASE_URL</code>의 호스트가 <code>localhost</code>,
+              <code>127.0.0.1</code>, <code>[::1]</code>일 때만 <code>dangerouslyAllowLocalIP</code>를 켜고,
+              <code>remotePatterns</code>는 그 주소의 <code>/posters/**</code> 하나만 허용한다.
+            </li>
+            <li>
+              <code>POSTER_BASE_URL</code>이 없으면 <code>remotePatterns</code>가 빈 목록이다. 빌드는 통과하지만 카드를 그릴 때
+              "hostname is not configured" 오류가 난다. 값을 바꾸면 스토어 서버를 다시 켜야 한다.
+            </li>
+            <li>포스터 경로에 내용 해시를 넣어 캐시 버스팅을 한다(#42).</li>
+            <li><code>sizes</code>는 <code>ShowCardList</code>의 열 수(모바일 1열 가로형, sm 3열, lg 4열)와 맞춘다.</li>
+          </ul>
+        </section>
+
+        <section id="check">
+          <h2>스스로 확인하기</h2>
+          <div class="quiz">
+            <p class="quiz-q">1. sizes를 지우면 모바일 카드는 어떤 파일을 받나?</p>
+            <p class="quiz-context"><a href="#srcset">srcset을 만드는 규칙</a>, <a href="#pick">브라우저가 고르는 방법</a>. 화면 390px, DPR 3.</p>
+            <pre><code class="language-diff">-&lt;Image src={card.posterUrl} alt="" fill sizes={POSTER_SIZES} className="object-cover" /&gt;
++&lt;Image src={card.posterUrl} alt="" fill className="object-cover" /&gt;</code></pre>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  <code>fill</code>에 <code>sizes</code>가 없으면 <code>srcset</code>은 <code>deviceSizes</code>(640~3840)만 쓰고
+                  <code>sizes="100vw"</code>가 붙는다. 브라우저는 이미지가 390px이라고 보고 390 × 3 = 1170 이상인 <code>w=1200</code>을
+                  고른다. 96px 칸에 그릴 이미지를 폭 600짜리 원본 크기로 받는다(원본보다 키우지는 않으므로). 필요한 것보다 몇 배 큰 파일이다.
+                </p>
+              </div>
+            </details>
+          </div>
+          <div class="quiz">
+            <p class="quiz-q">2. 포스터 경로에 해시가 없을 때, 운영 서버에서 시드 다음 날 첫 방문자와 두 번째 방문자는 무엇을 보나?</p>
+            <p class="quiz-context"><a href="#cache">캐시와 캐시 버스팅</a>. 어제 만든 캐시는 4시간이 지나 기간이 끝났고, 두 방문자의 브라우저 캐시는 비어 있다.</p>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  첫 방문자는 어제 포스터를 본다. 기간이 지난 캐시는 <code>STALE</code>로 옛 결과를 먼저 주고 뒤에서 다시 만들기 때문이다.
+                  두 번째 방문자는 새로 만든 오늘 포스터를 본다. 기간이 아직 안 지났다면 둘 다 어제 포스터를 본다. 같은 주소인 한 언제 바뀔지
+                  알 수 없다는 것이 문제다.
+                </p>
+              </div>
+            </details>
+          </div>
+          <details>
+            <summary>3. 공격자가 /_next/image?url=…&amp;w=1000&amp;q=75 를 보내면 어떻게 되나?</summary>
+            <p>
+              1000은 <code>deviceSizes</code>에도 <code>imageSizes</code>에도 없어서 400으로 거절된다. 폭을 마음대로 받으면 같은 이미지로
+              변형을 끝없이 만들게 해 CPU와 디스크를 쓰게 할 수 있기 때문이다.
+            </p>
+          </details>
+          <details>
+            <summary>4. src를 절대 주소 대신 /posters/show-01-3fa2b1c9.png 처럼 상대 주소로 주면 dangerouslyAllowLocalIP가 필요할까?</summary>
+            <p>
+              필요 없다. 상대 주소는 최적화 서버가 네트워크로 받지 않고 서버 안에서 그 경로를 처리해 받으므로 사설 IP 검사를 거치지 않는다.
+              대신 <code>localPatterns</code>로 허용 경로를 정한다. 우리는 스펙이 완전한 URL을 요구하고 나중에 포스터가 다른 호스트로 옮겨
+              가므로 절대 주소를 쓴다.
+            </p>
+          </details>
+        </section>
+
+        <section id="more">
+          <h2>더 읽을거리</h2>
+          <ol>
+            <li><a href="https://nextjs.org/docs/app/api-reference/components/image">Next.js: Image Component</a> (props와 설정 전체)</li>
+            <li><a href="https://nextjs.org/docs/app/getting-started/images">Next.js: Image Optimization</a></li>
+            <li><a href="https://web.dev/learn/design/responsive-images">web.dev: Responsive images</a> (srcset, sizes)</li>
+            <li><a href="https://developer.mozilla.org/docs/Web/HTML/Element/img">MDN: &lt;img&gt;</a></li>
+            <li><a href="https://owasp.org/www-community/attacks/Server_Side_Request_Forgery">OWASP: Server Side Request Forgery</a></li>
+          </ol>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

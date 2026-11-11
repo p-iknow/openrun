@@ -13,6 +13,7 @@ const learnFolders = [
       { file: '03-서버-컴포넌트-단계와-SSR-단계.html', title: '03 Server Component 단계와 SSR 단계', tags: ['nextjs'] },
       { file: '04-server-component가-해결하는-문제.html', title: '04 Server Component가 해결하는 문제', tags: ['nextjs'] },
       { file: '05-hydration-자세히.html', title: '05 hydration 자세히', tags: ['nextjs'] },
+      { file: '06-next-image가-해결하는-문제와-동작-방식.html', title: '06 next/image가 해결하는 문제와 동작 방식', tags: ['nextjs'] },
     ],
   },
   {
