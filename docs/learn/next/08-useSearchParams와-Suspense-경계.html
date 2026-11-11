@@ -231,8 +231,8 @@ Export encountered an error on /_not-found/page: /_not-found, exiting the build.
               그린다. 지금 정적 화면은 404뿐이라, 브라우저가 그려도 <code>fallback</code>과 같은 빈 칸이 나온다.
             </li>
             <li>
-              <strong>JS가 늦어도 쓸 수 있다.</strong> <code>fallback</code>도 <code>action="/"</code>가 있는 진짜 GET 폼이라, JS가 실행되기 전에
-              검색해도 공연 목록으로 간다.
+              <strong>JS가 늦어도 쓸 수 있다.</strong> <code>fallback</code>도 <code>action="/"</code>가 있는 폼이라, JS가 실행되기 전에 검색해도
+              브라우저가 보통 폼처럼 공연 목록(<code>/?q=…</code>)으로 보낸다.
             </li>
           </ul>
         </section>

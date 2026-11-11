@@ -98,15 +98,22 @@ export function getSortChangeHref({
 }
 
 /**
- * 제목 검색 GET 폼이 검색어와 함께 보낼 숨은 필드의 [이름, 값] 목록이다.
- * 폼을 제출하면 쿼리 문자열이 폼 값으로 통째로 바뀌므로 지금 정렬을 함께 보낸다. page는 보내지 않아 1페이지로 돌아간다.
+ * 제목 검색 폼을 제출할 때 옮겨 갈 주소를 만든다. 정렬은 두고 page는 빼서 결과의 1페이지로 간다.
+ * 검색어는 주소의 q와 같은 규칙으로 정리한다. 앞뒤 공백을 지우고, 비었으면 검색어를 뺀다.
  */
-export function getSearchFormHiddenFields(
-  query: ShowListQuery,
-): [name: string, value: string][] {
-  return [
-    ...getShowListSearchParams({ ...query, q: null, page: DEFAULT_PAGE }),
-  ];
+export function getSearchSubmitHref({
+  query,
+  value,
+}: {
+  query: ShowListQuery;
+  /** 검색 칸에 입력한 글자 */
+  value: string;
+}): string {
+  return getShowListHref({
+    ...query,
+    q: parseTitleQuery(value),
+    page: DEFAULT_PAGE,
+  });
 }
 
 function getShowListSearchParams(query: ShowListQuery): URLSearchParams {

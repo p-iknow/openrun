@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  getSearchFormHiddenFields,
+  getSearchSubmitHref,
   getShowListQueryFromSearch,
   getShowListHref,
   getSortChangeHref,
@@ -176,17 +176,29 @@ describe('getSortChangeHref', () => {
   });
 });
 
-describe('getSearchFormHiddenFields', () => {
-  it('지금 정렬은 함께 보내고, 검색어와 page는 보내지 않는다', () => {
+describe('getSearchSubmitHref', () => {
+  it('정렬은 두고 검색어를 바꾸며 page를 빼서 1페이지로 돌아간다', () => {
     expect(
-      getSearchFormHiddenFields({ page: 3, q: '정원', sort: 'newest' }),
-    ).toEqual([['sort', 'newest']]);
+      getSearchSubmitHref({
+        query: { page: 3, q: '정원', sort: 'newest' },
+        value: '햄릿',
+      }),
+    ).toBe('/?q=%ED%96%84%EB%A6%BF&sort=newest');
   });
 
-  it('기본 정렬이면 보낼 필드가 없다', () => {
-    expect(getSearchFormHiddenFields({ ...DEFAULT_QUERY, page: 2 })).toEqual(
-      [],
-    );
+  it('검색어의 앞뒤 공백을 지운다', () => {
+    expect(
+      getSearchSubmitHref({ query: DEFAULT_QUERY, value: '  햄릿 ' }),
+    ).toBe('/?q=%ED%96%84%EB%A6%BF');
+  });
+
+  it('공백만 있는 검색어면 검색어를 뺀다', () => {
+    expect(
+      getSearchSubmitHref({
+        query: { page: 2, q: '정원', sort: 'newest' },
+        value: '   ',
+      }),
+    ).toBe('/?sort=newest');
   });
 });
 
