@@ -18,6 +18,7 @@ import { AppModule } from '../src/app.module.js';
 import { Clock } from '../src/clock/clock.module.js';
 import { eq } from 'drizzle-orm';
 import {
+  type Genre,
   performanceSeats,
   performances,
   shows,
@@ -54,6 +55,7 @@ describe('GET /shows', () => {
   async function insertShow({
     venueId,
     title,
+    genre = 'musical',
     posterPath = 'poster.png',
     createdAt = DEFAULT_CREATED_AT,
     performanceStarts = [],
@@ -61,6 +63,7 @@ describe('GET /shows', () => {
   }: {
     venueId: number;
     title: string;
+    genre?: Genre;
     posterPath?: string;
     createdAt?: string;
     performanceStarts?: string[];
@@ -71,7 +74,7 @@ describe('GET /shows', () => {
       .values({
         venueId,
         title,
-        genre: 'musical',
+        genre,
         minAge: 8,
         runningMinutes: 150,
         description: '소개',
@@ -513,6 +516,135 @@ describe('GET /shows', () => {
         totalCount: 2,
       });
     });
+  });
+
+  describe('장르와 판매 상태 필터', () => {
+    // 넣는 순서대로 첫 회차 일시가 이르게 넣는다. 기본 현재 시각(2026-02-01) 기준으로
+    // 판매 오픈 일시를 주지 않은 회차는 판매 중이고, 2026-02-10에 여는 회차는 판매 예정이다.
+    async function insertShows(
+      inputs: { title: string; genre: Genre; status: 'on_sale' | 'upcoming' }[],
+    ) {
+      const venueId = await insertVenue('예술의전당');
+      for (const [index, { title, genre, status }] of inputs.entries()) {
+        await insertShow({
+          venueId,
+          title,
+          genre,
+          performances: [
+            {
+              startsAt: `2026-03-${String(index + 1).padStart(2, '0')}T10:00:00Z`,
+              salesOpenAt:
+                status === 'upcoming' ? '2026-02-10T05:00:00Z' : undefined,
+            },
+          ],
+        });
+      }
+    }
+
+    async function filterTitles(query: string) {
+      const response = await request(app.getHttpServer()).get(
+        `/shows?${query}`,
+      );
+      return {
+        status: response.status,
+        titles: response.body.items?.map(
+          (item: { title: string }) => item.title,
+        ),
+        totalCount: response.body.totalCount,
+      };
+    }
+
+    beforeEach(async () => {
+      await insertShows([
+        { title: '뮤지컬 판매 중', genre: 'musical', status: 'on_sale' },
+        { title: '연극 판매 중', genre: 'play', status: 'on_sale' },
+        { title: '콘서트 판매 예정', genre: 'concert', status: 'upcoming' },
+        { title: '뮤지컬 판매 예정', genre: 'musical', status: 'upcoming' },
+      ]);
+    });
+
+    it('genre 하나로 그 장르의 공연만 결과와 전체 개수에 담는다', async () => {
+      expect(await filterTitles('genre=musical')).toEqual({
+        status: 200,
+        titles: ['뮤지컬 판매 중', '뮤지컬 판매 예정'],
+        totalCount: 2,
+      });
+    });
+
+    it('genre를 여러 번 보내면 그중 하나에 맞는 공연을 담는다', async () => {
+      expect(await filterTitles('genre=play&genre=concert')).toEqual({
+        status: 200,
+        titles: ['연극 판매 중', '콘서트 판매 예정'],
+        totalCount: 2,
+      });
+    });
+
+    it.each([
+      {
+        salesStatus: 'on_sale',
+        titles: ['뮤지컬 판매 중', '연극 판매 중'],
+      },
+      {
+        salesStatus: 'upcoming',
+        titles: ['콘서트 판매 예정', '뮤지컬 판매 예정'],
+      },
+    ])(
+      'status가 $salesStatus이면 그 공연 판매 상태의 공연만 담는다',
+      async ({ salesStatus, titles }) => {
+        expect(await filterTitles(`status=${salesStatus}`)).toEqual({
+          status: 200,
+          titles,
+          totalCount: 2,
+        });
+      },
+    );
+
+    it('status를 둘 다 보내면 판매 중과 판매 예정 공연을 모두 담는다', async () => {
+      expect(
+        await filterTitles('status=on_sale&status=upcoming'),
+      ).toMatchObject({ totalCount: 4 });
+    });
+
+    it('장르와 판매 상태를 함께 보내면 둘 다 맞는 공연만 담는다', async () => {
+      expect(
+        await filterTitles('genre=musical&genre=concert&status=upcoming'),
+      ).toEqual({
+        status: 200,
+        titles: ['콘서트 판매 예정', '뮤지컬 판매 예정'],
+        totalCount: 2,
+      });
+    });
+
+    it('검색어와 함께 보내면 검색 결과 안에서 거른다', async () => {
+      expect(
+        await filterTitles(`q=${encodeURIComponent('판매 중')}&genre=musical`),
+      ).toMatchObject({ titles: ['뮤지컬 판매 중'], totalCount: 1 });
+    });
+
+    it.each([
+      {
+        query: 'genre=opera',
+        field: 'genre.0',
+        detail:
+          'musical, play, concert, classical_dance, kids_family 중 하나여야 합니다.',
+      },
+      // 판매 종료 공연은 목록에 없으므로 판매 상태 선택지가 아니다.
+      {
+        query: 'status=on_sale&status=ended',
+        field: 'status.1',
+        detail: 'on_sale, upcoming 중 하나여야 합니다.',
+      },
+    ])(
+      '$query: 모르는 값은 400으로 응답한다',
+      async ({ query, field, detail }) => {
+        const response = await request(app.getHttpServer()).get(
+          `/shows?${query}`,
+        );
+
+        expect(response.status).toBe(400);
+        expect(response.body.errors).toEqual([{ field, detail }]);
+      },
+    );
   });
 
   it('회차가 없는 공연은 목록과 전체 개수에서 뺀다', async () => {

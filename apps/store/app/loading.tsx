@@ -6,6 +6,17 @@ export default function Loading() {
   return (
     <main aria-busy="true" aria-label="공연 목록을 불러오는 중">
       <h1 className="mb-lg text-heading font-bold">공연</h1>
+      {/* 장르와 판매 상태 칩 줄(라벨 한 줄 + 높이 40px 칩)과 같은 높이를 차지한다. 칩은 주소를 알아야 그릴 수 있어 자리만 둔다. */}
+      <div className="mb-xl flex flex-col gap-md">
+        {[0, 1].map((row) => (
+          <div key={row} className="flex flex-col gap-sm">
+            <span className="text-body-sm">
+              <Skeleton className="h-lh w-[48px]" />
+            </span>
+            <Skeleton className="h-[40px] w-[320px] max-w-full rounded-full" />
+          </div>
+        ))}
+      </div>
       {/* "공연 N개" 줄과 같은 높이를 차지한다. */}
       <p className="mb-md text-body-sm">
         <Skeleton className="h-lh w-[64px]" />

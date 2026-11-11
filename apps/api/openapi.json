@@ -43,6 +43,43 @@
             }
           },
           {
+            "name": "genre",
+            "required": false,
+            "in": "query",
+            "description": "장르. 여러 번 보내면 그중 하나에 맞는 공연을 고른다(OR). 보내지 않으면 장르로 거르지 않는다.",
+            "schema": {
+              "description": "장르. 여러 번 보내면 그중 하나에 맞는 공연을 고른다(OR). 보내지 않으면 장르로 거르지 않는다.",
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "musical",
+                  "play",
+                  "concert",
+                  "classical_dance",
+                  "kids_family"
+                ]
+              }
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "description": "공연 판매 상태. on_sale(판매 중), upcoming(판매 예정) 중 고르고, 여러 번 보내면 그중 하나에 맞는 공연을 고른다(OR). 보내지 않으면 판매 상태로 거르지 않는다. 장르와 함께 보내면 둘 다 맞는 공연만 고른다(AND).",
+            "schema": {
+              "description": "공연 판매 상태. on_sale(판매 중), upcoming(판매 예정) 중 고르고, 여러 번 보내면 그중 하나에 맞는 공연을 고른다(OR). 보내지 않으면 판매 상태로 거르지 않는다. 장르와 함께 보내면 둘 다 맞는 공연만 고른다(AND).",
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "on_sale",
+                  "upcoming"
+                ]
+              }
+            }
+          },
+          {
             "name": "sort",
             "required": false,
             "in": "query",

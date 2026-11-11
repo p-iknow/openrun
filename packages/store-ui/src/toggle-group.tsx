@@ -23,8 +23,13 @@ export interface ToggleGroupProps {
   /** 늘 보이는 라벨. 칩 묶음의 접근 가능한 이름이 된다. */
   label: string;
   items: ToggleGroupItem[];
-  /** 처음 고른 값들. 비제어로만 쓰고, 바뀐 값은 `onValueChange`로 받는다. 주소의 필터를 채울 때 쓴다. */
+  /** 처음 고른 값들. 비제어로 쓸 때 넣고, 바뀐 값은 `onValueChange`로 받는다. */
   defaultValue?: string[];
+  /**
+   * 고른 값들. 제어로 쓸 때 넣고, `onValueChange`로 받은 값을 다시 넣어야 칩이 바뀐다.
+   * 주소의 필터처럼 바깥 값이 바뀌면 칩도 따라가야 할 때 쓴다. 칩을 새로 만들지 않아 누른 칩의 포커스가 남는다.
+   */
+  value?: string[];
   /** 칩을 누를 때마다 고른 값 전체를 배열로 받는다. 함수라서 Server Component에서는 넘길 수 없다. */
   onValueChange?: (value: string[]) => void;
   /** 칩을 모두 누를 수 없게 한다. */
@@ -35,6 +40,7 @@ export function ToggleGroup({
   label,
   items,
   defaultValue,
+  value,
   onValueChange,
   disabled = false,
 }: ToggleGroupProps) {
@@ -54,6 +60,7 @@ export function ToggleGroup({
         multiple
         aria-labelledby={labelId}
         defaultValue={defaultValue}
+        value={value}
         // Base UI가 두 번째 인자로 주는 eventDetails는 공개 API에 드러내지 않는다.
         onValueChange={(nextValue) => onValueChange?.(nextValue)}
         disabled={disabled}

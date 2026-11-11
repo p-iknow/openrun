@@ -1,5 +1,16 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, count, desc, eq, ilike, max, min, ne } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  ilike,
+  inArray,
+  max,
+  min,
+  ne,
+} from 'drizzle-orm';
 import { Clock } from '../clock/clock.module.js';
 import { DATABASE, type Database } from '../db/database.module.js';
 import { performances, shows } from '../db/schema/shows.js';
@@ -17,7 +28,14 @@ export class ShowsService {
     @Inject(POSTER_BASE_URL) private readonly posterBaseUrl: string,
   ) {}
 
-  async findPage({ page, size, sort, q }: ShowListQuery): Promise<ShowPageDto> {
+  async findPage({
+    page,
+    size,
+    sort,
+    q,
+    genre,
+    status,
+  }: ShowListQuery): Promise<ShowPageDto> {
     // 공연 기간은 저장하지 않고 회차에서 계산한다. 회차가 없는 공연은 목록에 나오지 않는다.
     const period = this.db
       .select({
@@ -35,6 +53,9 @@ export class ShowsService {
     const listCondition = and(
       ne(salesStatus.salesStatus, 'ended'),
       q ? ilike(shows.title, `%${escapeLikePattern(q)}%`) : undefined,
+      // 고른 값이 없으면 거르지 않는다. 같은 이름 안의 값은 OR(IN), 다른 조건과는 AND다.
+      genre.length > 0 ? inArray(shows.genre, genre) : undefined,
+      status.length > 0 ? inArray(salesStatus.salesStatus, status) : undefined,
     );
 
     const [rows, [total]] = await Promise.all([
