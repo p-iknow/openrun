@@ -20,6 +20,8 @@ export interface TextFieldProps {
   placeholder?: string;
   /** 처음 값. 비제어로만 쓰고, 바뀐 값은 `onValueChange`로 받는다. 주소의 검색어를 채울 때 쓴다. */
   defaultValue?: string;
+  /** 입력할 수 있는 최대 글자 수(UTF-16 단위). 서버가 받는 길이를 넘지 않게 막을 때 쓴다. 예: 제목 검색이면 `50`. */
+  maxLength?: number;
   /** 함수라서 Server Component에서는 넘길 수 없다. 앱의 클라이언트 컴포넌트에서 넘긴다. */
   onValueChange?: (value: string) => void;
   disabled?: boolean;
@@ -31,6 +33,7 @@ export function TextField({
   type = 'text',
   placeholder,
   defaultValue,
+  maxLength,
   onValueChange,
   disabled = false,
 }: TextFieldProps) {
@@ -47,6 +50,7 @@ export function TextField({
         type={type}
         placeholder={placeholder}
         defaultValue={defaultValue}
+        maxLength={maxLength}
         onValueChange={onValueChange}
         className={cn(
           'h-[52px] w-full rounded-button border border-border-input bg-surface px-lg text-body text-text transition-colors',

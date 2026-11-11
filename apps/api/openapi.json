@@ -30,6 +30,32 @@
               "minimum": 1,
               "maximum": 100
             }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "공연 제목 검색어. 앞뒤 공백을 지우고, 빈 값이면 검색하지 않는다. 대소문자를 구분하지 않는 부분 일치이며 %, _, \\도 글자 그대로 찾는다. 최대 50자.",
+            "schema": {
+              "description": "공연 제목 검색어. 앞뒤 공백을 지우고, 빈 값이면 검색하지 않는다. 대소문자를 구분하지 않는 부분 일치이며 %, _, \\도 글자 그대로 찾는다. 최대 50자.",
+              "type": "string",
+              "maxLength": 50
+            }
+          },
+          {
+            "name": "sort",
+            "required": false,
+            "in": "query",
+            "description": "정렬. start_date는 첫 회차 일시가 이른 순(기본), newest는 등록 일시가 늦은 순이다. 정렬값이 같으면 id로 순서를 고정한다.",
+            "schema": {
+              "default": "start_date",
+              "description": "정렬. start_date는 첫 회차 일시가 이른 순(기본), newest는 등록 일시가 늦은 순이다. 정렬값이 같으면 id로 순서를 고정한다.",
+              "type": "string",
+              "enum": [
+                "start_date",
+                "newest"
+              ]
+            }
           }
         ],
         "responses": {

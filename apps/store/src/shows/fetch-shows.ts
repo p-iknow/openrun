@@ -13,7 +13,14 @@ export async function fetchShows({
 }): Promise<ShowPage> {
   return unwrap(
     await client.GET('/shows', {
-      params: { query: { page: query.page, size: SHOW_PAGE_SIZE } },
+      params: {
+        query: {
+          page: query.page,
+          size: SHOW_PAGE_SIZE,
+          q: query.q ?? undefined,
+          sort: query.sort,
+        },
+      },
     }),
   );
 }

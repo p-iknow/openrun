@@ -1,27 +1,51 @@
-// 공연 목록 주소(`/?page=2`)의 쿼리를 다룬다. 주소에는 기본값과 다른 값만 남긴다.
+import type { paths } from '@openrun/api-client';
+
+// 공연 목록 주소(`/?q=정원&sort=newest&page=2`)의 쿼리를 다룬다. 주소에는 기본값과 다른 값만 남긴다.
 
 /** 페이지 크기는 고정이라 주소에 넣지 않는다. */
 export const SHOW_PAGE_SIZE = 20;
 
+type ApiShowSort = NonNullable<
+  NonNullable<paths['/shows']['get']['parameters']['query']>['sort']
+>;
+
+/** 정렬 선택지. API 계약이 바뀌면 `satisfies`가 타입 검사에서 알린다. */
+export const SHOW_SORTS = [
+  'start_date',
+  'newest',
+] as const satisfies readonly ApiShowSort[];
+export type ShowSort = (typeof SHOW_SORTS)[number];
+
+/** API가 받는 검색어의 최대 길이. 넘는 값을 보내면 400이 오므로 미리 버린다. */
+export const SHOW_TITLE_QUERY_MAX_LENGTH = 50;
+
 const LIST_PATH = '/';
 const DEFAULT_PAGE = 1;
+const DEFAULT_SORT: ShowSort = 'start_date';
 
 export interface ShowListQuery {
   /** 1부터 센다. */
   page: number;
+  /** 공연 제목 검색어. 앞뒤 공백을 지운 값이고, 검색하지 않으면 `null`이다. */
+  q: string | null;
+  sort: ShowSort;
 }
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
 /**
- * Next의 `searchParams`를 목록 쿼리로 정리한다. 모르는 쿼리는 버리고, 잘못된 `page`는 1로 고친다.
+ * Next의 `searchParams`를 목록 쿼리로 정리한다. 모르는 쿼리와 잘못된 값은 버리거나 기본값으로 고친다.
  * 정리한 주소가 원래 주소와 다르면 `redirectTo`에 정리된 주소를 담는다.
  */
 export function normalizeShowListQuery(searchParams: SearchParams): {
   query: ShowListQuery;
   redirectTo: string | null;
 } {
-  const query = { page: parsePage(searchParams.page) };
+  const query = {
+    page: parsePage(searchParams.page),
+    q: parseTitleQuery(searchParams.q),
+    sort: parseSort(searchParams.sort),
+  };
   const href = getShowListHref(query);
   return {
     query,
@@ -29,13 +53,27 @@ export function normalizeShowListQuery(searchParams: SearchParams): {
   };
 }
 
-/** 목록 쿼리로 주소를 만든다. 기본값은 주소에서 뺀다. 페이지 링크는 현재 쿼리에서 `page`만 바꿔 넘긴다. */
+/**
+ * 목록 쿼리로 주소를 만든다. 기본값은 주소에서 빼고, 순서는 q, sort, page로 고정한다.
+ * 페이지 링크는 현재 쿼리에서 `page`만 바꿔 넘긴다.
+ */
 export function getShowListHref(query: ShowListQuery): string {
+  return toHref(getShowListSearchParams(query));
+}
+
+/** 목록 쿼리를 주소의 쿼리 문자열 값으로 바꾼다. 검색 폼은 이 값으로 함께 제출할 숨은 필드를 만든다. */
+export function getShowListSearchParams(query: ShowListQuery): URLSearchParams {
   const search = new URLSearchParams();
+  if (query.q !== null) {
+    search.set('q', query.q);
+  }
+  if (query.sort !== DEFAULT_SORT) {
+    search.set('sort', query.sort);
+  }
   if (query.page !== DEFAULT_PAGE) {
     search.set('page', String(query.page));
   }
-  return toHref(search);
+  return search;
 }
 
 /**
@@ -63,6 +101,20 @@ function parsePage(value: string | string[] | undefined): number {
   }
   const page = Number(value);
   return Number.isSafeInteger(page) ? page : DEFAULT_PAGE;
+}
+
+// API와 같이 앞뒤 공백을 지운 뒤 길이를 잰다. 빈 값과 너무 긴 값은 검색하지 않는다.
+// 검색 칸이 maxLength로 길이를 막으므로, 너무 긴 값은 주소를 직접 고쳤을 때만 들어온다.
+function parseTitleQuery(value: string | string[] | undefined): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const q = value.trim();
+  return q === '' || q.length > SHOW_TITLE_QUERY_MAX_LENGTH ? null : q;
+}
+
+function parseSort(value: string | string[] | undefined): ShowSort {
+  return SHOW_SORTS.find((sort) => sort === value) ?? DEFAULT_SORT;
 }
 
 function toSearch(searchParams: SearchParams): URLSearchParams {
