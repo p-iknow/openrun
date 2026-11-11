@@ -53,6 +53,13 @@ const learnFolders = [
       { file: '05-useRender로-요소-바꿔-끼우기.html', title: '05 useRender로 요소 바꿔 끼우기', tags: ['base-ui', 'design-system'] },
     ],
   },
+  {
+    folder: 'style',
+    title: '스타일',
+    documents: [
+      { file: '00-tailwind-배치-패턴.html', title: '00 Tailwind 배치 패턴', tags: ['css'] },
+    ],
+  },
 ];
 
 // 문서 하나하나에 폴더를 붙여 한 줄로 편다. 앞뒤 링크는 같은 폴더 안에서만 잇는다.
