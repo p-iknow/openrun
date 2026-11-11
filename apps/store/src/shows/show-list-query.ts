@@ -16,7 +16,10 @@ export const SHOW_SORTS = [
 ] as const satisfies readonly ApiShowSort[];
 export type ShowSort = (typeof SHOW_SORTS)[number];
 
-/** API가 받는 검색어의 최대 길이. 넘는 값을 보내면 400이 오므로 미리 버린다. */
+/**
+ * API가 받는 검색어의 최대 길이. 넘는 값을 보내면 400이 오므로 미리 버린다.
+ * 생성 타입에는 길이가 담기지 않아 타입 검사로 묶을 수 없다. API의 q 최대 길이(openapi.json의 maxLength)와 같게 둔다.
+ */
 export const SHOW_TITLE_QUERY_MAX_LENGTH = 50;
 
 const LIST_PATH = '/';
