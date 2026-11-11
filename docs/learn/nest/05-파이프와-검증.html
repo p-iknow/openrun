@@ -146,11 +146,78 @@ findPage(
 
         <section id="shape">
           <h2>파이프의 생김새</h2>
-          <p>파이프는 <code>transform</code> 메서드 하나짜리 객체다.</p>
-          <pre><code class="language-ts">// @nestjs/common의 PipeTransform
+          <p>
+            파이프는 <code>transform</code> 메서드 하나짜리 객체다. 두 번째 인자 <code>metadata</code>의 타입
+            <code>ArgumentMetadata</code>부터 보면, 파이프가 "지금 어떤 인자를 다루는지" 알 수 있는 정보가 이것뿐이다. 아래는 설치된
+            <code>@nestjs/common</code> 12.4의 선언이고, 주석의 값은 <code>GET /shows?page=abc</code>에서 이 저장소의 핸들러
+            <code>findPage(@Query({ schema: showListQuerySchema }) query: ShowListQuery)</code>가 받는 값이다.
+          </p>
+          <pre><code class="language-ts">// @nestjs/common: interfaces/features/paramtype.interface.d.ts
+type Paramtype = 'body' | 'query' | 'param' | 'custom';
+
+// @nestjs/common: interfaces/features/pipe-transform.interface.d.ts
+interface ArgumentMetadata&lt;Metatype = any&gt; {
+  // 값이 요청의 어디서 왔나. @Body → 'body', @Query → 'query', @Param → 'param',
+  // createParamDecorator로 만든 직접 만든 데코레이터 → 'custom'
+  readonly type: Paramtype;                        // 예: 'query'
+
+  // 매개변수에 적은 TypeScript 타입이 실행 중에도 남는 것(클래스, String, Number 등)이면 그 생성자.
+  // ShowListQuery는 type 별칭이라 컴파일하면 사라지고 Object로 남는다.
+  readonly metatype?: Type&lt;Metatype&gt; | undefined;  // 예: Object
+
+  // 데코레이터에 넘긴 이름. @Query('page')면 'page', @Query()처럼 전체를 받으면 undefined
+  readonly data?: string | undefined;              // 예: undefined
+
+  // @Query({ schema })처럼 데코레이터에 붙인 Standard Schema(zod 등)
+  readonly schema?: StandardSchemaV1;              // 예: showListQuerySchema
+}
+
+// @nestjs/common: 파이프가 지켜야 하는 모양
 interface PipeTransform {
   transform(value: unknown, metadata: ArgumentMetadata): unknown;
+  //        └ 예: { page: 'abc' }   └ 예: 위의 네 값
 }</code></pre>
+          <p>
+            같은 요청이라도 매개변수를 어떻게 적느냐에 따라 <code>metadata</code>가 달라진다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>핸들러의 매개변수</th>
+                  <th><code>value</code></th>
+                  <th><code>metadata</code></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>@Query({ schema: showListQuerySchema }) query: ShowListQuery</code></td>
+                  <td><code>{ page: 'abc' }</code></td>
+                  <td><code>{ type: 'query', metatype: Object, data: undefined, schema: showListQuerySchema }</code></td>
+                </tr>
+                <tr>
+                  <td><code>@Query('page') page: string</code></td>
+                  <td><code>'abc'</code> (그 키의 값만)</td>
+                  <td><code>{ type: 'query', metatype: String, data: 'page', schema: undefined }</code></td>
+                </tr>
+                <tr>
+                  <td><code>@Param('id') id: number</code> (<code>/shows/7</code>)</td>
+                  <td><code>'7'</code> (주소 조각도 글자)</td>
+                  <td><code>{ type: 'param', metatype: Number, data: 'id', schema: undefined }</code></td>
+                </tr>
+                <tr>
+                  <td><code>@Body() body: CreateOrderDto</code> (클래스)</td>
+                  <td>요청 본문 객체</td>
+                  <td><code>{ type: 'body', metatype: CreateOrderDto, data: undefined, schema: undefined }</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            세 번째 줄처럼 타입을 <code>number</code>로 적어도 <code>value</code>는 글자 <code>'7'</code>이다. 타입은 파이프에게
+            <code>metatype: Number</code>라는 힌트를 줄 뿐, 값을 바꾸는 것은 파이프(<code>ParseIntPipe</code> 등)의 일이다. 아래 표는 첫
+            번째 줄, 곧 이 저장소의 경우를 하나씩 풀어 쓴 것이다.
+          </p>
           <div class="table-wrap">
             <table>
               <thead>
