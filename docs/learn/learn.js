@@ -29,6 +29,11 @@ const learnFolders = [
     ],
   },
   {
+    folder: 'zod',
+    title: 'zod',
+    documents: [{ file: '00-zod-기초.html', title: '00 zod 기초: 실행 중에도 남는 타입', tags: ['zod'] }],
+  },
+  {
     folder: 'db-and-drizzle',
     title: 'DB와 Drizzle',
     documents: [

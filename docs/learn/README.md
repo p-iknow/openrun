@@ -10,6 +10,7 @@
 |---|---|
 | `next/` | Next.js, 스토어 앱 구조, API 호출 |
 | `nest/` | NestJS, API 테스트 |
+| `zod/` | zod 스키마로 실행 중에 값 검사하기, 타입과 문서 만들기 |
 | `db-and-drizzle/` | DB와 SQL 개념, Drizzle 스키마와 쿼리, 마이그레이션 |
 | `design-system/` | `store-ui`의 토큰, 컴포넌트, Storybook, 라이브러리 빌드 |
 | `style/` | CSS와 Tailwind로 배치하고 꾸미는 패턴(앱과 `store-ui` 공통) |
@@ -49,6 +50,7 @@
 | 태그 | 대상 |
 |---|---|
 | `nestjs` | NestJS의 구조와 사용법 |
+| `zod` | zod 스키마의 문법과 동작 |
 | `drizzle` | Drizzle ORM의 스키마, 마이그레이션, 쿼리 |
 | `database` | Drizzle과 무관한 DB와 SQL 개념(테이블, 키, JOIN, 인덱스 등) |
 | `testing` | 테스트 구성, 도구, 작성 방법 |
