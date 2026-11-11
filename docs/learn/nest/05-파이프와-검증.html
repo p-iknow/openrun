@@ -917,30 +917,27 @@ export function createValidationPipe(): StandardSchemaValidationPipe {
   { path: ['page'], message: '1 이상의 정수여야 합니다.' },
   { path: ['size'], message: '1 이상 100 이하의 정수여야 합니다.' },
 ]</code></pre>
-          <p>반복문이 두 번 돈다. 번호는 위 코드의 주석 번호다.</p>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>단계</th>
-                  <th>첫 번째 issue</th>
-                  <th>두 번째 issue</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr><td>② <code>issue.path</code></td><td><code>['page']</code></td><td><code>['size']</code></td></tr>
-                <tr><td>③ 칸마다 글자로</td><td><code>['page']</code> (이미 글자)</td><td><code>['size']</code></td></tr>
-                <tr><td>④ <code>.join('.')</code></td><td><code>'page'</code></td><td><code>'size'</code></td></tr>
-                <tr><td>⑤ <code>errors.has(field)</code></td><td><code>false</code> (처음)</td><td><code>false</code> (처음)</td></tr>
-                <tr>
-                  <td>⑥ 저장 후 <code>errors</code></td>
-                  <td><code>page → { field: 'page', detail: '1 이상의 정수여야 합니다.' }</code></td>
-                  <td>위에 더해 <code>size → { field: 'size', detail: '1 이상 100 이하의 정수여야 합니다.' }</code></td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <p>⑦⑧에서 만들어지는 예외:</p>
+          <p>반복문이 두 번 돈다. 코드 한 줄마다 그 바퀴에서 실제로 나오는 값을 오른쪽에 적었다.</p>
+          <pre><code class="language-js">// 첫 번째 바퀴: issue = { path: ['page'], message: '1 이상의 정수여야 합니다.' }
+const field = (issue.path ?? [])     // ['page']
+  .map((segment) =&gt; ...String(segment))  // ['page']  (이미 글자라 그대로)
+  .join('.');                        // 'page'
+if (!errors.has(field)) {            // errors.has('page') → false, 처음 본 필드
+  errors.set(field, { field, detail: issue.message });
+}
+// errors: Map { 'page' → { field: 'page', detail: '1 이상의 정수여야 합니다.' } }</code></pre>
+          <pre><code class="language-js">// 두 번째 바퀴: issue = { path: ['size'], message: '1 이상 100 이하의 정수여야 합니다.' }
+const field = (issue.path ?? [])     // ['size']
+  .map((segment) =&gt; ...String(segment))  // ['size']
+  .join('.');                        // 'size'
+if (!errors.has(field)) {            // errors.has('size') → false, 처음 본 필드
+  errors.set(field, { field, detail: issue.message });
+}
+// errors: Map {
+//   'page' → { field: 'page', detail: '1 이상의 정수여야 합니다.' },
+//   'size' → { field: 'size', detail: '1 이상 100 이하의 정수여야 합니다.' },
+// }</code></pre>
+          <p>반복문이 끝나면 <code>return new ProblemException(...)</code>이 실행된다. <code>[...errors.values()]</code>가 Map에 넣은 순서대로 배열을 만든다:</p>
           <pre><code class="language-js">new ProblemException({
   status: 400,
   code: 'VALIDATION_FAILED',
@@ -964,22 +961,18 @@ export function createValidationPipe(): StandardSchemaValidationPipe {
   { path: ['q'], message: '3자 이하' },
   { path: ['q'], message: '소문자만' },   // 같은 필드가 한 번 더
 ]</code></pre>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>단계</th>
-                  <th>첫 번째 issue</th>
-                  <th>두 번째 issue</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr><td>④ <code>field</code></td><td><code>'q'</code></td><td><code>'q'</code></td></tr>
-                <tr><td>⑤ <code>errors.has('q')</code></td><td><code>false</code> → 저장</td><td><strong><code>true</code> → 건너뜀</strong></td></tr>
-                <tr><td><code>errors</code></td><td><code>q → { field: 'q', detail: '3자 이하' }</code></td><td>그대로</td></tr>
-              </tbody>
-            </table>
-          </div>
+          <pre><code class="language-js">// 첫 번째 바퀴: issue = { path: ['q'], message: '3자 이하' }
+const field = ...join('.');          // 'q'
+if (!errors.has(field)) {            // errors.has('q') → false, 처음 본 필드라 저장
+  errors.set(field, { field, detail: issue.message });
+}
+// errors: Map { 'q' → { field: 'q', detail: '3자 이하' } }</code></pre>
+          <pre><code class="language-js">// 두 번째 바퀴: issue = { path: ['q'], message: '소문자만' }
+const field = ...join('.');          // 'q'
+if (!errors.has(field)) {            // errors.has('q') → true, 이미 있어서 if 안으로 들어가지 않는다
+  errors.set(field, { field, detail: issue.message });   // 실행되지 않음
+}
+// errors: Map { 'q' → { field: 'q', detail: '3자 이하' } }   ← 그대로</code></pre>
           <p>결과: <code>errors: [{ field: 'q', detail: '3자 이하' }]</code>.</p>
           <p>
             <code>Map</code>을 쓴 이유가 이것이다. 키가 필드 이름이라 같은 필드는 처음 것만 남고, 응답의 <code>errors</code>가
@@ -994,27 +987,23 @@ export function createValidationPipe(): StandardSchemaValidationPipe {
             <code>?genre=musical&amp;genre=x</code>, 곧 <code>{ genre: ['musical', 'x'] }</code>를 넣었다.
           </p>
           <pre><code class="language-js">[{ path: ['genre', 1], message: '모르는 장르' }]   // genre 배열의 1번째(0부터 셈) 값</code></pre>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>단계</th>
-                  <th>값</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr><td>② <code>issue.path</code></td><td><code>['genre', 1]</code> (글자 하나, 숫자 하나)</td></tr>
-                <tr><td>③ 칸마다 <code>String()</code></td><td><code>['genre', '1']</code></td></tr>
-                <tr><td>④ <code>.join('.')</code></td><td><code>'genre.1'</code></td></tr>
-              </tbody>
-            </table>
-          </div>
+          <pre><code class="language-js">// 한 바퀴: issue = { path: ['genre', 1], message: '모르는 장르' }
+const field = (issue.path ?? [])     // ['genre', 1]   (글자 하나, 숫자 하나)
+  .map((segment) =&gt;
+    typeof segment === 'object'      // 둘 다 객체가 아니라 오른쪽으로
+      ? String(segment.key)
+      : String(segment))             // ['genre', '1']  (숫자 1이 글자 '1'로)
+  .join('.');                        // 'genre.1'
+if (!errors.has(field)) {            // errors.has('genre.1') → false
+  errors.set(field, { field, detail: issue.message });
+}
+// errors: Map { 'genre.1' → { field: 'genre.1', detail: '모르는 장르' } }</code></pre>
           <p>
             결과: <code>errors: [{ field: 'genre.1', detail: '모르는 장르' }]</code>. <code>path</code>가 배열인 이유는 위치가 여러 단계일
             수 있어서다(객체 안의 배열 안의 값 등). 응답에서는 사람이 읽기 쉽게 점으로 이어 붙인다.
           </p>
 
-          <h3>③의 typeof segment === 'object'는 왜 있나</h3>
+          <h3>typeof segment === 'object'는 왜 있나</h3>
           <p>
             Standard Schema 규격에서는 <code>path</code>의 한 칸이 <code>'page'</code>나 <code>1</code> 같은 값일 수도 있고,
             <code>{ key: 'page' }</code> 같은 객체일 수도 있다. 이 파이프는 zod만이 아니라 그 규격을 따르는 모든 검증 라이브러리를
