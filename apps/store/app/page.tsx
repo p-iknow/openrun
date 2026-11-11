@@ -39,7 +39,7 @@ export default async function HomePage({ searchParams }: PageProps<'/'>) {
       {/* 예매 사이트처럼 결과 수와 정렬을 목록 바로 위 한 줄에 둔다. 제목 검색은 헤더에 있다. */}
       <div className="mb-md flex items-center justify-between gap-md">
         <p className="font-semibold">공연 {showPage.totalCount}개</p>
-        {/* 정렬은 비제어라, 뒤로 가기나 초기화 링크로 주소가 바뀌면 key로 새로 그려 주소의 값을 다시 채운다. */}
+        {/* 정렬은 비제어라, 뒤로 가기나 초기화 링크로 주소가 바뀌면 key로 새로 만들어(리마운트) 주소의 값을 다시 채운다. */}
         <ShowSortSelect key={query.sort} query={query} />
       </div>
       {cards.length === 0 ? (
