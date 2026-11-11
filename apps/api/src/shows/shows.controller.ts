@@ -1,6 +1,6 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Query } from '@nestjs/common';
 import { ApiOkResponse } from '@nestjs/swagger';
-import { ShowPageDto } from './show.dto.js';
+import { ShowListQueryDto, ShowPageDto } from './show.dto.js';
 import { ShowsService } from './shows.service.js';
 
 @Controller('shows')
@@ -9,7 +9,7 @@ export class ShowsController {
 
   @Get()
   @ApiOkResponse({ type: ShowPageDto })
-  findPage(): Promise<ShowPageDto> {
-    return this.showsService.findPage();
+  findPage(@Query() query: ShowListQueryDto): Promise<ShowPageDto> {
+    return this.showsService.findPage(query);
   }
 }
