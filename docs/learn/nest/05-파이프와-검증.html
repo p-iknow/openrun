@@ -857,22 +857,22 @@ export function createValidationPipe(): StandardSchemaValidationPipe {
   return new StandardSchemaValidationPipe({
     exceptionFactory: (issues) =&gt; {
       // 한 필드가 여러 규칙에 걸릴 수 있어 필드마다 처음 걸린 것 하나만 남긴다.
-      const errors = new Map&lt;string, FieldErrorDto&gt;();           // ① 필드 이름 → 오류 하나
+      const errors = new Map&lt;string, FieldErrorDto&gt;();      // ① 필드 → 오류
       for (const issue of issues) {
-        const field = (issue.path ?? [])                          // ② 위치 배열. 예: ['page'], ['genre', 1]
-          .map((segment) =&gt;
-            typeof segment === 'object' ? String(segment.key) : String(segment), // ③ 한 칸을 글자로
+        const field = (issue.path ?? [])                    // ② 예: ['page']
+          .map((segment) =&gt;                                 // ③ 칸마다 글자로
+            typeof segment === 'object' ? String(segment.key) : String(segment),
           )
-          .join('.');                                             // ④ 점으로 잇기. 예: 'page', 'genre.1'
-        if (!errors.has(field)) {                                 // ⑤ 이 필드가 처음이면
-          errors.set(field, { field, detail: issue.message });    // ⑥ 저장
+          .join('.');                                       // ④ 예: 'page'
+        if (!errors.has(field)) {                           // ⑤ 처음 본 필드만
+          errors.set(field, { field, detail: issue.message }); // ⑥ 저장
         }
       }
-      return new ProblemException({                               // ⑦ 우리 형식의 예외
+      return new ProblemException({                         // ⑦ 우리 형식의 예외
         status: HttpStatus.BAD_REQUEST,
         code: 'VALIDATION_FAILED',
         detail: '요청 값이 올바르지 않습니다.',
-        errors: [...errors.values()],                             // ⑧ Map에 넣은 순서대로 배열로
+        errors: [...errors.values()],                       // ⑧ 넣은 순서대로
       });
     },
   });
