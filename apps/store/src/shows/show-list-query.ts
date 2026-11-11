@@ -57,6 +57,21 @@ export function normalizeShowListQuery(searchParams: SearchParams): {
 }
 
 /**
+ * 클라이언트에서 읽은 주소의 쿼리 문자열(`useSearchParams`)을 목록 쿼리로 정리한다.
+ * Next의 `searchParams`와 같은 모양(한 번이면 글자, 여러 번이면 배열)으로 바꿔 같은 규칙을 쓴다.
+ */
+export function getShowListQueryFromSearch(
+  search: URLSearchParams,
+): ShowListQuery {
+  const searchParams: SearchParams = {};
+  for (const key of new Set(search.keys())) {
+    const values = search.getAll(key);
+    searchParams[key] = values.length === 1 ? values[0] : values;
+  }
+  return normalizeShowListQuery(searchParams).query;
+}
+
+/**
  * 목록 쿼리로 주소를 만든다. 기본값은 주소에서 빼고, 순서는 q, sort, page로 고정한다.
  * 페이지 링크는 현재 쿼리에서 `page`만 바꿔 넘긴다.
  */

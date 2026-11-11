@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   getSearchFormHiddenFields,
+  getShowListQueryFromSearch,
   getShowListHref,
   getSortChangeHref,
   normalizeShowListQuery,
@@ -128,6 +129,24 @@ describe('normalizeShowListQuery', () => {
       query: { ...DEFAULT_QUERY, page: 2 },
       redirectTo: '/?page=2',
     });
+  });
+});
+
+describe('getShowListQueryFromSearch', () => {
+  it('주소의 쿼리 문자열을 normalizeShowListQuery와 같은 규칙으로 정리한다', () => {
+    expect(
+      getShowListQueryFromSearch(
+        new URLSearchParams('q=+%EC%A0%95%EC%9B%90+&sort=newest&page=2&foo=1'),
+      ),
+    ).toEqual({ q: '정원', sort: 'newest', page: 2 });
+  });
+
+  it('여러 번 들어온 값은 잘못된 값으로 본다', () => {
+    expect(
+      getShowListQueryFromSearch(
+        new URLSearchParams('sort=newest&sort=newest'),
+      ),
+    ).toEqual(DEFAULT_QUERY);
   });
 });
 

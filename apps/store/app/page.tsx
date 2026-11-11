@@ -11,7 +11,6 @@ import {
   getShowListHref,
   normalizeShowListQuery,
 } from '../src/shows/show-list-query';
-import { ShowListSearchForm } from '../src/shows/show-list-search-form';
 import { ShowSortSelect } from '../src/shows/show-sort-select';
 
 export default async function HomePage({ searchParams }: PageProps<'/'>) {
@@ -36,16 +35,11 @@ export default async function HomePage({ searchParams }: PageProps<'/'>) {
 
   return (
     <main>
-      {/* 검색 칸과 정렬은 비제어라, 뒤로 가기나 초기화 링크로 주소가 바뀌면 key로 새로 그려 주소의 값을 다시 채운다. */}
-      <div className="mb-xl flex flex-col gap-lg sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-heading font-bold">공연</h1>
-        <div className="sm:w-[400px]">
-          <ShowListSearchForm key={query.q ?? ''} query={query} />
-        </div>
-      </div>
-      {/* 예매 사이트처럼 결과 수와 정렬을 목록 바로 위 한 줄에 둔다. */}
+      <h1 className="mb-lg text-heading font-bold">공연</h1>
+      {/* 예매 사이트처럼 결과 수와 정렬을 목록 바로 위 한 줄에 둔다. 제목 검색은 헤더에 있다. */}
       <div className="mb-md flex items-center justify-between gap-md">
         <p className="font-semibold">공연 {showPage.totalCount}개</p>
+        {/* 정렬은 비제어라, 뒤로 가기나 초기화 링크로 주소가 바뀌면 key로 새로 그려 주소의 값을 다시 채운다. */}
         <ShowSortSelect key={query.sort} query={query} />
       </div>
       {cards.length === 0 ? (
