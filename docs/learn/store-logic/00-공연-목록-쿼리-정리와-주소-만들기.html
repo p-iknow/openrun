@@ -245,9 +245,40 @@ return { query, redirectTo: href === 들어온 주소 ? null : href };</code></p
             여러 번이면 배열)으로 바꾼 뒤 <a href="#normalize">normalizeShowListQuery</a>에 넘긴다. 규칙을 두 번 쓰지
             않고 한 함수를 함께 쓰기 위해서다. 클라이언트에서는 리다이렉트하지 않으므로 <code>query</code>만 쓴다.
           </p>
-          <pre><code>URLSearchParams("q=정원&amp;q=햄릿&amp;sort=newest")
-  → { q: ['정원', '햄릿'], sort: 'newest' }   한 번이면 글자, 여러 번이면 배열
-  → { page: 1, q: null, sort: 'newest' }      q는 여러 번 들어와 버림</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>입력: 주소의 쿼리</th>
+                  <th>중간: searchParams 모양</th>
+                  <th>결과: query</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>q=정원&amp;sort=newest</code></td>
+                  <td><code>{ q: '정원', sort: 'newest' }</code></td>
+                  <td><code>{ page: 1, q: '정원', sort: 'newest' }</code></td>
+                </tr>
+                <tr>
+                  <td><code>q=정원&amp;q=햄릿&amp;sort=newest</code></td>
+                  <td><code>{ q: ['정원', '햄릿'], sort: 'newest' }</code></td>
+                  <td><code>{ page: 1, q: null, sort: 'newest' }</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            둘째 줄은 주소에 <code>q</code>가 두 번 붙은 경우다. URL 규칙상 같은 이름을 여러 번 넣을 수 있어서, 주소를
+            손으로 고치거나 밖에서 잘못 만든 링크로 들어오면 이런 주소가 생긴다. 우리 화면은 늘
+            <a href="#href">getShowListHref</a>로 주소를 만들어 <code>q</code>를 한 번만 넣으므로 스스로 만들지는 않는다.
+            <code>정원</code>과 <code>햄릿</code> 중 무엇을 찾으려던 건지 알 수 없으므로, <a href="#parse">q의 규칙</a>에
+            따라 배열이면 검색어가 없는 것(<code>null</code>)으로 본다.
+          </p>
+          <p>
+            <code>URLSearchParams.get('q')</code>로 첫 값만 읽지 않고 배열로 바꾸는 이유도 여기 있다. 헤더가 첫 값
+            <code>정원</code>을 쓰고 서버는 버리면, 같은 주소를 두 곳이 다르게 읽는다.
+          </p>
           <p>
             <code>HeaderSearch</code>는 목록 화면(<code>/</code>)이 아니면 빈 <code>URLSearchParams</code>를 넘긴다.
             그래서 다른 화면에서는 쿼리가 기본값 <code>{ page: 1, q: null, sort: 'start_date' }</code>이 되고, 검색은
