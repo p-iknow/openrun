@@ -1,0 +1,1156 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>05 파이프와 검증</title>
+    <link rel="stylesheet" href="../learn.css" />
+    <script src="../vendor/highlightjs/highlight.min.js" defer></script>
+    <script src="../learn.js" defer></script>
+  </head>
+  <body>
+    <div class="layout">
+      <nav aria-label="목차">
+        <strong>1부: 파이프란</strong>
+        <ol>
+          <li><a href="#overview">한눈에 보기</a></li>
+          <li><a href="#problem">파이프가 없으면</a></li>
+          <li><a href="#shape">파이프의 생김새</a></li>
+          <li><a href="#custom">직접 만들어 보기</a></li>
+        </ol>
+        <strong>2부: 요청이 지나가는 순서</strong>
+        <ol>
+          <li><a href="#lifecycle">핸들러 앞의 네 단계</a></li>
+          <li><a href="#scopes">파이프를 붙이는 네 곳과 순서</a></li>
+          <li><a href="#skip">파이프를 거치지 않는 인자</a></li>
+        </ol>
+        <strong>3부: 이 저장소의 검증 파이프</strong>
+        <ol>
+          <li><a href="#two-pipes">검증 파이프 두 가지</a></li>
+          <li><a href="#schema">showListQuerySchema 읽기</a></li>
+          <li><a href="#walkthrough">잘못된 요청 하나 따라가기</a></li>
+          <li><a href="#results">값마다 무엇이 나오나</a></li>
+          <li><a href="#exception-factory">exceptionFactory: 필드별 오류</a></li>
+          <li><a href="#app-pipe">왜 APP_PIPE인가</a></li>
+        </ol>
+        <strong>마무리</strong>
+        <ol>
+          <li><a href="#pitfalls">헷갈리기 쉬운 점</a></li>
+          <li><a href="#check">스스로 확인하기</a></li>
+          <li><a href="#more">더 읽을거리</a></li>
+        </ol>
+      </nav>
+
+      <main>
+        <h1>05 파이프와 검증</h1>
+        <p class="lead">
+          Nest의 파이프가 무엇이고 어떤 문제를 풀려고 나왔는지, 요청 안에서 언제 어떤 순서로 실행되는지 정리한다.
+          그다음 <code>GET /shows</code>의 쿼리를 검증하는 <code>StandardSchemaValidationPipe</code>와 zod 스키마를
+          한 줄씩 따라간다. Nest 내부 동작은 설치된 <code>@nestjs/core</code>·<code>@nestjs/common</code> 12.4 소스로,
+          검증 결과는 저장소의 스키마를 직접 실행해 확인했다.
+        </p>
+
+        <section id="overview">
+          <h2>한눈에 보기</h2>
+          <div class="callout">
+            <p>
+              <strong>파이프(Pipe)</strong>는 Nest가 컨트롤러 메서드(핸들러)를 부르기 <strong>직전에</strong>, 핸들러에 넘길
+              인자 하나하나를 받아 <strong>바꾸거나(변환) 검사하는(검증)</strong> 함수다. 값을 돌려주면 그 값이 핸들러에
+              들어가고, 예외를 던지면 핸들러는 불리지 않는다. 요청 값을 검사하는 파이프를
+              <strong>검증 파이프</strong>라고 부른다.
+            </p>
+          </div>
+          <div class="flow">
+            <div class="lane blue">
+              <div class="lane-title">올바른 요청: GET /shows?page=2</div>
+              <ol class="chain">
+                <li><span>쿼리 <code>{ page: '2' }</code></span></li>
+                <li><span>파이프: 숫자로 바꾸고 검사</span></li>
+                <li><span>핸들러가 <code>{ page: 2, size: 20 }</code>을 받음</span></li>
+              </ol>
+            </div>
+            <div class="lane green">
+              <div class="lane-title">잘못된 요청: GET /shows?page=abc</div>
+              <ol class="chain">
+                <li><span>쿼리 <code>{ page: 'abc' }</code></span></li>
+                <li><span>파이프: 검사 실패 → 예외</span></li>
+                <li><span>핸들러는 불리지 않음, 예외 필터가 400 응답</span></li>
+              </ol>
+            </div>
+          </div>
+          <p>
+            프론트엔드로 비유하면 react-hook-form에 zod 스키마를 넘겨 두는 것과 같다. 폼의 <code>onSubmit</code>은
+            검사를 통과한 값만 받고, 검사 실패는 폼 라이브러리가 따로 처리한다. Nest에서는 핸들러가
+            <code>onSubmit</code>, 파이프가 폼 라이브러리의 검증 단계, 예외 필터가 오류 표시를 맡는다.
+          </p>
+        </section>
+
+        <section id="problem">
+          <h2>파이프가 없으면</h2>
+          <p>
+            HTTP 요청의 쿼리 문자열은 전부 <strong>글자</strong>로 온다. <code>?page=2</code>의 <code>2</code>도 숫자
+            <code>2</code>가 아니라 글자 <code>'2'</code>다. 파이프가 없다면 <code>GET /shows?page=abc&amp;size=500</code>을
+            받는 핸들러는 이렇게 생겨야 한다.
+          </p>
+          <pre><code class="language-ts">@Get()
+findPage(@Query() query: Record&lt;string, string | undefined&gt;) {
+  // 1. 글자를 숫자로 바꾸고, 빠졌으면 기본값을 넣는다.
+  const page = query.page === undefined ? 1 : Number(query.page);
+  const size = query.size === undefined ? 20 : Number(query.size);
+
+  // 2. 범위를 검사하고, 틀리면 ADR 0007 형식으로 400을 던진다.
+  const errors = [];
+  if (!Number.isSafeInteger(page) || page &lt; 1) {
+    errors.push({ field: 'page', detail: '1 이상의 정수여야 합니다.' });
+  }
+  if (!Number.isSafeInteger(size) || size &lt; 1 || size &gt; 100) {
+    errors.push({ field: 'size', detail: '1 이상 100 이하의 정수여야 합니다.' });
+  }
+  if (errors.length &gt; 0) {
+    throw new ProblemException({ status: 400, code: 'VALIDATION_FAILED', detail: '요청 값이 올바르지 않습니다.', errors });
+  }
+
+  // 3. 이제야 하려던 일을 한다.
+  return this.showsService.findPage({ page, size });
+}</code></pre>
+          <p>이 코드에는 문제가 세 가지 있다.</p>
+          <ol class="steps blue">
+            <li>
+              <strong>모든 핸들러가 같은 코드를 반복한다</strong>
+              엔드포인트가 열 개면 "글자를 숫자로, 범위 검사, 400 던지기"를 열 번 쓴다. 공연 상세(<code>GET /shows/:id</code>)도,
+              뒤 티켓의 장르·판매 상태 필터도 같은 일을 한다.
+            </li>
+            <li>
+              <strong>오류 응답 모양이 제각각이 된다</strong>
+              누구는 <code>errors</code>를 빼먹고, 누구는 <code>code</code>를 다르게 쓴다. 스토어는 모든 오류가 같은
+              형식으로 온다고 믿고 <code>transformErrorResponse</code> 하나로 처리하므로, 한 곳만 어긋나도 깨진다.
+            </li>
+            <li>
+              <strong>핸들러가 업무보다 입력 청소에 바쁘다</strong>
+              핸들러가 실제로 하는 일은 마지막 한 줄인데, 읽는 사람은 그 앞의 검사 코드를 모두 지나야 한다.
+            </li>
+          </ol>
+          <p>
+            파이프는 이 입력 청소를 <strong>핸들러 바깥의 한곳</strong>으로 뺀다. 지금 저장소의 핸들러는 한 줄이고,
+            <code>query.page</code>는 이미 1 이상의 정수(<code>number</code>)다.
+          </p>
+          <pre><code class="language-ts">// apps/api/src/shows/shows.controller.ts
+@Get()
+@ApiOkResponse({ type: ShowPageDto })
+findPage(
+  @Query({ schema: showListQuerySchema }) query: ShowListQuery,
+): Promise&lt;ShowPageDto&gt; {
+  return this.showsService.findPage(query);
+}</code></pre>
+        </section>
+
+        <section id="shape">
+          <h2>파이프의 생김새</h2>
+          <p>
+            파이프는 <code>transform</code> 메서드 하나짜리 객체다. 두 번째 인자 <code>metadata</code>의 타입
+            <code>ArgumentMetadata</code>부터 보면, 파이프가 "지금 어떤 인자를 다루는지" 알 수 있는 정보가 이것뿐이다. 아래는 설치된
+            <code>@nestjs/common</code> 12.4의 선언이고, 주석의 값은 <code>GET /shows?page=abc</code>에서 이 저장소의 핸들러
+            <code>findPage(@Query({ schema: showListQuerySchema }) query: ShowListQuery)</code>가 받는 값이다.
+          </p>
+          <pre><code class="language-ts">// @nestjs/common: interfaces/features/paramtype.interface.d.ts
+type Paramtype = 'body' | 'query' | 'param' | 'custom';
+
+// @nestjs/common: interfaces/features/pipe-transform.interface.d.ts
+interface ArgumentMetadata&lt;Metatype = any&gt; {
+  // 값이 요청의 어디서 왔나. @Body → 'body', @Query → 'query', @Param → 'param',
+  // createParamDecorator로 만든 직접 만든 데코레이터 → 'custom'
+  readonly type: Paramtype;                        // 예: 'query'
+
+  // 매개변수에 적은 TypeScript 타입이 실행 중에도 남는 것(클래스, String, Number 등)이면 그 생성자.
+  // ShowListQuery는 type 별칭이라 컴파일하면 사라지고 Object로 남는다.
+  readonly metatype?: Type&lt;Metatype&gt; | undefined;  // 예: Object
+
+  // 데코레이터에 넘긴 이름. @Query('page')면 'page', @Query()처럼 전체를 받으면 undefined
+  readonly data?: string | undefined;              // 예: undefined
+
+  // @Query({ schema })처럼 데코레이터에 붙인 Standard Schema(zod 등)
+  readonly schema?: StandardSchemaV1;              // 예: showListQuerySchema
+}
+
+// @nestjs/common: 파이프가 지켜야 하는 모양
+interface PipeTransform {
+  transform(value: unknown, metadata: ArgumentMetadata): unknown;
+  //        └ 예: { page: 'abc' }   └ 예: 위의 네 값
+}</code></pre>
+          <p>
+            같은 요청이라도 매개변수를 어떻게 적느냐에 따라 <code>metadata</code>가 달라진다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>핸들러의 매개변수</th>
+                  <th><code>value</code></th>
+                  <th><code>metadata</code></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>@Query({ schema: showListQuerySchema }) query: ShowListQuery</code></td>
+                  <td><code>{ page: 'abc' }</code></td>
+                  <td><code>{ type: 'query', metatype: Object, data: undefined, schema: showListQuerySchema }</code></td>
+                </tr>
+                <tr>
+                  <td><code>@Query('page') page: string</code></td>
+                  <td><code>'abc'</code> (그 키의 값만)</td>
+                  <td><code>{ type: 'query', metatype: String, data: 'page', schema: undefined }</code></td>
+                </tr>
+                <tr>
+                  <td><code>@Param('id') id: number</code> (<code>/shows/7</code>)</td>
+                  <td><code>'7'</code> (주소 조각도 글자)</td>
+                  <td><code>{ type: 'param', metatype: Number, data: 'id', schema: undefined }</code></td>
+                </tr>
+                <tr>
+                  <td><code>@Body() body: CreateOrderDto</code> (클래스)</td>
+                  <td>요청 본문 객체</td>
+                  <td><code>{ type: 'body', metatype: CreateOrderDto, data: undefined, schema: undefined }</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            세 번째 줄처럼 타입을 <code>number</code>로 적어도 <code>value</code>는 글자 <code>'7'</code>이다. 타입은 파이프에게
+            <code>metatype: Number</code>라는 힌트를 줄 뿐, 값을 바꾸는 것은 파이프(<code>ParseIntPipe</code> 등)의 일이다. 아래 표는 첫
+            번째 줄, 곧 이 저장소의 경우를 하나씩 풀어 쓴 것이다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>받는 것·돌려주는 것</th>
+                  <th>뜻</th>
+                  <th><code>GET /shows?page=abc</code>일 때</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>value</code></td>
+                  <td>이 인자에 들어갈 원래 값</td>
+                  <td><code>{ page: 'abc' }</code></td>
+                </tr>
+                <tr>
+                  <td><code>metadata.type</code></td>
+                  <td>값이 어디서 왔나: <code>'query'</code>, <code>'body'</code>, <code>'param'</code> 등</td>
+                  <td><code>'query'</code></td>
+                </tr>
+                <tr>
+                  <td><code>metadata.data</code></td>
+                  <td><code>@Query('page')</code>처럼 이름을 줬을 때 그 이름</td>
+                  <td><code>undefined</code> (쿼리 전체를 받음)</td>
+                </tr>
+                <tr>
+                  <td><code>metadata.metatype</code></td>
+                  <td>매개변수의 TypeScript 타입이 클래스면 그 클래스</td>
+                  <td><code>Object</code> (아래 설명)</td>
+                </tr>
+                <tr>
+                  <td><code>metadata.schema</code></td>
+                  <td><code>@Query({ schema })</code>로 붙인 스키마</td>
+                  <td><code>showListQuerySchema</code></td>
+                </tr>
+                <tr>
+                  <td>돌려주는 값</td>
+                  <td>핸들러에 실제로 들어갈 값. 바꿔 돌려주면 <strong>변환</strong></td>
+                  <td>(예외를 던지므로 없음)</td>
+                </tr>
+                <tr>
+                  <td>던지는 예외</td>
+                  <td>핸들러를 부르지 않고 예외 필터로 보낸다. 이것이 <strong>검증</strong></td>
+                  <td><code>ProblemException</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            <code>metatype</code>이 <code>Object</code>인 이유: <code>ShowListQuery</code>는 <code>type</code> 별칭이라
+            컴파일하면 사라진다. 컴파일러가 남기는 타입 기록(<a href="01-데코레이터와-메타데이터.html#compiler">nest 01
+            문서</a>)에는 클래스만 남고, 클래스가 아니면 <code>Object</code>로 적힌다. 그래서 파이프가 타입만 보고는 무엇을
+            검사할지 알 수 없고, 스키마를 데코레이터에 직접 넘긴다.
+          </p>
+        </section>
+
+        <section id="custom">
+          <h2>직접 만들어 보기</h2>
+          <p>
+            검증 파이프가 하는 일을 손으로 만들면 이렇다. 이 저장소에는 없는 연습용 코드다. 쿼리 값 하나를 받아 1 이상의
+            정수로 바꾸고, 아니면 400을 던진다.
+          </p>
+          <pre><code class="language-ts">import { HttpStatus, type ArgumentMetadata, type PipeTransform } from '@nestjs/common';
+import { ProblemException } from '../problem-details/problem.exception.js';
+
+export class ParsePositiveIntPipe implements PipeTransform&lt;unknown, number&gt; {
+  transform(value: unknown, metadata: ArgumentMetadata): number {
+    const number = Number(value);
+    if (typeof value !== 'string' || !Number.isSafeInteger(number) || number &lt; 1) {
+      throw new ProblemException({
+        status: HttpStatus.BAD_REQUEST,
+        code: 'VALIDATION_FAILED',
+        detail: '요청 값이 올바르지 않습니다.',
+        errors: [{ field: metadata.data ?? 'value', detail: '1 이상의 정수여야 합니다.' }],
+      });
+    }
+    return number; // 글자 '2'가 숫자 2로 바뀌어 핸들러에 들어간다.
+  }
+}
+
+// 쓰는 쪽
+@Get(':id')
+findOne(@Param('id', ParsePositiveIntPipe) id: number) {
+  // 여기서 id는 항상 1 이상의 정수다.
+}</code></pre>
+          <p>
+            <code>@Param('id', ParsePositiveIntPipe)</code>의 두 번째 인자가 이 인자에만 붙는 파이프다. Nest가
+            <code>metadata.data</code>에 <code>'id'</code>를 넣어 주므로 오류에 필드 이름을 실을 수 있다. Nest에는 이런
+            파이프가 몇 개 들어 있다(<code>ParseIntPipe</code>, <code>ParseUUIDPipe</code>, <code>ParseEnumPipe</code> 등).
+          </p>
+          <p>
+            값 하나짜리라면 이걸로 충분하다. 하지만 쿼리에 <code>page</code>, <code>size</code>, <code>genre</code>,
+            <code>sort</code>가 함께 오면 인자마다 파이프를 붙여야 하고, 여러 필드의 오류를 한 응답에 모으지도 못한다. 그래서
+            <strong>객체 전체를 규칙 묶음(스키마)으로 한 번에 검사하는</strong> 검증 파이프를 쓴다(<a href="#two-pipes">3부</a>).
+          </p>
+        </section>
+
+        <section id="lifecycle">
+          <h2>핸들러 앞의 네 단계</h2>
+          <p>
+            요청 하나는 핸들러에 닿기 전에 정해진 순서로 여러 단계를 지난다. 파이프는 <strong>핸들러 바로 앞</strong>이다.
+          </p>
+          <ul class="tree" style="--tree-col: 15rem">
+            <li>
+              <div class="tree-row">
+                <span class="tree-node">HTTP 요청</span>
+                <span class="tree-note">Express가 받아 <code>req.query</code>를 객체로 만든다</span>
+              </div>
+              <ul>
+                <li>
+                  <div class="tree-row">
+                    <span class="tree-node">1. 미들웨어</span>
+                    <span class="tree-note">Express 단계. 로깅, CORS 등. 아직 어느 핸들러인지 모른다</span>
+                  </div>
+                </li>
+                <li>
+                  <div class="tree-row">
+                    <span class="tree-node">2. 가드(Guard)</span>
+                    <span class="tree-note">"들여보내도 되나?" 인증·권한. 1.4 인증에서 쓴다</span>
+                  </div>
+                </li>
+                <li>
+                  <div class="tree-row">
+                    <span class="tree-node">3. 인터셉터 앞부분</span>
+                    <span class="tree-note">시간 재기, 응답 감싸기 등. 핸들러 실행 전체를 감싼다</span>
+                  </div>
+                </li>
+                <li>
+                  <div class="tree-row">
+                    <span class="tree-node">4. 파이프</span>
+                    <span class="tree-note"><span class="badge blue">이 문서</span> 인자마다 변환·검증</span>
+                  </div>
+                </li>
+                <li>
+                  <div class="tree-row">
+                    <span class="tree-node">5. 핸들러</span>
+                    <span class="tree-note">컨트롤러 메서드. <code>showsService.findPage(query)</code></span>
+                  </div>
+                </li>
+                <li>
+                  <div class="tree-row">
+                    <span class="tree-node">6. 인터셉터 뒷부분</span>
+                    <span class="tree-note">핸들러가 돌려준 값을 받아 다룬다</span>
+                  </div>
+                </li>
+                <li>
+                  <div class="tree-row">
+                    <span class="tree-node">어디서든 예외</span>
+                    <span class="tree-note">예외 필터 → 오류 응답 (<a href="04-예외-필터와-APP_FILTER.html#flow">nest 04 문서</a>)</span>
+                  </div>
+                </li>
+              </ul>
+            </li>
+          </ul>
+          <p>
+            Nest 소스(<code>@nestjs/core/router/router-execution-context.js</code>)에서 순서가 그대로 보인다. 가드를 먼저
+            기다리고, 파이프와 핸들러 호출을 묶은 함수(<code>handler</code>)를 인터셉터에 넘긴다.
+          </p>
+          <pre><code class="language-js">// 핸들러를 부르기 직전에 파이프를 기다린다.
+const handler = (args, req, res, next, ...) =&gt; async () =&gt; {
+  const pendingPipes = fnApplyPipes &amp;&amp; fnApplyPipes(args, req, res, next);
+  pendingPipes &amp;&amp; (await pendingPipes);       // 파이프에서 예외가 나면 여기서 멈춘다
+  const result = callback.apply(instance, args); // 핸들러 호출
+  ...
+};
+
+return async (req, res, next) =&gt; {
+  fnCanActivate &amp;&amp; (await fnCanActivate([req, res, next])); // 가드
+  ...
+  // 인터셉터가 handler(파이프 + 핸들러)를 감싸 실행한다.
+  const resultOrDeferred = this.interceptorsConsumer.intercept(interceptors, ..., handler(args, req, res, next, ...));
+};</code></pre>
+          <div class="callout">
+            <p>
+              가드가 파이프보다 앞이다. 로그인하지 않은 사용자의 요청은 입력 검사까지 가지도 않고 가드에서 막힌다. 반대로
+              파이프에서 막힌 요청도 핸들러와 서비스, DB 쿼리를 하나도 실행하지 않는다.
+            </p>
+          </div>
+        </section>
+
+        <section id="scopes">
+          <h2>파이프를 붙이는 네 곳과 순서</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>붙이는 곳</th>
+                  <th>쓰는 법</th>
+                  <th>적용 범위</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>전역</td>
+                  <td><code>{ provide: APP_PIPE, ... }</code> 또는 <code>app.useGlobalPipes()</code></td>
+                  <td>모든 핸들러의 모든 인자</td>
+                </tr>
+                <tr>
+                  <td>컨트롤러</td>
+                  <td>클래스에 <code>@UsePipes(...)</code></td>
+                  <td>그 컨트롤러의 핸들러</td>
+                </tr>
+                <tr>
+                  <td>메서드</td>
+                  <td>메서드에 <code>@UsePipes(...)</code></td>
+                  <td>그 핸들러</td>
+                </tr>
+                <tr>
+                  <td>인자</td>
+                  <td><code>@Query('page', ParseIntPipe)</code>, <code>@Query({ pipes: [...] })</code></td>
+                  <td>그 인자 하나</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            여러 곳에 붙어 있으면 <strong>전역 → 컨트롤러 → 메서드 → 인자</strong> 순서로 하나씩 실행되고, 앞 파이프가 돌려준
+            값이 다음 파이프의 <code>value</code>가 된다. Nest 소스(<code>pipes/pipes-consumer.js</code>)는 단순한 반복문이다.
+          </p>
+          <pre><code class="language-js">async applyPipes(value, { metatype, type, data, schema }, transforms) {
+  let result = isThenable(value) ? await value : value;
+  for (const pipe of transforms) {
+    result = await pipe.transform(result, { metatype, type, data, schema });
+  }
+  return result;
+}</code></pre>
+          <p>
+            <code>transforms</code>는 "전역·컨트롤러·메서드 파이프"에 "그 인자의 파이프"를 이어 붙인 배열이다
+            (<code>pipes.concat(paramPipes)</code>). 이 저장소는 전역에 검증 파이프 하나만 둔다.
+          </p>
+        </section>
+
+        <section id="skip">
+          <h2>파이프를 거치지 않는 인자</h2>
+          <p>
+            모든 인자가 파이프를 지나지는 않는다. Nest는 요청에서 꺼낸 <strong>값</strong>인 인자만 파이프에 넘긴다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>파이프를 거친다</th>
+                  <th>거치지 않는다</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>
+                    <code>@Body</code>, <code>@Query</code>, <code>@Param</code>, <code>@RawBody</code>,
+                    <code>@UploadedFile(s)</code>, <code>@Cookies</code> 등
+                  </td>
+                  <td><code>@Req</code>, <code>@Res</code>, <code>@Next</code>, <code>@Headers</code> 등 요청·응답 객체 자체</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            Express의 <code>req</code> 객체를 검증하거나 바꿀 일은 없기 때문이다. 소스의 <code>isPipeable(type)</code>이 이
+            목록을 정한다.
+          </p>
+        </section>
+
+        <section id="two-pipes">
+          <h2>검증 파이프 두 가지</h2>
+          <p>Nest 12에는 객체 전체를 검사하는 검증 파이프가 두 개 들어 있다. 같은 쿼리 규칙을 두 방식으로 적어 보면 차이가 보인다.</p>
+
+          <h3>ValidationPipe: 클래스와 데코레이터</h3>
+          <p>
+            class-validator로 규칙을 클래스 속성의 데코레이터에 적는다. 숫자로 바꾸기는 class-transformer의
+            <code>@Type</code>이 맡는다. 이 PR의 첫 구현이 이 방식이었다.
+          </p>
+          <pre><code class="language-ts">export class ShowListQueryDto {
+  @ApiPropertyOptional({ type: 'integer', minimum: 1, default: 1 }) // OpenAPI 문서용
+  @Type(() =&gt; Number)                                                 // 글자 → 숫자
+  @IsInt({ message: '1 이상의 정수여야 합니다.' })                    // 검증용
+  @Min(1, { message: '1 이상의 정수여야 합니다.' })                    // 검증용
+  page: number = 1;                                                   // 기본값
+}
+
+@Get()
+findPage(@Query() query: ShowListQueryDto) {} // 파이프는 metatype(클래스)을 보고 검사한다</code></pre>
+          <p>
+            <code>minimum: 1</code>(문서)과 <code>@Min(1)</code>(검증)이 같은 규칙을 두 번 말한다. 하나만 고치면 문서와 실제
+            동작이 어긋나는데, 아무것도 이를 알려 주지 않는다.
+          </p>
+
+          <h3>StandardSchemaValidationPipe: 스키마</h3>
+          <p>
+            zod처럼 <a href="https://standardschema.dev">Standard Schema</a> 규격을 따르는 스키마로 검사한다. 스키마
+            하나에서 검증, OpenAPI 문서, TypeScript 타입이 모두 나온다. 지금 저장소가 쓰는 방식이다.
+          </p>
+          <pre><code class="language-ts">export const showListQuerySchema = z.object({
+  page: z.coerce.number(PAGE_MESSAGE).int(PAGE_MESSAGE).min(1, PAGE_MESSAGE).default(1),
+});
+export type ShowListQuery = z.infer&lt;typeof showListQuerySchema&gt;; // { page: number }
+
+@Get()
+findPage(@Query({ schema: showListQuerySchema }) query: ShowListQuery) {} // 파이프는 metadata.schema를 보고 검사한다</code></pre>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th><code>ValidationPipe</code></th>
+                  <th><code>StandardSchemaValidationPipe</code></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>규칙을 적는 곳</td>
+                  <td>클래스 속성의 데코레이터</td>
+                  <td>스키마 객체</td>
+                </tr>
+                <tr>
+                  <td>파이프가 보는 것</td>
+                  <td><code>metadata.metatype</code> (클래스)</td>
+                  <td><code>metadata.schema</code></td>
+                </tr>
+                <tr>
+                  <td>글자 → 숫자</td>
+                  <td><code>@Type(() =&gt; Number)</code></td>
+                  <td><code>z.coerce.number()</code></td>
+                </tr>
+                <tr>
+                  <td>기본값</td>
+                  <td>속성 초기값 <code>page = 1</code></td>
+                  <td><code>.default(1)</code></td>
+                </tr>
+                <tr>
+                  <td>모르는 값 버리기</td>
+                  <td><code>whitelist: true</code> 옵션</td>
+                  <td><code>z.object</code>가 기본으로 버림</td>
+                </tr>
+                <tr>
+                  <td>OpenAPI 문서</td>
+                  <td><code>@ApiProperty</code>에 한 번 더 적음</td>
+                  <td><code>@nestjs/swagger</code>가 스키마에서 만듦</td>
+                </tr>
+                <tr>
+                  <td>핸들러 타입</td>
+                  <td>클래스 자체</td>
+                  <td><code>z.infer&lt;typeof schema&gt;</code></td>
+                </tr>
+                <tr>
+                  <td>필요한 패키지</td>
+                  <td>class-validator, class-transformer</td>
+                  <td>zod (Nest·swagger 쪽은 기본 제공)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <details class="fold">
+            <summary>선택 읽기: 스키마에서 OpenAPI 문서가 나오는 과정</summary>
+            <div class="fold-body">
+              <p>
+                Standard Schema 규격은 스키마가 <code>~standard</code>라는 속성을 갖게 한다. zod 4는 여기에 검사 함수
+                <code>validate</code>와 JSON Schema 변환 함수 <code>jsonSchema</code>를 넣어 둔다.
+              </p>
+              <pre><code class="language-ts">Object.keys(showListQuerySchema['~standard']);
+// ['validate', 'vendor', 'version', 'jsonSchema']
+
+showListQuerySchema['~standard'].jsonSchema.input({ target: 'openapi-3.0' });
+// { type: 'object', properties: {
+//     page: { default: 1, type: 'integer', minimum: 1, maximum: 9007199254740991, description: '...' },
+//     size: { default: 20, type: 'integer', minimum: 1, maximum: 100, description: '...' } } }</code></pre>
+              <p>
+                <code>@nestjs/swagger</code> 12의 <code>StandardSchemaOpenApiConverter</code>가 문서를 만들 때 이 함수를 불러
+                객체의 속성을 쿼리 파라미터 하나하나로 펼친다. <code>input</code>을 쓰는 이유는 요청 쪽 모양(기본값이
+                있으니 생략 가능)을 문서로 보여 주기 위해서다. 그래서 <code>apps/api/openapi.json</code>에
+                <code>page</code>, <code>size</code>가 각각 <code>"in": "query"</code>로 나온다.
+              </p>
+            </div>
+          </details>
+        </section>
+
+        <section id="schema">
+          <h2>showListQuerySchema 읽기</h2>
+          <pre><code class="language-ts">// apps/api/src/shows/show-list-query.ts
+export const showListQuerySchema = z.object({
+  page: z.coerce
+    .number(PAGE_MESSAGE)   // ① 글자를 Number()로 바꾼다. NaN이면 이 문구로 실패
+    .int(PAGE_MESSAGE)      // ② 정수인가 (zod 4의 int()는 Number.MAX_SAFE_INTEGER까지만)
+    .min(1, PAGE_MESSAGE)   // ③ 1 이상인가
+    .default(1)             // ④ 값이 없으면(undefined) ①~③을 건너뛰고 1
+    .meta({ description: '페이지 번호(1부터). ...' }), // ⑤ OpenAPI 설명
+  size: z.coerce
+    .number(SIZE_MESSAGE)
+    .int(SIZE_MESSAGE)
+    .min(1, SIZE_MESSAGE)
+    .max(MAX_PAGE_SIZE, SIZE_MESSAGE) // 100 이하인가
+    .default(DEFAULT_PAGE_SIZE)
+    .meta({ description: '페이지 크기' }),
+});</code></pre>
+          <ul>
+            <li>
+              <strong><code>z.coerce</code>:</strong> 검사 전에 <code>Number(value)</code>로 바꾼다. 쿼리 문자열은 늘 글자라
+              이것이 없으면 <code>'2'</code>도 "숫자가 아니다"로 실패한다.
+            </li>
+            <li>
+              <strong><code>.default()</code>의 위치:</strong> 맨 뒤에 있지만 실행은 가장 먼저 판단한다. 값이
+              <code>undefined</code>면 앞의 변환과 검사를 거치지 않고 기본값을 쓴다. <code>Number(undefined)</code>는
+              <code>NaN</code>이라, 기본값이 없었다면 쿼리를 생략한 요청이 실패했을 것이다.
+            </li>
+            <li>
+              <strong>필드마다 문구 하나:</strong> 어느 규칙에 걸려도 같은 문구가 나오게 했다. 스토어나 사용자는 "몇 번째 규칙에
+              걸렸나"가 아니라 "이 값은 이래야 한다"를 알면 된다.
+            </li>
+            <li>
+              <strong><code>z.object</code>:</strong> 스키마에 없는 키(<code>?foo=bar</code>)는 결과에서 빠진다. 오류는
+              아니다.
+            </li>
+          </ul>
+        </section>
+
+        <section id="walkthrough">
+          <h2>잘못된 요청 하나 따라가기</h2>
+          <p><code>GET /shows?page=abc&amp;size=500</code>이 들어왔을 때 일어나는 일을 순서대로 본다.</p>
+          <ol class="steps blue">
+            <li>
+              <strong>Express가 쿼리를 객체로 만든다</strong>
+              값은 모두 글자다: <code>{ page: 'abc', size: '500' }</code>.
+            </li>
+            <li>
+              <strong>Nest가 이 핸들러의 인자 정보를 꺼낸다</strong>
+              <code>@Query({ schema: showListQuerySchema })</code>가 앱이 뜰 때 저장해 둔 정보로 metadata를 만든다:
+              <code>{ type: 'query', data: undefined, metatype: Object, schema: showListQuerySchema }</code>. 데코레이터가
+              정보를 저장하고 Nest가 읽는 과정은 <a href="01-데코레이터와-메타데이터.html#read">nest 01 문서</a>에 있다.
+            </li>
+            <li>
+              <strong>가드와 인터셉터를 지난다</strong>
+              지금 저장소에는 둘 다 없다.
+            </li>
+            <li>
+              <strong>전역 파이프의 transform이 불린다</strong>
+              <code>AppModule</code>에 <code>APP_PIPE</code>로 등록한 <code>StandardSchemaValidationPipe</code>다.
+            </li>
+          </ol>
+          <pre><code class="language-js">// @nestjs/common/pipes/standard-schema-validation.pipe.js
+async transform(value, metadata) {
+  const schema = metadata.schema;
+  if (!schema || !this.toValidate(metadata)) {
+    return value;                                   // 스키마가 없는 인자는 그대로 통과
+  }
+  this.stripProtoKeys(value);                       // __proto__ 같은 위험한 키 제거
+  const result = await this.validate(value, schema, this.validateOptions); // schema['~standard'].validate
+  if (result.issues) {
+    throw this.exceptionFactory(result.issues);     // 실패 → 우리가 넣은 함수로 예외를 만든다
+  }
+  return this.isTransformEnabled ? result.value : value; // 성공 → 변환된 값
+}</code></pre>
+          <ol class="steps blue" style="--start: 4">
+            <li>
+              <strong>zod가 필드마다 검사한다</strong>
+              <code>page</code>: <code>Number('abc')</code>는 <code>NaN</code> → 숫자가 아니라 실패.
+              <code>size</code>: <code>500</code> → 정수 통과 → 1 이상 통과 → 100 이하 실패. 결과는
+              <code>{ issues: [{ path: ['page'], message: '1 이상의 정수여야 합니다.' }, { path: ['size'], message: '1 이상 100 이하의 정수여야 합니다.' }] }</code>.
+            </li>
+            <li>
+              <strong>exceptionFactory가 ProblemException을 만든다</strong>
+              <code>path</code>를 <code>'page'</code> 같은 필드 이름으로 바꿔 <code>errors</code>에 담는다(<a
+                href="#exception-factory">아래 절</a>).
+            </li>
+            <li>
+              <strong>핸들러는 불리지 않는다</strong>
+              <code>showsService.findPage</code>도, DB 쿼리도 실행되지 않는다.
+            </li>
+            <li>
+              <strong>예외 필터가 응답을 쓴다</strong>
+              <code>ProblemDetailsFilter</code>가 <code>ProblemException</code>을 받아 <code>application/problem+json</code>으로
+              보낸다(<a href="04-예외-필터와-APP_FILTER.html#to-problem">nest 04 문서</a>).
+            </li>
+          </ol>
+          <pre><code>HTTP/1.1 400 Bad Request
+Content-Type: application/problem+json
+
+{
+  "type": "about:blank",
+  "title": "Bad Request",
+  "status": 400,
+  "detail": "요청 값이 올바르지 않습니다.",
+  "code": "VALIDATION_FAILED",
+  "errors": [
+    { "field": "page", "detail": "1 이상의 정수여야 합니다." },
+    { "field": "size", "detail": "1 이상 100 이하의 정수여야 합니다." }
+  ]
+}</code></pre>
+          <p>
+            올바른 요청 <code>?page=2</code>라면 5단계에서 검사가 통과하고 <code>result.value</code>가
+            <code>{ page: 2, size: 20 }</code>이다. 이 값이 핸들러의 <code>query</code>로 들어가므로, 서비스는
+            <code>(page - 1) * size</code>를 바로 계산한다.
+          </p>
+        </section>
+
+        <section id="results">
+          <h2>값마다 무엇이 나오나</h2>
+          <p>저장소의 <code>showListQuerySchema</code>에 쿼리 객체를 넣어 직접 실행한 결과다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>쿼리</th>
+                  <th>결과</th>
+                  <th>왜</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>(없음)</td>
+                  <td><span class="badge green">통과</span> <code>{ page: 1, size: 20 }</code></td>
+                  <td>둘 다 기본값</td>
+                </tr>
+                <tr>
+                  <td><code>?page=2</code></td>
+                  <td><span class="badge green">통과</span> <code>{ page: 2, size: 20 }</code></td>
+                  <td>글자 <code>'2'</code>가 숫자 <code>2</code>로</td>
+                </tr>
+                <tr>
+                  <td><code>?page=2&amp;foo=x</code></td>
+                  <td><span class="badge green">통과</span> <code>{ page: 2, size: 20 }</code></td>
+                  <td><code>foo</code>는 버려진다</td>
+                </tr>
+                <tr>
+                  <td><code>?page=1e1</code></td>
+                  <td><span class="badge green">통과</span> <code>{ page: 10, size: 20 }</code></td>
+                  <td><code>Number('1e1')</code>은 10. 값으로는 정수다</td>
+                </tr>
+                <tr>
+                  <td><code>?page=%202</code> (앞에 공백)</td>
+                  <td><span class="badge green">통과</span> <code>{ page: 2, size: 20 }</code></td>
+                  <td><code>Number(' 2')</code>는 2</td>
+                </tr>
+                <tr>
+                  <td><code>?page=abc</code></td>
+                  <td><span class="badge blue">400</span> page</td>
+                  <td><code>NaN</code></td>
+                </tr>
+                <tr>
+                  <td><code>?page=</code> (빈 값)</td>
+                  <td><span class="badge blue">400</span> page</td>
+                  <td>빈 값은 <code>undefined</code>가 아니라 <code>''</code>이고, <code>Number('')</code>는 0</td>
+                </tr>
+                <tr>
+                  <td><code>?page=0</code>, <code>?page=1.5</code></td>
+                  <td><span class="badge blue">400</span> page</td>
+                  <td>1 미만, 정수 아님</td>
+                </tr>
+                <tr>
+                  <td><code>?page=1&amp;page=2</code></td>
+                  <td><span class="badge blue">400</span> page</td>
+                  <td>같은 키가 두 번이면 배열 <code>['1', '2']</code>가 오고, <code>Number(['1','2'])</code>는 <code>NaN</code></td>
+                </tr>
+                <tr>
+                  <td><code>?page=1e30</code></td>
+                  <td><span class="badge blue">400</span> page</td>
+                  <td><code>Number.MAX_SAFE_INTEGER</code>를 넘는다</td>
+                </tr>
+                <tr>
+                  <td><code>?size=500</code></td>
+                  <td><span class="badge blue">400</span> size</td>
+                  <td>100 초과</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            <code>1e1</code>과 <code>' 2'</code>가 통과하는 것은 일부러 둔 결정이다. 값으로는 정수라 "정수가 아닌 page는
+            400"이라는 규칙에 맞고, 스토어가 API를 부르기 전에 <code>^[1-9]\d*$</code>로 주소를 먼저 정리하므로 실제로 이런
+            값이 API에 오지 않는다.
+          </p>
+        </section>
+
+        <section id="exception-factory">
+          <h2>exceptionFactory: 필드별 오류</h2>
+          <div class="callout">
+            <p>
+              <code>exceptionFactory</code>는 <strong>zod의 오류 목록(<code>issues</code>)을 우리 API의 오류 형식
+              (<code>ProblemException</code>)으로 바꾸는 번역기</strong>다. 직접 부르는 곳은 없고, 검사가 실패했을 때만 파이프가
+              부른다. 검사가 통과하면 아예 불리지 않는다.
+            </p>
+          </div>
+
+          <h3>왜 바꿔 끼우나</h3>
+          <p>
+            파이프의 기본 동작은 Nest의 <code>BadRequestException</code>을 던지는 것이다. 그 응답에는 ADR 0007의 <code>code</code>와
+            필드별 <code>errors</code>가 없다. 스토어는 모든 오류가 같은 Problem Details 형식으로 온다고 믿으므로, 예외를 만드는 함수를
+            바꿔 끼워 형식을 맞춘다.
+          </p>
+
+          <h3>누가 언제 부르나</h3>
+          <ul class="tree" style="--tree-col: 19rem">
+            <li>
+              <div class="tree-row">
+                <span class="tree-node">GET /shows?page=abc&amp;size=500</span>
+                <span class="tree-note">Nest가 쿼리를 <code>{ page: 'abc', size: '500' }</code>로 만든다</span>
+              </div>
+              <ul>
+                <li>
+                  <div class="tree-row">
+                    <span class="tree-node">pipe.transform(value, metadata)</span>
+                    <span class="tree-note">전역 파이프. <code>metadata.schema</code>는 <code>showListQuerySchema</code></span>
+                  </div>
+                  <ul>
+                    <li>
+                      <div class="tree-row">
+                        <span class="tree-node">schema['~standard'].validate(value)</span>
+                        <span class="tree-note">zod가 검사. 실패하면 <code>{ issues: [...] }</code></span>
+                      </div>
+                    </li>
+                    <li>
+                      <div class="tree-row">
+                        <span class="tree-node">exceptionFactory(issues)</span>
+                        <span class="tree-note"><span class="badge blue">이 절</span> <code>ProblemException</code>을 만들어 돌려준다</span>
+                      </div>
+                    </li>
+                    <li>
+                      <div class="tree-row">
+                        <span class="tree-node">throw</span>
+                        <span class="tree-note">파이프가 돌려받은 예외를 던진다. 핸들러는 불리지 않는다</span>
+                      </div>
+                    </li>
+                  </ul>
+                </li>
+                <li>
+                  <div class="tree-row">
+                    <span class="tree-node">ProblemDetailsFilter</span>
+                    <span class="tree-note">그 예외로 400 응답을 쓴다 (<a href="04-예외-필터와-APP_FILTER.html#to-problem">nest 04 문서</a>)</span>
+                  </div>
+                </li>
+              </ul>
+            </li>
+          </ul>
+
+          <h3>코드</h3>
+          <pre><code class="language-ts">// apps/api/src/problem-details/validation.pipe.ts
+export function createValidationPipe(): StandardSchemaValidationPipe {
+  return new StandardSchemaValidationPipe({
+    exceptionFactory: (issues) =&gt; {
+      // 한 필드가 여러 규칙에 걸릴 수 있어 필드마다 처음 걸린 것 하나만 남긴다.
+      const errors = new Map&lt;string, FieldErrorDto&gt;();      // ① 필드 → 오류
+      for (const issue of issues) {
+        const field = (issue.path ?? [])                    // ② 예: ['page']
+          .map((segment) =&gt;                                 // ③ 칸마다 글자로
+            typeof segment === 'object' ? String(segment.key) : String(segment),
+          )
+          .join('.');                                       // ④ 예: 'page'
+        if (!errors.has(field)) {                           // ⑤ 처음 본 필드만
+          errors.set(field, { field, detail: issue.message }); // ⑥ 저장
+        }
+      }
+      return new ProblemException({                         // ⑦ 우리 형식의 예외
+        status: HttpStatus.BAD_REQUEST,
+        code: 'VALIDATION_FAILED',
+        detail: '요청 값이 올바르지 않습니다.',
+        errors: [...errors.values()],                       // ⑧ 넣은 순서대로
+      });
+    },
+  });
+}</code></pre>
+
+          <h3>들어오는 값: issues</h3>
+          <p>
+            <code>issues</code>는 zod가 만든 배열이다. 항목마다 여러 속성이 있지만 이 함수는 두 개만 쓴다(전체 모양은 <a
+              href="../zod/00-zod-기초.html#messages">zod 00 문서</a>).
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>속성</th>
+                  <th>뜻</th>
+                  <th>예</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>path</code></td>
+                  <td>틀린 값의 위치. 속성 이름과 배열 순번을 바깥부터 차례로 담은 배열</td>
+                  <td><code>['page']</code>, <code>['genre', 1]</code></td>
+                </tr>
+                <tr>
+                  <td><code>message</code></td>
+                  <td>스키마에 적은 문구</td>
+                  <td><code>'1 이상의 정수여야 합니다.'</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            아래 세 예시는 저장소의 <code>createValidationPipe()</code>에 값을 넣어 실제로 실행한 결과다. 예시 2와 3은 지금
+            <code>GET /shows</code>에 없는 필드라, 뒤 티켓에서 붙을 검색어와 장르를 가정한 스키마로 돌렸다.
+          </p>
+
+          <h3>예시 1: 두 필드가 틀림</h3>
+          <p>요청 <code>GET /shows?page=abc&amp;size=500</code>. 들어오는 <code>issues</code>:</p>
+          <pre><code class="language-js">[
+  { path: ['page'], message: '1 이상의 정수여야 합니다.' },
+  { path: ['size'], message: '1 이상 100 이하의 정수여야 합니다.' },
+]</code></pre>
+          <p>두 필드가 서로 달라 둘 다 <code>errors</code>에 들어가고, 넣은 순서대로 배열이 되어 이 예외가 만들어진다:</p>
+          <pre><code class="language-js">new ProblemException({
+  status: 400,
+  code: 'VALIDATION_FAILED',
+  detail: '요청 값이 올바르지 않습니다.',
+  errors: [
+    { field: 'page', detail: '1 이상의 정수여야 합니다.' },
+    { field: 'size', detail: '1 이상 100 이하의 정수여야 합니다.' },
+  ],
+})</code></pre>
+          <p>
+            이 예외가 <code>ProblemDetailsFilter</code>를 거쳐 <a href="#walkthrough">따라가기 절</a>의 마지막 응답이 된다. <code>errors</code>
+            배열이 응답의 <code>errors</code>로 그대로 나간다.
+          </p>
+
+          <h3>예시 2: 한 필드가 규칙 두 개에 걸림 → Map이 하는 일</h3>
+          <p>
+            검색어 스키마 <code>z.object({ q: z.string().max(3, '3자 이하').regex(/^[a-z]*$/, '소문자만') })</code>에
+            <code>{ q: 'ABCDE' }</code>를 넣었다. 다섯 글자이고 대문자라 두 규칙에 모두 걸린다.
+          </p>
+          <pre><code class="language-js">[
+  { path: ['q'], message: '3자 이하' },
+  { path: ['q'], message: '소문자만' },   // 같은 필드가 한 번 더
+]</code></pre>
+          <p>
+            두 번째 issue는 <code>errors.has('q')</code>가 <code>true</code>라 건너뛴다. 결과:
+            <code>errors: [{ field: 'q', detail: '3자 이하' }]</code>.
+          </p>
+          <p>
+            <code>Map</code>을 쓴 이유가 이것이다. 키가 필드 이름이라 같은 필드는 처음 것만 남고, 응답의 <code>errors</code>가
+            "필드마다 하나"라는 약속을 지킨다. 그냥 배열에 <code>push</code>했다면 <code>q</code>가 두 번 들어가, 스토어가 필드 이름으로
+            오류를 찾을 때 어느 것을 보여 줄지 정해야 한다. 지금 <code>GET /shows</code>의 숫자 필드는 <code>int()</code>에서 멈춰 오류가
+            늘 하나지만(<a href="../zod/00-zod-기초.html#number">zod 00 문서</a>), 파이프는 앞으로 붙을 모든 스키마에 쓰인다.
+          </p>
+
+          <h3>예시 3: 배열 안의 값 → join이 하는 일</h3>
+          <p>
+            장르 스키마 <code>z.object({ genre: z.array(z.enum(['musical', 'play'], '모르는 장르')) })</code>에
+            <code>?genre=musical&amp;genre=x</code>, 곧 <code>{ genre: ['musical', 'x'] }</code>를 넣었다.
+          </p>
+          <pre><code class="language-js">[{ path: ['genre', 1], message: '모르는 장르' }]   // genre 배열의 1번째(0부터 셈) 값</code></pre>
+          <p>
+            <code>path</code>의 칸마다 <code>String()</code>을 씌우면 <code>['genre', '1']</code>, 점으로 이으면 <code>'genre.1'</code>이다. 결과:
+            <code>errors: [{ field: 'genre.1', detail: '모르는 장르' }]</code>. <code>path</code>가 배열인 이유는 위치가 여러 단계일
+            수 있어서다(객체 안의 배열 안의 값 등). 응답에서는 사람이 읽기 쉽게 점으로 이어 붙인다.
+          </p>
+
+          <h3>typeof segment === 'object'는 왜 있나</h3>
+          <p>
+            Standard Schema 규격에서는 <code>path</code>의 한 칸이 <code>'page'</code>나 <code>1</code> 같은 값일 수도 있고,
+            <code>{ key: 'page' }</code> 같은 객체일 수도 있다. 이 파이프는 zod만이 아니라 그 규격을 따르는 모든 검증 라이브러리를
+            받으므로, 객체로 오면 <code>.key</code>를 꺼낸다.
+          </p>
+          <pre><code class="language-js">String('page')            // 'page'
+String(1)                 // '1'
+String({ key: 'page' })   // '[object Object]'  ← .key를 꺼내지 않으면 이렇게 된다</code></pre>
+          <p>zod는 위 실행 결과처럼 항상 값으로 주므로, 지금은 언제나 <code>String(segment)</code> 쪽으로 간다.</p>
+
+          <h3>통과하면</h3>
+          <p>
+            <code>GET /shows?page=2</code>면 zod가 <code>issues</code> 없이 <code>{ value: { page: 2, size: 20 } }</code>를 돌려주므로
+            <code>exceptionFactory</code>는 불리지 않는다. 파이프가 그 값을 돌려주고, 핸들러의 <code>query</code>로 들어간다.
+          </p>
+        </section>
+
+        <section id="app-pipe">
+          <h2>왜 APP_PIPE인가</h2>
+          <pre><code class="language-ts">// apps/api/src/app.module.ts
+providers: [
+  { provide: APP_FILTER, useClass: ProblemDetailsFilter },
+  { provide: APP_PIPE, useFactory: createValidationPipe },
+],</code></pre>
+          <p>
+            <code>main.ts</code>에서 <code>app.useGlobalPipes(createValidationPipe())</code>로 붙여도 운영 앱은 똑같이
+            동작한다. 하지만 통합 테스트는 <code>main.ts</code>를 거치지 않고 <code>AppModule</code>로 앱을 따로 조립한다.
+            <code>main.ts</code>에 붙이면 테스트 앱에는 파이프가 없어 <code>?page=abc</code>가 검사 없이 핸들러까지 가고,
+            테스트는 운영과 다른 앱을 검증하게 된다. 예외 필터를 <code>APP_FILTER</code>로 등록한 것과 같은 이유다(<a
+              href="04-예외-필터와-APP_FILTER.html#why-module">nest 04 문서</a>).
+          </p>
+          <p>
+            <code>useClass</code>가 아니라 <code>useFactory</code>인 이유: 파이프에 <code>exceptionFactory</code> 옵션을
+            넘겨 만들어야 하는데, <code>useClass</code>는 생성자 인자를 줄 수 없다. 팩토리 함수가 옵션을 넣어
+            <code>new</code>한 인스턴스를 돌려준다.
+          </p>
+        </section>
+
+        <section id="pitfalls">
+          <h2>헷갈리기 쉬운 점</h2>
+          <div class="callout warn">
+            <p>
+              <strong>스키마를 안 붙이면 검사하지 않는다.</strong> 전역 파이프여도 <code>metadata.schema</code>가 없는 인자는
+              <code>return value</code>로 그냥 통과한다. <code>@Query()</code>만 쓰면 <code>page</code>는 글자
+              <code>'abc'</code> 그대로 핸들러에 들어오고, 타입 검사도 이를 잡지 못한다.
+            </p>
+          </div>
+          <div class="callout warn">
+            <p>
+              <strong>타입 주석은 검사가 아니다.</strong> <code>query: ShowListQuery</code>라고 적어도 실행 중에는 아무 일도
+              일어나지 않는다. 핸들러가 받는 값이 정말 그 모양이 되는 것은 파이프가 스키마로 바꿔 넣었기 때문이다.
+            </p>
+          </div>
+          <div class="callout warn">
+            <p>
+              <strong><code>transform</code>을 끄면 검사만 하고 원래 값을 넘긴다.</strong>
+              <code>new StandardSchemaValidationPipe({ transform: false })</code>면 마지막 줄이 <code>value</code>를 돌려준다.
+              검사는 통과해도 <code>page</code>는 글자이고, 기본값과 모르는 키 버리기도 적용되지 않는다.
+            </p>
+          </div>
+          <div class="callout warn">
+            <p>
+              <strong>파이프는 응답을 쓰지 않는다.</strong> 예외를 던질 뿐이고, 응답 모양은 예외 필터가 정한다. 그래서 검증
+              실패든 404든 500이든 모두 <code>ProblemDetailsFilter</code> 한곳에서 Problem Details로 나간다.
+            </p>
+          </div>
+        </section>
+
+        <section id="check">
+          <h2>스스로 확인하기</h2>
+
+          <div class="quiz">
+            <p class="quiz-q">1. 컨트롤러를 이렇게 바꾸고 <code>GET /shows?page=abc</code>를 보내면 어떻게 되는가?</p>
+            <p class="quiz-context"><a href="#pitfalls">헷갈리기 쉬운 점</a>과 <a href="#walkthrough">따라가기</a>의 2·4단계를 묻는다.</p>
+            <pre><code class="language-diff"> findPage(
+-  @Query({ schema: showListQuerySchema }) query: ShowListQuery,
++  @Query() query: ShowListQuery,
+ ): Promise&lt;ShowPageDto&gt; {</code></pre>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  <code>metadata.schema</code>가 없으니 전역 파이프가 값을 그대로 넘긴다. 핸들러는
+                  <code>{ page: 'abc' }</code>를 받고, <code>size</code>도 기본값이 없어 <code>undefined</code>다. 서비스의
+                  <code>.limit(size)</code>와 <code>(page - 1) * size</code>가 <code>undefined</code>와 <code>NaN</code>을
+                  만나 DB 쿼리가 실패하거나 엉뚱하게 동작하고, 400이 아니라 500이 나갈 수 있다. 타입 검사는
+                  <code>ShowListQuery</code>를 믿으므로 아무 경고도 하지 않는다.
+                </p>
+              </div>
+            </details>
+          </div>
+
+          <div class="quiz">
+            <p class="quiz-q">2. 아래처럼 가드가 붙은 엔드포인트에 로그인하지 않고 <code>?page=abc</code>를 보내면 401과 400 중 무엇이 오는가?</p>
+            <p class="quiz-context"><a href="#lifecycle">핸들러 앞의 네 단계</a>의 순서를 묻는다. <code>AuthGuard</code>는 로그인하지 않았으면 401 예외를 던진다고 하자.</p>
+            <pre><code class="language-ts">@UseGuards(AuthGuard)
+@Get('mine')
+findMine(@Query({ schema: showListQuerySchema }) query: ShowListQuery) {}</code></pre>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  401이다. 가드가 파이프보다 먼저 실행되어 거기서 예외가 나므로, 파이프는 불리지 않는다. 그래서 로그인하지
+                  않은 사람은 쿼리를 어떻게 보내도 입력 오류 정보를 얻지 못한다.
+                </p>
+              </div>
+            </details>
+          </div>
+
+          <div class="quiz">
+            <p class="quiz-q">3. 스키마에서 <code>.default(1)</code>을 지우면 <code>GET /shows</code>(쿼리 없음)는 어떻게 되는가?</p>
+            <p class="quiz-context"><a href="#schema">showListQuerySchema 읽기</a>의 <code>z.coerce</code>와 <code>.default()</code> 설명을 묻는다.</p>
+            <pre><code class="language-diff">   page: z.coerce
+     .number(PAGE_MESSAGE)
+     .int(PAGE_MESSAGE)
+     .min(1, PAGE_MESSAGE)
+-    .default(1)</code></pre>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  400이 온다. <code>page</code>가 없으면 값은 <code>undefined</code>이고, <code>z.coerce</code>가
+                  <code>Number(undefined)</code>로 <code>NaN</code>을 만들어 숫자 검사에서 실패한다. 스토어는
+                  <code>fetchShows</code>가 언제나 <code>page</code>와 <code>size</code>를 보내므로 영향이 없지만, 쿼리 없이 부르는
+                  다른 클라이언트(어드민, curl, 앞으로의 앱)는 모두 오류를 받는다. OpenAPI 문서의 <code>default: 1</code>도 사라진다.
+                  기본값은 "생략할 수 있다"는 계약의 일부다.
+                </p>
+              </div>
+            </details>
+          </div>
+
+          <div class="quiz">
+            <p class="quiz-q">4. 전역 파이프를 <code>main.ts</code>로 옮기면 어떤 테스트가 깨지는가?</p>
+            <p class="quiz-context"><a href="#app-pipe">왜 APP_PIPE인가</a>를 묻는다.</p>
+            <pre><code class="language-diff">// apps/api/src/app.module.ts
+-    { provide: APP_PIPE, useFactory: createValidationPipe },
+// apps/api/src/main.ts
++app.useGlobalPipes(createValidationPipe());</code></pre>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  <code>shows.int.spec.ts</code>의 "잘못된 쿼리 값은 필드별 오류를 담은 400 Problem Details로 응답한다"가
+                  깨진다. 테스트 앱은 <code>main.ts</code>를 거치지 않아 파이프가 없으므로 <code>?page=abc</code>가 핸들러까지
+                  가서 400이 아닌 응답이 나온다. 같은 이유로 페이지 자르기 테스트도 <code>page</code>, <code>size</code>가 글자로
+                  들어와 결과가 달라질 수 있다.
+                </p>
+              </div>
+            </details>
+          </div>
+          <div class="quiz">
+            <p class="quiz-q">5. exceptionFactory에 아래 issues가 들어오면 응답의 <code>errors</code>는 무엇인가?</p>
+            <p class="quiz-context"><a href="#exception-factory">exceptionFactory</a> 절의 ④⑤⑧을 묻는다.</p>
+            <pre><code class="language-js">[
+  { path: ['size'], message: 'A' },
+  { path: ['page'], message: 'B' },
+  { path: ['size'], message: 'C' },
+  { path: ['genre', 0], message: 'D' },
+]</code></pre>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  <code>[{ field: 'size', detail: 'A' }, { field: 'page', detail: 'B' }, { field: 'genre.0', detail: 'D' }]</code>.
+                  세 번째 issue는 <code>size</code>가 이미 있어 건너뛴다. <code>Map</code>은 처음 넣은 순서를 기억하므로
+                  <code>size</code>, <code>page</code>, <code>genre.0</code> 순서로 나온다. <code>['genre', 0]</code>은
+                  <code>'genre.0'</code>이 된다.
+                </p>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section id="more">
+          <h2>더 읽을거리</h2>
+          <ol>
+            <li><a href="https://docs.nestjs.com/pipes">NestJS: Pipes</a></li>
+            <li><a href="https://docs.nestjs.com/techniques/validation">NestJS: Validation</a></li>
+            <li><a href="https://docs.nestjs.com/faq/request-lifecycle">NestJS: Request lifecycle</a></li>
+            <li><a href="https://standardschema.dev">Standard Schema</a></li>
+            <li><a href="https://zod.dev/api">Zod: Defining schemas</a></li>
+            <li><a href="04-예외-필터와-APP_FILTER.html">nest 04 문서: 예외 필터와 APP_FILTER</a></li>
+            <li><a href="../../adr/0007-problem-details-error-response.md">ADR 0007: Problem Details로 통일</a></li>
+          </ol>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

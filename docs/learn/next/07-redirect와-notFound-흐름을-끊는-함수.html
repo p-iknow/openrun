@@ -1,0 +1,546 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>07 redirect와 notFound: 흐름을 끊는 함수</title>
+    <link rel="stylesheet" href="../learn.css" />
+    <script src="../vendor/highlightjs/highlight.min.js" defer></script>
+    <script src="../learn.js" defer></script>
+  </head>
+  <body>
+    <div class="layout">
+      <nav aria-label="목차">
+        <strong>목차</strong>
+        <ol>
+          <li><a href="#overview">한눈에 보기</a></li>
+          <li><a href="#throw">return이 없어도 되는 이유</a></li>
+          <li><a href="#digest">Next가 예외를 알아보는 법</a></li>
+          <li><a href="#redirect">redirect와 permanentRedirect</a></li>
+          <li><a href="#not-found">notFound와 not-found.tsx</a></li>
+          <li><a href="#auth">forbidden과 unauthorized</a></li>
+          <li><a href="#status">스트리밍이 시작된 뒤의 응답</a></li>
+          <li><a href="#try-catch">try/catch에 삼켜지는 문제</a></li>
+        </ol>
+        <strong>마무리</strong>
+        <ol>
+          <li><a href="#ours">우리 프로젝트에서는</a></li>
+          <li><a href="#check">스스로 확인하기</a></li>
+          <li><a href="#more">더 읽을거리</a></li>
+        </ol>
+      </nav>
+
+      <main>
+        <h1>07 redirect와 notFound: 흐름을 끊는 함수</h1>
+        <p class="lead">
+          <code>next/navigation</code>의 <code>redirect</code>, <code>permanentRedirect</code>, <code>notFound</code>,
+          <code>forbidden</code>, <code>unauthorized</code>는 모두 값을 돌려주지 않고 <strong>예외를 던져</strong> 렌더링을 멈춘다.
+          그래서 뒤에 <code>return</code>을 쓰지 않아도 흐름이 끝난다. 이 문서는 각 함수가 무엇을 던지고, Next가 그 예외를 받아 어떤
+          응답을 만드는지, 그리고 예외라서 생기는 함정을 본다. 내용은 Next 16.4.5의 소스 코드와 문서, 그리고 이 저장소의 스토어를 띄워
+          실제로 받은 응답을 기준으로 했다.
+        </p>
+
+        <section id="overview">
+          <h2>한눈에 보기</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>함수</th>
+                  <th>언제 쓰나</th>
+                  <th>던지는 예외의 <code>digest</code></th>
+                  <th>결과</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>redirect(url)</code></td>
+                  <td>다른 주소로 보낼 때</td>
+                  <td><code>NEXT_REDIRECT;replace;/;307;</code></td>
+                  <td>307 리다이렉트</td>
+                </tr>
+                <tr>
+                  <td><code>permanentRedirect(url)</code></td>
+                  <td>주소가 영영 바뀌었을 때</td>
+                  <td><code>NEXT_REDIRECT;replace;/;308;</code></td>
+                  <td>308 리다이렉트</td>
+                </tr>
+                <tr>
+                  <td><code>notFound()</code></td>
+                  <td>찾는 자원이 없을 때</td>
+                  <td><code>NEXT_HTTP_ERROR_FALLBACK;404</code></td>
+                  <td>404와 <code>not-found.tsx</code> 화면</td>
+                </tr>
+                <tr>
+                  <td><code>forbidden()</code> <span class="badge blue">실험</span></td>
+                  <td>로그인했지만 권한이 없을 때</td>
+                  <td><code>NEXT_HTTP_ERROR_FALLBACK;403</code></td>
+                  <td>403과 <code>forbidden.tsx</code> 화면</td>
+                </tr>
+                <tr>
+                  <td><code>unauthorized()</code> <span class="badge blue">실험</span></td>
+                  <td>로그인하지 않았을 때</td>
+                  <td><code>NEXT_HTTP_ERROR_FALLBACK;401</code></td>
+                  <td>401과 <code>unauthorized.tsx</code> 화면</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            다섯 함수 모두 서버 컴포넌트, Route Handler, Server Action에서 쓸 수 있다. 상태 코드는 응답을 보내기 시작하기 전에 부른 경우다.
+            이미 보내기 시작했으면 달라진다(<a href="#status">스트리밍 절</a>).
+          </p>
+          <div class="callout">
+            <p>
+              이 함수들은 "여기서 이 요청은 끝났다"를 <strong>예외로</strong> Next에게 알린다. 함수를 부른 줄 아래는 실행되지 않고, Next가
+              예외를 받아 리다이렉트나 404 같은 응답으로 바꾼다.
+            </p>
+          </div>
+        </section>
+
+        <section id="throw">
+          <h2>return이 없어도 되는 이유</h2>
+          <p>스토어의 공연 목록 페이지(<code>apps/store/app/page.tsx</code>)는 이렇게 쓴다.</p>
+          <pre><code class="language-tsx">const { query, redirectTo } = normalizeShowListQuery(await searchParams);
+if (redirectTo !== null) {
+  redirect(redirectTo); // return이 없다
+}
+
+const showPage = await fetchShows({ client: createServerApiClient(), query });</code></pre>
+          <p>
+            <code>redirect</code> 뒤에 <code>return</code>이 없으니, 리다이렉트할 때도 <code>fetchShows</code>가 불릴 것처럼 보인다. 하지만
+            설치된 Next의 <code>redirect</code>는 이렇게 생겼다.
+          </p>
+          <pre><code class="language-js">// next/dist/client/components/redirect.js
+function redirect(url, type) {
+  type ??= actionAsyncStorage?.getStore()?.isAction ? 'push' : 'replace';
+  throw getRedirectError(url, type, RedirectStatusCode.TemporaryRedirect);
+}</code></pre>
+          <p>
+            본문이 <code>throw</code> 한 줄이다. 값을 돌려주는 길이 없으니 부른 곳으로 돌아오지 않는다. 예외는 함수를 차례로 빠져나가
+            <code>HomePage</code>도 그 줄에서 끝나고, <code>fetchShows</code>는 실행되지 않는다. <code>notFound</code>도 같다.
+          </p>
+          <pre><code class="language-js">// next/dist/client/components/not-found.js
+const DIGEST = 'NEXT_HTTP_ERROR_FALLBACK;404';
+function notFound() {
+  const error = new Error(DIGEST);
+  error.digest = DIGEST;
+  throw error;
+}</code></pre>
+
+          <h3>타입도 알고 있다: never</h3>
+          <p>타입 선언에서 반환 타입은 <code>never</code>, 곧 "절대 돌아오지 않는다"다.</p>
+          <pre><code class="language-ts">export declare function redirect(url: string, type?: RedirectType): never;
+export declare function notFound(): never;</code></pre>
+          <p>
+            그래서 TypeScript도 <code>if</code> 안에서 흐름이 끝난다는 것을 안다. <code>if</code>를 지나온 아래쪽에서는 조건이 거짓이었던
+            경우만 남으므로, 값의 타입이 좁혀진다.
+          </p>
+          <pre><code class="language-tsx">const show = await fetchShow(id); // Show | undefined
+if (!show) {
+  notFound();
+}
+show.title; // 여기서 show는 Show. undefined일 수 없다</code></pre>
+          <p>
+            <code>notFound()</code>가 <code>never</code>가 아니라 <code>void</code>였다면 TypeScript는 아래에서도 <code>show</code>를
+            <code>Show | undefined</code>로 보고 <code>show.title</code>에 오류를 낸다. 공식 문서도 <code>return redirect()</code>나
+            <code>return notFound()</code>로 쓸 필요가 없다고 적는다.
+          </p>
+        </section>
+
+        <section id="digest">
+          <h2>Next가 예외를 알아보는 법</h2>
+          <p>
+            던져진 것은 평범한 <code>Error</code>지만 <code>digest</code>라는 글자 속성이 붙어 있다. Next는 렌더링 중에 잡은 예외의
+            <code>digest</code>를 <code>;</code>로 잘라 읽고, 정해진 모양이면 오류가 아니라 지시로 다룬다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th><code>digest</code></th>
+                  <th>잘라 읽은 칸</th>
+                  <th>알아보는 함수</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>NEXT_REDIRECT;replace;/;307;</code></td>
+                  <td>종류, 기록 방식(<code>replace</code>/<code>push</code>), 주소, 상태 코드</td>
+                  <td><code>isRedirectError</code></td>
+                </tr>
+                <tr>
+                  <td><code>NEXT_HTTP_ERROR_FALLBACK;404</code></td>
+                  <td>종류, 상태 코드(401, 403, 404 중 하나)</td>
+                  <td><code>isHTTPAccessFallbackError</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            두 함수를 합친 것이 <code>isNextRouterError</code>다. 앱의 <code>error.tsx</code>를 그리는 오류 경계도 이 함수로 먼저 거른다.
+          </p>
+          <pre><code class="language-js">// next/dist/client/components/error-boundary.js
+static getDerivedStateFromError(thrownValue) {
+  if (isNextRouterError(thrownValue)) {
+    // 다른 경계(예: 부모 구간의 NotFound 경계)가 처리해야 하므로 다시 던진다
+    throw thrownValue;
+  }
+  ...
+}</code></pre>
+          <p>
+            그래서 <code>redirect()</code>나 <code>notFound()</code>를 불러도 <code>error.tsx</code>의 "문제가 생겼어요" 화면이 뜨지 않는다.
+            <code>error.tsx</code>는 진짜 오류만 받는다.
+          </p>
+        </section>
+
+        <section id="redirect">
+          <h2>redirect와 permanentRedirect</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th><code>redirect</code></th>
+                  <th><code>permanentRedirect</code></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>상태 코드</td>
+                  <td>307 Temporary Redirect</td>
+                  <td>308 Permanent Redirect</td>
+                </tr>
+                <tr>
+                  <td>뜻</td>
+                  <td>이번 요청만 다른 곳으로</td>
+                  <td>이 주소는 앞으로도 저기다. 브라우저와 검색 엔진이 기억할 수 있다</td>
+                </tr>
+                <tr>
+                  <td>예</td>
+                  <td>로그인이 필요해 <code>/login</code>으로, 잘못 쓴 쿼리를 정리한 주소로</td>
+                  <td>공연 주소 형식을 바꿔 옛 주소를 새 주소로</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>307과 308은 302, 301과 달리 브라우저가 요청 방식(POST 등)과 본문을 바꾸지 않고 그대로 다시 보낸다.</p>
+
+          <h3>두 번째 인자 type: replace와 push</h3>
+          <p>
+            브라우저 방문 기록에 새 칸을 쌓을지(<code>push</code>), 지금 칸을 바꿀지(<code>replace</code>)다. 기본은 Server Action
+            안에서는 <code>push</code>, 그 밖에서는 <code>replace</code>다. 위 소스의 <code>isAction ? 'push' : 'replace'</code>가
+            그것이다. 서버 컴포넌트에서는 효과가 없다.
+          </p>
+
+          <h3>어디서 부를 수 있나</h3>
+          <ul>
+            <li><strong>서버 컴포넌트:</strong> 렌더링 중 어디서든. 이 저장소의 쓰임새다.</li>
+            <li>
+              <strong>Server Action:</strong> 자바스크립트가 있으면 클라이언트 이동으로, 자바스크립트 없이 폼을 제출했으면 303 See Other로
+              응답한다(<code>action-handler.js</code>가 상태 코드를 303으로 바꾼다).
+            </li>
+            <li><strong>Route Handler:</strong> 307/308 응답.</li>
+            <li>
+              <strong>클라이언트 컴포넌트:</strong> 렌더링 중에는 되지만 <code>onClick</code> 같은 이벤트 핸들러에서는 안 된다. 이벤트에서는
+              <code>useRouter().push()</code>를 쓴다.
+            </li>
+          </ul>
+          <p>
+            요청이 렌더링에 닿기도 전에 보내고 싶으면(예: 옛 주소 전체를 새 주소로) <code>next.config.ts</code>의 <code>redirects</code>나
+            Proxy를 쓴다.
+          </p>
+        </section>
+
+        <section id="not-found">
+          <h2>notFound와 not-found.tsx</h2>
+          <p>
+            <code>notFound()</code>를 부르면 그 구간에서 가장 가까운 <code>not-found.tsx</code>를 그린다. 공연 상세처럼 주소의 ID에 해당하는
+            공연이 없을 때 쓴다.
+          </p>
+          <pre><code class="language-tsx">// app/shows/[id]/page.tsx (예시)
+export default async function ShowPage({ params }: PageProps&lt;'/shows/[id]'&gt;) {
+  const { id } = await params;
+  const show = await fetchShow(id);
+  if (!show) {
+    notFound();
+  }
+  return &lt;ShowDetail show={show} /&gt;;
+}</code></pre>
+          <ul>
+            <li>
+              <code>not-found.tsx</code>가 없으면 Next의 기본 404 화면("This page could not be found.")이 나온다. 이 저장소에는 아직
+              <code>not-found.tsx</code>가 없어서, 없는 주소 <code>/nope</code>을 열면 이 기본 화면과 404를 받는다.
+            </li>
+            <li>
+              Next가 <code>&lt;meta name="robots" content="noindex" /&gt;</code>를 넣어 검색 엔진이 이 페이지를 색인하지 않게 한다.
+            </li>
+            <li>
+              <code>redirect</code>와 달리 주소는 바뀌지 않는다. 사용자는 자기가 친 주소를 그대로 보면서 "없음" 화면을 본다.
+            </li>
+          </ul>
+          <p>
+            <code>redirect</code>와 <code>notFound</code> 중 무엇을 쓸지는 "고쳐 줄 수 있는 주소인가"로 나눈다. <code>?page=abc</code>는
+            뜻이 분명한 주소(<code>/</code>)로 고쳐 줄 수 있어 <code>redirect</code>, 없는 공연 ID는 고칠 곳이 없어 <code>notFound</code>다.
+          </p>
+        </section>
+
+        <section id="auth">
+          <h2>forbidden과 unauthorized</h2>
+          <p>
+            같은 방식으로 401, 403 화면을 그리는 함수다. 아직 실험 기능이라 <code>next.config.ts</code>에서 켜야 한다. 켜지 않고 부르면
+            예외가 바뀌어 <code>`forbidden()` is experimental ...</code>라는 진짜 오류가 난다.
+          </p>
+          <pre><code class="language-ts">// next.config.ts
+const nextConfig: NextConfig = {
+  experimental: { authInterrupts: true },
+};</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>함수</th>
+                  <th>상태</th>
+                  <th>그리는 파일</th>
+                  <th>예</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>unauthorized()</code></td>
+                  <td>401</td>
+                  <td><code>unauthorized.tsx</code></td>
+                  <td>로그인하지 않고 예매 내역을 열었다</td>
+                </tr>
+                <tr>
+                  <td><code>forbidden()</code></td>
+                  <td>403</td>
+                  <td><code>forbidden.tsx</code></td>
+                  <td>로그인했지만 남의 예매 내역을 열었다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>이 저장소는 아직 로그인이 없어 쓰지 않는다. 로그인이 생기면 로그인 페이지로 <code>redirect</code>할지, 401 화면을 보여 줄지 정해야 한다.</p>
+        </section>
+
+        <section id="status">
+          <h2>스트리밍이 시작된 뒤의 응답</h2>
+          <p>
+            HTTP 응답은 상태 줄(<code>200 OK</code> 등)을 맨 앞에 보낸다. 그래서 Next가 응답을 보내기 시작한 뒤에는 상태 코드를 바꿀 수
+            없다. 이 저장소의 <code>app/loading.tsx</code>처럼 로딩 화면이 있으면 Next는 로딩 화면부터 먼저 보내므로(스트리밍),
+            <code>page.tsx</code>가 <code>redirect</code>를 부를 때는 이미 <code>200</code>을 보낸 뒤다.
+          </p>
+          <p>그때 Next는 상태 코드 대신 HTML 안에 지시를 넣는다. 스토어를 띄워 실제로 받은 응답이다.</p>
+          <pre><code>$ curl -i "http://localhost:3001/?page=abc"
+HTTP/1.1 200 OK
+...
+&lt;meta id="__next-page-redirect" http-equiv="refresh" content="1;url=/"/&gt;</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>함수</th>
+                  <th>응답을 보내기 전</th>
+                  <th>스트리밍이 시작된 뒤</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>redirect</code></td>
+                  <td>307과 <code>Location</code> 헤더</td>
+                  <td>200과 <code>&lt;meta http-equiv="refresh" content="1;url=..."&gt;</code></td>
+                </tr>
+                <tr>
+                  <td><code>permanentRedirect</code></td>
+                  <td>308과 <code>Location</code> 헤더</td>
+                  <td>200과 <code>content="0;url=..."</code></td>
+                </tr>
+                <tr>
+                  <td><code>notFound</code></td>
+                  <td>404</td>
+                  <td>200과 <code>noindex</code> meta, not-found 화면</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            자바스크립트가 켜진 브라우저에서는 Next 클라이언트가 바로 주소를 바꾸므로 사용자는 차이를 거의 느끼지 못한다. meta 태그는
+            자바스크립트가 없을 때를 위한 대비다. 다만 상태 코드를 보고 판단하는 검색 엔진, 모니터링, <code>curl</code> 같은 도구는 200을
+            본다. 정확한 상태 코드가 중요하면 로딩 화면보다 먼저, 곧 스트리밍이 시작되기 전에 판단이 끝나도록 구조를 잡는다.
+          </p>
+        </section>
+
+        <section id="try-catch">
+          <h2>try/catch에 삼켜지는 문제</h2>
+          <p>예외라서 생기는 함정이다. <code>try</code> 안에서 부르면 <code>catch</code>가 Next보다 먼저 받아 버린다.</p>
+          <pre><code class="language-tsx">export default function Page() {
+  try {
+    redirect('/');
+  } catch (error) {
+    return &lt;p&gt;{error.digest}&lt;/p&gt;;
+  }
+}</code></pre>
+          <p>
+            임시 페이지로 띄워 보면 리다이렉트되지 않고 200과 함께 <code>NEXT_REDIRECT;replace;/;307;</code>라는 글자가 화면에 나온다.
+            예외를 Next가 받지 못했으니 리다이렉트도 일어나지 않는다. 실제로는 주로 이렇게 숨어 있다.
+          </p>
+          <pre><code class="language-tsx">try {
+  const show = await fetchShow(id); // 이 안에서 404면 notFound()를 부른다
+  ...
+} catch (error) {
+  console.error(error);
+  return &lt;ErrorMessage /&gt;; // notFound()까지 여기로 와서 404 대신 오류 화면이 된다
+}</code></pre>
+
+          <h3>피하는 법</h3>
+          <ol class="steps blue">
+            <li>
+              <strong>try 밖에서 부른다</strong>
+              <code>try</code>에서는 결과만 받아 오고, 판단과 <code>redirect</code>/<code>notFound</code>는 <code>try</code>가 끝난 뒤에
+              한다. 공식 문서가 권하는 방법이다.
+            </li>
+            <li>
+              <strong>catch 첫 줄에서 unstable_rethrow</strong>
+              <code>try</code> 안에서 불릴 수밖에 없으면 <code>catch</code> 맨 앞에서 <code>unstable_rethrow(error)</code>를 부른다. Next의
+              예외면 다시 던지고, 아니면 아무것도 하지 않는다.
+            </li>
+          </ol>
+          <pre><code class="language-tsx">import { notFound, unstable_rethrow } from 'next/navigation';
+
+try {
+  notFound();
+} catch (error) {
+  unstable_rethrow(error); // Next의 예외면 여기서 다시 던진다
+  return &lt;p&gt;삼킴&lt;/p&gt;;   // 진짜 오류만 여기까지 온다
+}</code></pre>
+          <p>
+            임시 페이지로 띄워 보면 "삼킴" 대신 not-found 화면("This page could not be found.")과 <code>noindex</code> meta가 나온다.
+            <code>unstable_rethrow</code>의 몸통은 아래와 같다. <code>isNextRouterError</code>(리다이렉트와 401/403/404) 말고도 Next가
+            렌더링을 바꾸려고 던지는 다른 예외들도 다시 던지고, <code>error.cause</code>도 따라 들어가 본다.
+          </p>
+          <pre><code class="language-js">// next/dist/client/components/unstable-rethrow.js
+function unstable_rethrow(error) {
+  if (isNextRouterError(error) || isBailoutToCSRError(error) || isDynamicServerError(error) || ...) {
+    throw error;
+  }
+  if (error instanceof Error &amp;&amp; 'cause' in error) {
+    unstable_rethrow(error.cause);
+  }
+}</code></pre>
+          <div class="callout warn">
+            <p>
+              이름의 <code>unstable_</code>은 API가 아직 바뀔 수 있다는 뜻이다. 1번 방법으로 풀 수 있으면 그쪽이 낫다. 같은 이유로
+              <code>await</code>하지 않은 Promise 안에서 <code>notFound()</code>를 부르면 아무도 받지 못해 not-found 화면이 나오지 않는다.
+              렌더링 경로, 곧 컴포넌트나 컴포넌트가 <code>await</code>하는 함수 안에서 불러야 한다.
+            </p>
+          </div>
+        </section>
+
+        <section id="ours">
+          <h2>우리 프로젝트에서는</h2>
+          <p><code>apps/store/app/page.tsx</code>가 <code>redirect</code>를 두 번 쓴다. 둘 다 <code>try</code> 밖이다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>시점</th>
+                  <th>조건</th>
+                  <th>예</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>API를 부르기 전</td>
+                  <td>쿼리를 정리한 주소가 지금 주소와 다르다</td>
+                  <td><code>/?page=abc</code> → <code>/</code>, <code>/?page=1&amp;foo=bar</code> → <code>/</code></td>
+                </tr>
+                <tr>
+                  <td>API 응답을 받은 뒤</td>
+                  <td>요청한 페이지가 마지막 페이지를 넘는다</td>
+                  <td><code>/?page=99</code> → <code>/?page=4</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            첫 번째를 API 호출 앞에 둔 이유는 잘못된 쿼리를 그대로 보내 API에서 400을 받지 않기 위해서다. 두 번째는 전체 페이지 수를 알아야
+            하므로 응답 뒤에만 할 수 있다. <code>app/loading.tsx</code>가 있어서 둘 다 <a href="#status">200과 meta refresh</a>로 나간다.
+          </p>
+        </section>
+
+        <section id="check">
+          <h2>스스로 확인하기</h2>
+          <div class="quiz">
+            <p class="quiz-q">1. 아래에서 <code>if</code> 뒤의 <code>show.title</code>에 타입 오류가 나지 않는 이유는?</p>
+            <p class="quiz-context"><a href="#throw">return이 없어도 되는 이유</a> 절의 <code>never</code>를 묻는다.</p>
+            <pre><code class="language-tsx">const show = await fetchShow(id); // Show | undefined
+if (!show) {
+  notFound();
+}
+show.title;</code></pre>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  <code>notFound()</code>의 반환 타입이 <code>never</code>라서, TypeScript는 <code>if</code> 안으로 들어간 흐름이 아래로
+                  내려오지 않는다고 본다. 아래에는 <code>show</code>가 참이었던 경우만 남아 <code>Show</code>로 좁혀진다. 실행할 때도
+                  <code>notFound()</code>가 예외를 던지므로 실제로 내려오지 않는다.
+                </p>
+              </div>
+            </details>
+          </div>
+
+          <div class="quiz">
+            <p class="quiz-q">2. 이 페이지에서 공연이 없으면 사용자는 무엇을 보나?</p>
+            <p class="quiz-context"><a href="#try-catch">try/catch</a> 절. <code>fetchShow</code>는 API가 404면 <code>notFound()</code>를 부른다.</p>
+            <pre><code class="language-tsx">try {
+  const show = await fetchShow(id);
+  return &lt;ShowDetail show={show} /&gt;;
+} catch {
+  return &lt;p&gt;공연을 불러오지 못했어요.&lt;/p&gt;;
+}</code></pre>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  not-found 화면이 아니라 "공연을 불러오지 못했어요."를 본다. <code>notFound()</code>가 던진 예외를 <code>catch</code>가 먼저
+                  받아 Next까지 가지 않는다. <code>catch</code> 첫 줄에 <code>unstable_rethrow(error)</code>를 넣거나, <code>try</code>에서는
+                  응답만 받고 <code>notFound()</code>는 <code>try</code> 밖에서 부르도록 고친다.
+                </p>
+              </div>
+            </details>
+          </div>
+
+          <div class="quiz">
+            <p class="quiz-q">3. <code>curl -i "localhost:3001/?page=abc"</code>가 307이 아니라 200을 받는 이유는?</p>
+            <p class="quiz-context"><a href="#status">스트리밍</a> 절과 <code>app/loading.tsx</code>를 묻는다.</p>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  <code>app/loading.tsx</code>가 있어 Next가 로딩 화면부터 보내기 시작하고, 그 순간 상태 줄 <code>200 OK</code>가 이미
+                  나간다. <code>page.tsx</code>의 <code>redirect</code>는 그 뒤에 불리므로 상태 코드를 바꿀 수 없고, Next는 대신
+                  <code>&lt;meta http-equiv="refresh" content="1;url=/"&gt;</code>를 넣는다. 브라우저에서는 Next 클라이언트가 곧바로
+                  <code>/</code>로 옮긴다.
+                </p>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section id="more">
+          <h2>더 읽을거리</h2>
+          <ul>
+            <li><a href="https://nextjs.org/docs/app/api-reference/functions/redirect">Next.js 문서: redirect</a></li>
+            <li><a href="https://nextjs.org/docs/app/api-reference/functions/not-found">Next.js 문서: notFound</a></li>
+            <li><a href="https://nextjs.org/docs/app/api-reference/functions/unstable_rethrow">Next.js 문서: unstable_rethrow</a></li>
+            <li><a href="https://nextjs.org/docs/app/api-reference/functions/forbidden">Next.js 문서: forbidden</a>, <a href="https://nextjs.org/docs/app/api-reference/functions/unauthorized">unauthorized</a></li>
+            <li><a href="https://nextjs.org/docs/app/api-reference/file-conventions/loading#status-codes">Next.js 문서: 스트리밍과 상태 코드</a></li>
+            <li><a href="00-nextjs-렌더링-시점과-캐시.html#connection">next 00 문서</a>: 이 페이지가 요청마다 렌더링되는 이유(<code>connection()</code>)</li>
+          </ul>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

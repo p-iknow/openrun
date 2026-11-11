@@ -14,6 +14,7 @@ const learnFolders = [
       { file: '04-server-component가-해결하는-문제.html', title: '04 Server Component가 해결하는 문제', tags: ['nextjs'] },
       { file: '05-hydration-자세히.html', title: '05 hydration 자세히', tags: ['nextjs'] },
       { file: '06-next-image가-해결하는-문제와-동작-방식.html', title: '06 next/image가 해결하는 문제와 동작 방식', tags: ['nextjs'] },
+      { file: '07-redirect와-notFound-흐름을-끊는-함수.html', title: '07 redirect와 notFound: 흐름을 끊는 함수', tags: ['nextjs'] },
     ],
   },
   {
@@ -25,7 +26,13 @@ const learnFolders = [
       { file: '02-의존성-주입.html', title: '02 의존성 주입', tags: ['nestjs'] },
       { file: '03-통합-테스트-구성.html', title: '03 통합 테스트 구성', tags: ['testing'] },
       { file: '04-예외-필터와-APP_FILTER.html', title: '04 예외 필터와 APP_FILTER', tags: ['nestjs'] },
+      { file: '05-파이프와-검증.html', title: '05 파이프와 검증', tags: ['nestjs', 'openapi'] },
     ],
+  },
+  {
+    folder: 'zod',
+    title: 'zod',
+    documents: [{ file: '00-zod-기초.html', title: '00 zod 기초: 실행 중에도 남는 타입', tags: ['zod'] }],
   },
   {
     folder: 'db-and-drizzle',

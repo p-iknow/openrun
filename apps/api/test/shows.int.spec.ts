@@ -281,6 +281,89 @@ describe('GET /shows', () => {
     expect(response.body.items.at(-1).title).toBe('공연 20');
   });
 
+  describe('페이지', () => {
+    // 3월 1일부터 하루에 하나씩 시작하는 공연 12개. 제목은 `공연 1` ~ `공연 12`이고 정렬 순서와 같다.
+    async function insertTwelveShows() {
+      const venueId = await insertVenue('예술의전당');
+      for (let day = 1; day <= 12; day += 1) {
+        await insertShow({
+          venueId,
+          title: `공연 ${day}`,
+          performanceStarts: [
+            `2026-03-${String(day).padStart(2, '0')}T10:00:00Z`,
+          ],
+        });
+      }
+    }
+
+    it('page와 size로 자른 항목과 전체 개수, 전체 페이지 수를 돌려준다', async () => {
+      await insertTwelveShows();
+
+      const response = await request(app.getHttpServer()).get(
+        '/shows?page=2&size=5',
+      );
+
+      expect(response.status).toBe(200);
+      expect(
+        response.body.items.map((item: { title: string }) => item.title),
+      ).toEqual(['공연 6', '공연 7', '공연 8', '공연 9', '공연 10']);
+      expect(response.body).toMatchObject({
+        page: 2,
+        size: 5,
+        totalCount: 12,
+        totalPages: 3,
+      });
+    });
+
+    it('마지막 페이지는 남은 항목만 담는다', async () => {
+      await insertTwelveShows();
+
+      const response = await request(app.getHttpServer()).get(
+        '/shows?page=3&size=5',
+      );
+
+      expect(
+        response.body.items.map((item: { title: string }) => item.title),
+      ).toEqual(['공연 11', '공연 12']);
+    });
+
+    it('마지막 페이지를 넘는 요청은 오류 없이 빈 항목과 전체 페이지 수를 돌려준다', async () => {
+      await insertTwelveShows();
+
+      const response = await request(app.getHttpServer()).get(
+        '/shows?page=4&size=5',
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        items: [],
+        page: 4,
+        size: 5,
+        totalCount: 12,
+        totalPages: 3,
+      });
+    });
+
+    it('잘못된 쿼리 값은 필드별 오류를 담은 400 Problem Details로 응답한다', async () => {
+      const response = await request(app.getHttpServer()).get(
+        '/shows?page=abc',
+      );
+
+      expect(response.status).toBe(400);
+      expect(response.headers['content-type']).toMatch(
+        /^application\/problem\+json/,
+      );
+      expect(response.body).toEqual({
+        type: 'about:blank',
+        title: 'Bad Request',
+        status: 400,
+        detail: '요청 값이 올바르지 않습니다.',
+        code: 'VALIDATION_FAILED',
+        errors: [{ field: 'page', detail: '1 이상의 정수여야 합니다.' }],
+      });
+    });
+  });
+
   it('회차가 없는 공연은 목록과 전체 개수에서 뺀다', async () => {
     const venueId = await insertVenue('예술의전당');
     await insertShow({ venueId, title: '회차 없음', performanceStarts: [] });
