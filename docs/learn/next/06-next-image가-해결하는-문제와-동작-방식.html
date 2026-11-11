@@ -23,7 +23,7 @@
           <li><a href="#optimizer">최적화 서버 /_next/image</a></li>
           <li><a href="#cache">캐시와 캐시 버스팅</a></li>
           <li><a href="#security">보안: 허용 목록과 SSRF</a></li>
-          <li><a href="#other">최적화를 끄거나 맡기기</a></li>
+          <li><a href="#remote">원본이 원격 CDN에 있을 때</a></li>
         </ol>
         <strong>마무리</strong>
         <ol>
@@ -672,19 +672,173 @@ X-Nextjs-Cache: MISS</code></pre>
           </p>
         </section>
 
-        <section id="other">
-          <h2>최적화를 끄거나 맡기기</h2>
+        <section id="remote">
+          <h2>원본이 public이 아니라 원격 CDN에 있을 때</h2>
+          <p>
+            지금 포스터는 스토어의 <code>public/posters/</code>에 있고, 스토어 자신이 정적 파일로 내보낸다. 실제 서비스에서는 이미지를 앱
+            서버에 두지 않는다. 운영자가 올린 포스터는 S3나 MinIO 같은 객체 저장소에 넣고, 그 앞에 CloudFront 같은 CDN을 두어
+            <code>https://cdn.openrun.example/posters/show-01-3fa2b1c9.png</code>처럼 내보낸다. 이 저장소도 1.7에서 MinIO로 옮긴다. 이때
+            "누가 이미지를 줄이느냐"에 따라 세 가지 구성이 있다.
+          </p>
+
+          <h3>A. 원본은 CDN, 줄이기는 Next (기본 loader)</h3>
+          <p>
+            <code>src</code>만 CDN 주소로 바뀌고 나머지는 지금과 같다. <code>srcset</code>은 여전히 <code>/_next/image</code>를
+            가리키고, Next 서버가 CDN에서 원본을 받아 줄인다.
+          </p>
+          <div class="flow">
+            <div class="lane blue">
+              <div class="lane-title">처음 요청 (MISS)</div>
+              <ol class="chain">
+                <li><span>브라우저 → Next /_next/image?url=https://cdn…</span></li>
+                <li><span>Next → CDN에서 원본 PNG 받기</span></li>
+                <li><span>Next가 줄이고 WebP로 바꿔 디스크에 저장</span></li>
+                <li><span>브라우저에 응답</span></li>
+              </ol>
+            </div>
+            <div class="lane green">
+              <div class="lane-title">다음 요청 (HIT)</div>
+              <ol class="chain">
+                <li><span>브라우저 → Next /_next/image</span></li>
+                <li><span>디스크 캐시에서 바로 응답 (CDN에 안 감)</span></li>
+              </ol>
+            </div>
+          </div>
+          <pre><code class="language-ts">// next.config.ts: CDN 호스트와 포스터 경로만 허용한다
+images: {
+  remotePatterns: [new URL('https://cdn.openrun.example/posters/**')],
+  // CDN은 공인 IP라 dangerouslyAllowLocalIP는 켜지 않는다
+}</code></pre>
           <ul>
             <li>
-              <strong><code>unoptimized</code>:</strong> <code>/_next/image</code>를 거치지 않고 원본 주소를 그대로 쓴다.
-              <code>srcset</code>도 만들지 않는다. 1KB 미만 이미지, SVG, 움직이는 GIF처럼 줄여도 이득이 없을 때 쓴다.
+              <strong>지금 구성과 달라지는 점:</strong> 원본 호스트가 공인 IP라서 사설 IP 차단을 끄지 않아도 된다. 지금처럼
+              <code>POSTER_BASE_URL</code>만 바꾸면 <code>remotePatterns</code>와 <code>dangerouslyAllowLocalIP</code>가 따라 바뀐다.
             </li>
             <li>
-              <strong><code>loader</code> / <code>loaderFile</code>:</strong> <code>srcset</code>의 주소를 만드는 함수를 바꾼다.
-              Cloudinary, imgix, CloudFront 같은 이미지 CDN이 줄이기를 맡고, Next 서버는 이미지 일을 하지 않는다. 트래픽이 많은
-              서비스는 보통 이쪽을 쓴다.
+              <strong>캐시 기간:</strong> Next 캐시의 기간은 <code>minimumCacheTTL</code>과 원본 응답의 <code>Cache-Control</code> 중 큰
+              값이다. 내용 해시가 들어간 파일은 내용이 절대 바뀌지 않으므로, CDN이 <code>Cache-Control: public, max-age=31536000,
+              immutable</code>을 보내게 하면 Next도 1년 동안 다시 받지 않는다.
+            </li>
+            <li>
+              <strong>Next 서버가 일을 다 한다:</strong> 이미지를 줄이는 CPU, 결과를 저장할 디스크가 모두 Next 서버의 몫이다. 서버를 여러
+              대 띄우면 디스크 캐시가 서버마다 따로 있어서, 같은 이미지를 서버 수만큼 다시 만든다. 공유하려면 <code>cacheHandler</code>로
+              Redis 같은 공용 저장소를 붙인다.
+            </li>
+            <li>
+              <strong>Next 앞에도 CDN을 두는 경우:</strong> <code>/_next/image</code> 응답을 CDN이 캐시하면 Next까지 오는 요청이 줄어든다.
+              이때 CDN이 <code>Accept</code> 헤더를 Next로 넘기고 캐시 키에도 넣어야 한다. 그러지 않으면 WebP를 못 읽는 브라우저에 WebP가
+              가거나, 모두가 PNG를 받는다. Next 응답의 <code>Vary: Accept</code>가 이 점을 알린다.
             </li>
           </ul>
+
+          <h3>B. 원본도 줄이기도 이미지 CDN (custom loader)</h3>
+          <p>
+            Cloudinary, imgix, Cloudflare Images, CloudFront + 이미지 변환 기능처럼 <strong>주소의 쿼리로 크기를 받아 줄여 주는 CDN</strong>이
+            있다. 이때는 <code>srcset</code>의 주소를 <code>/_next/image</code> 대신 그 CDN 주소로 만들게 바꾼다. Next 서버는 이미지 일을
+            전혀 하지 않는다.
+          </p>
+          <pre><code class="language-ts">// apps/store/src/image-loader.ts (예시)
+'use client';
+
+export default function cdnLoader({ src, width, quality }: { src: string; width: number; quality?: number }) {
+  const url = new URL(src); // 예: https://cdn.openrun.example/posters/show-01-3fa2b1c9.png
+  url.searchParams.set('width', String(width));
+  url.searchParams.set('quality', String(quality ?? 75));
+  url.searchParams.set('format', 'auto'); // 형식 고르기도 CDN이 Accept를 보고 한다
+  return url.href;
+}
+
+// next.config.ts
+images: { loader: 'custom', loaderFile: './src/image-loader.ts' }</code></pre>
+          <pre><code class="language-html">&lt;!-- 만들어지는 srcset: 브라우저가 CDN에 직접 요청한다 --&gt;
+&lt;img srcset="https://cdn.openrun.example/posters/show-01-3fa2b1c9.png?width=256&amp;quality=75&amp;format=auto 256w,
+             https://cdn.openrun.example/posters/show-01-3fa2b1c9.png?width=384&amp;quality=75&amp;format=auto 384w, ..." /&gt;</code></pre>
+          <ul>
+            <li>
+              <strong>그대로 남는 것:</strong> 컴포넌트가 하는 일(<code>srcset</code>, <code>sizes</code>, lazy, 자리 잡기)은 그대로다.
+              loader는 <code>srcset</code>의 주소를 만드는 방법만 바꾼다. 그래서 <code>sizes</code>를 열 수와 맞추는 일도 그대로 필요하다.
+            </li>
+            <li>
+              <strong>사라지는 것:</strong> <code>/_next/image</code> 요청이 없으므로 Next의 디스크 캐시, <code>remotePatterns</code> 검사,
+              Next 서버의 SSRF 걱정이 없어진다. 대신 그 CDN에서 원본 경로와 변환 옵션을 제한하는 설정을 해야 한다. 공격자가 쿼리를 바꿔 변형을
+              끝없이 만들게 하는 문제는 그 CDN에서도 똑같이 생기기 때문이다.
+            </li>
+            <li>
+              <strong>loader 파일은 브라우저에서도 실행된다:</strong> 클라이언트 컴포넌트가 <code>&lt;Image&gt;</code>를 쓸 수도 있어서 App
+              Router 문서는 이 파일에 <code>'use client'</code>를 붙이게 한다. 비밀 키를 넣으면 안 된다.
+            </li>
+            <li>
+              <strong>캐시 버스팅은 여전히 필요하다:</strong> CDN도 주소로 캐시한다. CDN에는 캐시를 지우는 기능(purge, invalidation)이
+              있지만, 전 세계 서버에 퍼지는 데 시간이 걸리고 요금이 붙기도 하며, 이미 받아 간 브라우저 캐시는 지우지 못한다. 그래서 파일 이름에
+              내용 해시를 넣는 방법이 가장 확실하다.
+            </li>
+          </ul>
+
+          <h3>C. 줄이지 않고 원본 그대로 (unoptimized)</h3>
+          <p>
+            <code>unoptimized</code>를 주면 <code>srcset</code> 없이 원본 주소 하나를 쓴다. 업로드할 때 이미 적당한 크기와 형식으로 바꿔
+            저장한다면(예: 올리는 순간 WebP 폭 600 하나만 만든다) 이걸로 충분하다. SVG, 1KB 미만 이미지, 움직이는 GIF처럼 줄여도 이득이 없을
+            때도 쓴다. 컴포넌트의 자리 잡기와 lazy는 그대로 동작한다.
+          </p>
+
+          <h3>세 구성 비교</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>A. Next가 줄이기</th>
+                  <th>B. 이미지 CDN이 줄이기</th>
+                  <th>C. 원본 그대로</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>브라우저가 요청하는 곳</td>
+                  <td>Next <code>/_next/image</code></td>
+                  <td>CDN 주소</td>
+                  <td>CDN 주소</td>
+                </tr>
+                <tr>
+                  <td>줄이는 CPU</td>
+                  <td>Next 서버</td>
+                  <td>CDN 업체</td>
+                  <td>없음 (업로드 때 미리)</td>
+                </tr>
+                <tr>
+                  <td>화면 크기별 파일</td>
+                  <td>있음</td>
+                  <td>있음</td>
+                  <td>없음</td>
+                </tr>
+                <tr>
+                  <td>설정</td>
+                  <td><code>remotePatterns</code></td>
+                  <td><code>loader: 'custom'</code>, <code>loaderFile</code></td>
+                  <td><code>unoptimized</code></td>
+                </tr>
+                <tr>
+                  <td>비용</td>
+                  <td>서버 자원. 트래픽이 늘면 서버도 늘려야 한다</td>
+                  <td>CDN 요금 (변환 횟수, 전송량)</td>
+                  <td>가장 싸지만 모바일이 큰 파일을 받는다</td>
+                </tr>
+                <tr>
+                  <td>어울리는 곳</td>
+                  <td>이미지 트래픽이 적은 서비스, 학습용 프로젝트</td>
+                  <td>이미지가 많은 상용 서비스</td>
+                  <td>크기가 한 가지면 되는 이미지</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout">
+            <p>
+              어느 구성이든 <strong>컴포넌트의 역할</strong>(크기별 후보, <code>sizes</code>, lazy, 자리 잡기)과 <strong>주소로 캐시한다는
+              사실</strong>은 바뀌지 않는다. 바뀌는 것은 <code>srcset</code>의 주소가 어디를 가리키고, 누가 이미지를 줄이느냐뿐이다. 그래서
+              API는 포스터의 완전한 URL을 주고, 저장 위치가 바뀌면 <code>POSTER_BASE_URL</code>(그리고 B라면 loader)만 바꾼다.
+            </p>
+          </div>
         </section>
 
         <section id="ours">
