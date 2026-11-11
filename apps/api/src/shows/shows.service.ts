@@ -4,7 +4,8 @@ import { Clock } from '../clock/clock.module.js';
 import { DATABASE, type Database } from '../db/database.module.js';
 import { performances, shows } from '../db/schema/shows.js';
 import { venues } from '../db/schema/venues.js';
-import type { ShowListQueryDto, ShowPageDto } from './show.dto.js';
+import type { ShowListQuery } from './show-list-query.js';
+import type { ShowPageDto } from './show.dto.js';
 import { POSTER_BASE_URL, buildPosterUrl } from './poster-url.js';
 import { showSalesStatusSubquery } from './show-sales-status.js';
 
@@ -16,7 +17,7 @@ export class ShowsService {
     @Inject(POSTER_BASE_URL) private readonly posterBaseUrl: string,
   ) {}
 
-  async findPage({ page, size }: ShowListQueryDto): Promise<ShowPageDto> {
+  async findPage({ page, size }: ShowListQuery): Promise<ShowPageDto> {
     // 공연 기간은 저장하지 않고 회차에서 계산한다. 회차가 없는 공연은 목록에 나오지 않는다.
     const period = this.db
       .select({
