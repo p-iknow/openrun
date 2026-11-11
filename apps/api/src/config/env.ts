@@ -4,17 +4,17 @@
 export function readDatabaseUrl(
   source: NodeJS.ProcessEnv = process.env,
 ): string {
-  return required(source, { name: 'DATABASE_URL' });
+  return getOrThrow(source, { name: 'DATABASE_URL' });
 }
 
 /** 포스터 키 앞에 붙여 포스터의 완전한 URL을 만드는 주소. 예: `http://localhost:3001/posters` */
 export function readPosterBaseUrl(
   source: NodeJS.ProcessEnv = process.env,
 ): string {
-  return required(source, { name: 'POSTER_BASE_URL' });
+  return getOrThrow(source, { name: 'POSTER_BASE_URL' });
 }
 
-function required(
+function getOrThrow(
   source: NodeJS.ProcessEnv,
   { name }: { name: string },
 ): string {
