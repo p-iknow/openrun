@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>10 숨은 입력 칸으로 쿼리 보존하기</title>
+    <link rel="stylesheet" href="../learn.css" />
+    <script src="../vendor/highlightjs/highlight.min.js" defer></script>
+    <script src="../learn.js" defer></script>
+  </head>
+  <body>
+    <div class="layout">
+      <nav aria-label="목차">
+        <strong>목차</strong>
+        <ol>
+          <li><a href="#overview">한눈에 보기</a></li>
+          <li><a href="#get-form">GET 폼이 주소를 만드는 규칙</a></li>
+          <li><a href="#problem">문제: 지금 쿼리가 사라진다</a></li>
+          <li><a href="#action-query">action에 쿼리를 붙이면 안 되나</a></li>
+          <li><a href="#hidden">해결: 숨은 입력 칸</a></li>
+          <li><a href="#which">어떤 값을 숨은 칸에 넣나</a></li>
+          <li><a href="#react">React와 Next에서 쓰기</a></li>
+          <li><a href="#rules">알아 둘 규칙</a></li>
+          <li><a href="#tradeoff">장점과 약점</a></li>
+          <li><a href="#alternative">대안: 함수로 주소를 만들어 이동하기</a></li>
+        </ol>
+        <strong>마무리</strong>
+        <ol>
+          <li><a href="#ours">우리 프로젝트에서는</a></li>
+          <li><a href="#check">스스로 확인하기</a></li>
+          <li><a href="#more">더 읽을거리</a></li>
+        </ol>
+      </nav>
+
+      <main>
+        <h1>10 숨은 입력 칸으로 쿼리 보존하기</h1>
+        <p class="lead">
+          검색 결과 화면에서 정렬을 바꿔 둔 뒤 다시 검색하면 정렬이 풀리는 문제가 있다. GET 폼은 제출할 때 주소의 쿼리 문자열을 폼 값으로 통째로 바꾸기
+          때문이다. 이 문서는 <code>&lt;input type="hidden"&gt;</code>으로 지금 쿼리를 지키는 방법과, 이 방법의 장점과 약점, 대안을 본다. GET 폼의 동작은 Chrome에서
+          작은 시험 페이지로 직접 확인했다.
+        </p>
+
+        <section id="overview">
+          <h2>한눈에 보기</h2>
+          <div class="callout">
+            <p>
+              GET 폼은 제출할 때 <strong>폼 안의 입력 칸만으로</strong> 새 주소의 쿼리 문자열을 만든다. 그래서 지금 주소에 있던 다른 쿼리(예: 정렬)는 사라진다.
+              지키고 싶은 쿼리를 화면에 보이지 않는 입력 칸(<code>type="hidden"</code>)에 담아 두면, 제출할 때 함께 실려 간다.
+            </p>
+          </div>
+          <pre><code class="language-html">&lt;!-- 지금 주소: /?sort=newest --&gt;
+&lt;form action="/"&gt;
+  &lt;input name="q" placeholder="공연 제목으로 찾기" /&gt;
+  &lt;input type="hidden" name="sort" value="newest" /&gt;  &lt;!-- 지금 정렬을 함께 보낸다 --&gt;
+&lt;/form&gt;
+&lt;!-- "햄릿"을 쓰고 제출하면 → /?q=햄릿&amp;sort=newest --&gt;</code></pre>
+        </section>
+
+        <section id="get-form">
+          <h2>GET 폼이 주소를 만드는 규칙</h2>
+          <p>
+            <code>&lt;form&gt;</code>의 <code>method</code>를 정하지 않으면 GET이다. GET 폼을 제출하면 브라우저가 다음 순서로 이동한다. 자바스크립트는 필요 없다.
+          </p>
+          <ol class="steps blue">
+            <li><strong>값 모으기</strong> 폼 안에서 <code>name</code>이 있는 입력 칸의 이름과 값을 차례로 모은다.</li>
+            <li><strong>쿼리 문자열 만들기</strong> 모은 값을 <code>q=햄릿&amp;sort=newest</code>처럼 잇는다. 한글과 공백은 주소에 쓸 수 있게 바꾼다(인코딩).</li>
+            <li><strong>이동</strong> <code>action</code> 주소 뒤에 <code>?</code>와 쿼리 문자열을 붙여 그 주소로 간다.</li>
+          </ol>
+          <pre><code class="language-ts">// 브라우저가 하는 일을 자바스크립트로 쓰면
+const values = new FormData(form); // ① name 있는 입력 칸의 값을 모은다
+const query = new URLSearchParams(values).toString(); // ② 'q=%ED%96%84%EB%A6%BF&amp;sort=newest'
+location.href = `${form.action}?${query}`; // ③ action 주소로 이동한다</code></pre>
+          <p>
+            제출은 입력 칸에서 Enter를 누르거나, 폼 안의 <code>type="submit"</code> 버튼을 누를 때 일어난다. 글자를 입력하는 동안에는 일어나지 않는다.
+          </p>
+        </section>
+
+        <section id="problem">
+          <h2>문제: 지금 쿼리가 사라진다</h2>
+          <p>
+            위 규칙의 ②를 다시 보자. 쿼리 문자열은 <strong>폼에 있는 값만으로</strong> 새로 만든다. 지금 주소의 쿼리를 이어 붙이지 않는다. 그래서 폼에 검색 칸
+            하나만 있으면 이런 일이 생긴다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>순서</th><th>사용자가 한 일</th><th>주소</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>①</td><td>정렬을 "최근 등록 순"으로 바꾼다</td><td><code>/?sort=newest</code></td></tr>
+                <tr><td>②</td><td>검색 칸에 "햄릿"을 쓰고 Enter</td><td><code>/?q=햄릿</code> ← <code>sort</code>가 사라졌다</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            사용자는 정렬을 바꾼 적이 없는데 목록이 기본 정렬로 돌아간다. 검색 결과 화면에서 필터(장르, 날짜)를 고른 뒤 검색해도 필터가 모두 풀린다.
+          </p>
+        </section>
+
+        <section id="action-query">
+          <h2>action에 쿼리를 붙이면 안 되나</h2>
+          <p>가장 먼저 떠오르는 방법은 <code>action</code> 주소에 지금 쿼리를 붙여 두는 것이다. 하지만 GET 폼에서는 통하지 않는다.</p>
+          <pre><code class="language-html">&lt;form action="/?sort=newest"&gt;
+  &lt;input name="q" /&gt;
+&lt;/form&gt;
+&lt;!-- "정원"을 쓰고 제출하면 → /?q=정원  (sort=newest는 버려진다) --&gt;</code></pre>
+          <p>
+            GET 폼은 <code>action</code> 주소의 쿼리 부분을 폼 값으로 만든 쿼리로 <strong>바꿔 끼운다</strong>. 덧붙이지 않는다. HTML 표준이 정한 동작이고, Chrome에서
+            시험해 봐도 <code>sort</code>가 사라진다. 그래서 지키고 싶은 값은 <code>action</code>이 아니라 <strong>폼 안의 입력 칸</strong>으로 넣어야 한다.
+          </p>
+        </section>
+
+        <section id="hidden">
+          <h2>해결: 숨은 입력 칸</h2>
+          <p>
+            <code>&lt;input type="hidden"&gt;</code>은 화면에 보이지 않고, 사용자가 고칠 수도 없는 입력 칸이다. 하지만 <code>name</code>이 있으면 다른 입력 칸과
+            똑같이 제출된다. "사용자가 쓰지는 않지만 함께 보내야 하는 값"을 폼에 싣는 표준 수단이다.
+          </p>
+          <pre><code class="language-html">&lt;!-- 지금 주소: /?sort=newest --&gt;
+&lt;form action="/"&gt;
+  &lt;input name="q" /&gt;
+  &lt;input type="hidden" name="sort" value="newest" /&gt;
+&lt;/form&gt;</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th></th><th>지금 주소</th><th>"햄릿" 검색 후 주소</th><th>정렬</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>숨은 칸 없음</td><td><code>/?sort=newest</code></td><td><code>/?q=햄릿</code></td><td>풀린다</td></tr>
+                <tr><td>숨은 칸 있음</td><td><code>/?sort=newest</code></td><td><code>/?q=햄릿&amp;sort=newest</code></td><td>유지된다</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout">
+            <p>
+              비유하면, 우편으로 신청서를 보낼 때 사용자가 쓴 칸만 보내지는데, 담당자가 "이 신청서는 최근 등록 순으로 처리"라는 메모를 봉투 안에 미리 넣어 두는
+              것과 같다. 사용자 눈에는 메모가 보이지 않지만 신청서와 함께 도착한다.
+            </p>
+          </div>
+        </section>
+
+        <section id="which">
+          <h2>어떤 값을 숨은 칸에 넣나</h2>
+          <p>지금 주소의 쿼리를 하나씩 보며 "새 검색에서도 이어져야 하나"를 정한다. 공연 목록(<code>/?q=정원&amp;sort=newest&amp;page=3</code>)이면 이렇다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>쿼리</th><th>숨은 칸</th><th>이유</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>sort</code></td><td><span class="badge green">넣는다</span></td><td>사용자가 고른 정렬은 새 검색에서도 이어져야 한다</td></tr>
+                <tr><td><code>page</code></td><td>넣지 않는다</td><td>새 검색 결과는 1페이지부터 봐야 한다. 3페이지를 이어 가면 결과가 적을 때 빈 페이지가 된다</td></tr>
+                <tr><td><code>q</code></td><td>넣지 않는다</td><td>사용자가 검색 칸에 쓴 값이 새 <code>q</code>다. 숨은 칸에도 넣으면 <code>q</code>가 두 번 실려 간다</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            기본값은 넣지 않는 것이 좋다. 정렬이 기본값(공연 시작일 순)이면 주소에서 <code>sort</code>를 빼는 규칙인데, 숨은 칸에 <code>sort=start_date</code>를 넣으면
+            검색할 때마다 주소에 기본값이 붙는다.
+          </p>
+        </section>
+
+        <section id="react">
+          <h2>React와 Next에서 쓰기</h2>
+          <p>
+            숨은 칸 목록은 지금 쿼리에서 계산한다. 주소를 만드는 함수와 같은 규칙에서 뽑으면, 나중에 쿼리(예: 장르)가 늘어도 숨은 칸에 자동으로 들어간다.
+          </p>
+          <pre><code class="language-tsx">import Form from 'next/form';
+
+// 지금 쿼리에서 q와 page를 뺀 나머지(기본값 제외)를 [이름, 값] 목록으로 만든다.
+function getHiddenFields(query: ShowListQuery): [string, string][] {
+  return [...getShowListSearchParams({ ...query, q: null, page: 1 })];
+}
+
+export function SearchForm({ query }: { query: ShowListQuery }) {
+  return (
+    &lt;Form action="/" role="search"&gt;
+      &lt;input name="q" defaultValue={query.q ?? ''} /&gt;
+      {getHiddenFields(query).map(([name, value]) =&gt; (
+        &lt;input key={`${name}=${value}`} type="hidden" name={name} value={value} /&gt;
+      ))}
+    &lt;/Form&gt;
+  );
+}</code></pre>
+          <ul>
+            <li>
+              <strong><code>next/form</code>:</strong> <code>action</code>이 문자열이면 위 GET 폼 규칙대로 쿼리 문자열을 만들되, 페이지 전체를 새로 불러오지 않고 링크처럼
+              화면을 옮긴다. JS가 실행되기 전에는 보통 HTML 폼으로 동작한다. 숨은 칸 규칙도 그대로 적용된다.
+            </li>
+            <li>
+              <strong>숨은 칸의 <code>value</code>:</strong> 숨은 칸은 사용자가 고칠 수 없으니 <code>value</code>를 그대로 줘도 된다(<code>onChange</code>가 필요 없다).
+              정렬이 바뀌어 다시 그리면 값도 따라 바뀐다.
+            </li>
+          </ul>
+        </section>
+
+        <section id="rules">
+          <h2>알아 둘 규칙</h2>
+          <p>Chrome에서 시험 페이지로 확인한 GET 폼의 규칙이다. 숨은 칸을 쓸 때 헷갈리기 쉬운 것들이다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>규칙</th><th>예</th><th>결과</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>action</code>의 쿼리는 버려진다</td><td><code>action="/?sort=newest"</code></td><td><code>/?q=정원</code></td></tr>
+                <tr><td>빈 칸도 보내진다</td><td>검색 칸을 비우고 제출</td><td><code>/?q=&amp;sort=newest</code>. 받는 쪽이 빈 <code>q</code>를 "검색 안 함"으로 처리해야 한다</td></tr>
+                <tr><td><code>name</code>이 없으면 보내지 않는다</td><td><code>&lt;input value="x" /&gt;</code></td><td>쿼리에 없다</td></tr>
+                <tr><td><code>disabled</code>면 보내지 않는다</td><td><code>&lt;input name="sort" disabled /&gt;</code></td><td>쿼리에 없다. 보내기 싫은 숨은 칸은 아예 그리지 않는다</td></tr>
+                <tr><td>누른 버튼의 <code>name</code>과 <code>value</code>도 보낸다</td><td><code>&lt;button name="sort" value="newest"&gt;</code></td><td><code>/?q=햄릿&amp;sort=newest</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout warn">
+            <p>
+              숨은 칸은 "화면에 안 보일" 뿐 비밀이 아니다. 개발자 도구에서 보이고, 제출하면 주소에 그대로 나온다. 사용자가 고쳐서 보낼 수도 있으므로, 받는 쪽은
+              숨은 칸의 값도 다른 쿼리처럼 검사해야 한다(이 저장소는 <code>normalizeShowListQuery</code>가 모르는 정렬값을 버린다).
+            </p>
+          </div>
+        </section>
+
+        <section id="tradeoff">
+          <h2>장점과 약점</h2>
+          <h3>장점</h3>
+          <ul>
+            <li><strong>HTML 표준만으로 동작한다.</strong> 브라우저가 주소를 만들므로 JS가 아직 받아지지 않았거나 꺼져 있어도, 정렬을 지킨 채 검색할 수 있다.</li>
+            <li><strong>오래되고 흔한 방법이다.</strong> 검색 결과 화면에서 정렬이나 필터를 유지한 채 다시 검색하는 폼은 오래전부터 이렇게 만들어 왔다.</li>
+            <li><strong>값이 어긋나지 않게 만들 수 있다.</strong> 숨은 칸을 주소 규칙에서 뽑으면 따로 관리할 값이 없다.</li>
+          </ul>
+          <h3>약점</h3>
+          <ul>
+            <li>
+              <strong>동작이 코드에 드러나지 않는다.</strong> "제출하면 쿼리가 통째로 바뀐다"를 모르면, 코드만 보고는 숨은 칸이 왜 있는지 알 수 없다. 읽는 사람이 HTML
+              폼 규칙을 알아야 한다.
+            </li>
+            <li>
+              <strong>같은 일을 두 방식으로 하게 된다.</strong> 정렬 Select처럼 고르는 즉시 이동하는 컨트롤은 함수로 주소를 만들어 이동한다. 검색만 폼에 값을 실어 보내면,
+              "지금 쿼리에서 하나만 바꿔 이동한다"는 같은 일을 두 방식으로 하게 된다.
+            </li>
+            <li><strong>화면에 없는 값이 DOM에 있다.</strong> 상태의 원본은 주소인데 그 복사본이 폼 안에도 생긴다.</li>
+          </ul>
+        </section>
+
+        <section id="alternative">
+          <h2>대안: 함수로 주소를 만들어 이동하기</h2>
+          <p>
+            JS로 제출을 가로채, 지금 쿼리와 검색어로 새 주소를 함수로 만들고 <code>router.push</code>로 이동하는 방법이다. 숨은 칸이 필요 없다.
+          </p>
+          <pre><code class="language-tsx">&lt;form
+  role="search"
+  onSubmit={(event) =&gt; {
+    event.preventDefault(); // 브라우저의 기본 제출(GET 폼 이동)을 막는다
+    const q = String(new FormData(event.currentTarget).get('q') ?? '');
+    router.push(getSearchSubmitHref({ query, value: q })); // 정렬은 두고 q를 바꾸고 page는 뺀다
+  }}
+&gt;
+  &lt;input name="q" defaultValue={query.q ?? ''} /&gt;
+&lt;/form&gt;</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th></th><th>숨은 입력 칸 (GET 폼)</th><th>함수 + <code>router.push</code></th></tr>
+              </thead>
+              <tbody>
+                <tr><td>지금 쿼리를 지키는 곳</td><td>폼 안의 숨은 칸</td><td>주소를 만드는 함수. 단위 테스트로 확인</td></tr>
+                <tr><td>코드만 보고 이해하기</td><td>HTML 폼 규칙을 알아야 한다</td><td>함수 이름과 인자로 의도가 드러난다</td></tr>
+                <tr><td>JS 없이 검색</td><td>된다. 정렬도 지킨다</td><td>JS가 실행되기 전에는 우리 함수가 돌지 않는다</td></tr>
+                <tr><td>다른 컨트롤과의 일관성</td><td>정렬 Select와 방식이 다르다</td><td>정렬 Select와 같다</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            어느 쪽이 옳다기보다 무엇을 더 중요하게 보느냐의 문제다. JS 없이 동작하는 것이 중요하면 숨은 칸이, 코드를 읽기 쉽고 컨트롤마다 방식이 같은 것이 중요하면
+            함수 방식이 맞다.
+          </p>
+        </section>
+
+        <section id="ours">
+          <h2>우리 프로젝트에서는</h2>
+          <p>
+            스토어의 제목 검색 폼(<code>apps/store/src/shows/show-list-search-form.tsx</code>)이 지금 이 방법을 쓴다. <code>next/form</code>의
+            <code>&lt;Form action="/"&gt;</code> 안에 검색 칸과, <code>getSearchFormHiddenFields(query)</code>가 정한 숨은 칸(지금 정렬)을 둔다. 폼 전체의 흐름과
+            <code>key</code>는 <a href="09-검색-폼-GET-폼과-비제어-입력.html">next 09 문서</a>에 있다.
+          </p>
+        </section>
+
+        <section id="check">
+          <h2>스스로 확인하기</h2>
+          <div class="quiz">
+            <p class="quiz-q">1. 지금 주소가 <code>/?sort=newest&amp;page=3</code>일 때, 아래 폼으로 "햄릿"을 검색하면 새 주소는 무엇인가?</p>
+            <p class="quiz-context"><a href="#action-query">action에 쿼리를 붙이면 안 되나</a>.</p>
+            <pre><code class="language-html">&lt;form action="/?sort=newest"&gt;
+  &lt;input name="q" /&gt;
+&lt;/form&gt;</code></pre>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p><code>/?q=햄릿</code>이다. GET 폼은 <code>action</code>의 쿼리를 폼 값으로 만든 쿼리로 바꿔 끼우므로 <code>sort=newest</code>도 사라진다.</p>
+              </div>
+            </details>
+          </div>
+
+          <div class="quiz">
+            <p class="quiz-q">2. 숨은 칸에 <code>page</code>도 넣으면 어떤 문제가 생기는가?</p>
+            <p class="quiz-context"><a href="#which">어떤 값을 숨은 칸에 넣나</a>. 지금 주소는 <code>/?sort=newest&amp;page=3</code>이다.</p>
+            <pre><code class="language-diff">   &lt;input type="hidden" name="sort" value="newest" /&gt;
++  &lt;input type="hidden" name="page" value="3" /&gt;</code></pre>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  새 검색 결과의 3페이지로 간다. 결과가 한 페이지뿐이면 빈 페이지가 되고(이 저장소는 마지막 페이지로 리다이렉트한다), 사용자는 결과의 처음 부분을
+                  놓친다. 새 검색은 1페이지부터 보여야 하므로 <code>page</code>는 넣지 않는다.
+                </p>
+              </div>
+            </details>
+          </div>
+
+          <details>
+            <summary>3. 숨은 칸의 정렬값을 사용자가 개발자 도구로 <code>sort=hack</code>으로 바꿔 제출하면 어떻게 되는가?</summary>
+            <p>
+              주소가 <code>/?q=…&amp;sort=hack</code>이 된다. 숨은 칸은 비밀도 잠금도 아니기 때문이다. 받는 쪽인 <code>normalizeShowListQuery</code>가 모르는 정렬값을
+              버리고 기본 정렬 주소로 리다이렉트하므로 문제는 생기지 않는다. 숨은 칸의 값도 사용자 입력처럼 검사해야 하는 이유다.
+            </p>
+          </details>
+        </section>
+
+        <section id="more">
+          <h2>더 읽을거리</h2>
+          <ul>
+            <li><a href="https://developer.mozilla.org/ko/docs/Web/HTML/Element/input/hidden">MDN: &lt;input type="hidden"&gt;</a></li>
+            <li><a href="https://developer.mozilla.org/ko/docs/Learn/Forms/Sending_and_retrieving_form_data">MDN: 폼 데이터 보내기</a>의 GET 방식 절</li>
+            <li><a href="https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#form-submission-algorithm">HTML 표준: 폼 제출 알고리즘</a></li>
+            <li><a href="https://nextjs.org/docs/app/api-reference/components/form">Next.js 문서: Form</a></li>
+            <li><a href="09-검색-폼-GET-폼과-비제어-입력.html">next 09 문서</a>: 이 저장소의 검색 폼 전체 흐름과 <code>key</code></li>
+          </ul>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
