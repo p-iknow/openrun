@@ -35,7 +35,10 @@ const learnFolders = [
   {
     folder: 'zod',
     title: 'zod',
-    documents: [{ file: '00-zod-기초.html', title: '00 zod 기초: 실행 중에도 남는 타입', tags: ['zod'] }],
+    documents: [
+      { file: '00-zod-기초.html', title: '00 zod 기초: 실행 중에도 남는 타입', tags: ['zod'] },
+      { file: '01-반복-쿼리를-배열로-받기.html', title: '01 반복 쿼리를 배열로 받기: preprocess, array, enum', tags: ['zod', 'url-state', 'openapi'] },
+    ],
   },
   {
     folder: 'db-and-drizzle',

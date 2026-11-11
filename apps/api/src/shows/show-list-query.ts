@@ -26,9 +26,9 @@ const GENRE_MESSAGE = `${GENRES.join(', ')} 중 하나여야 합니다.`;
 const STATUS_MESSAGE = `${SHOW_LIST_SALES_STATUSES.join(', ')} 중 하나여야 합니다.`;
 
 // 같은 이름을 여러 번 보낸 쿼리(?genre=musical&genre=play)는 배열로, 한 번 보낸 쿼리는 글자로 들어온다.
-// 둘 다 배열로 맞춘 뒤 검증한다. 값이 없으면 undefined로 두어 default를 적용한다.
-function wrapInArray(value: unknown): unknown {
-  return value === undefined ? undefined : [value].flat();
+// 둘 다 배열로 맞춘 뒤 검증한다. 값이 없을 때는 바깥의 default가 먼저 []를 돌려주므로 이 함수까지 오지 않는다.
+function wrapInArray(value: unknown): unknown[] {
+  return [value].flat();
 }
 
 // GET /shows의 쿼리. 이 스키마 하나에서 검증(StandardSchemaValidationPipe), OpenAPI 쿼리 파라미터, 타입이 모두 나온다.
