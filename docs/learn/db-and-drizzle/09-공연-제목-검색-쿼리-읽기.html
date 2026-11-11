@@ -73,14 +73,28 @@ function escapeLikePattern(value: string): string {
 
         <section id="condition">
           <h2>검색어가 있을 때만 붙는 조건</h2>
-          <p>
-            <code>q ? ilike(...) : undefined</code>는 검색어가 있으면 제목 조건을 만들고, 없으면 <code>undefined</code>를 넘긴다.
-            <code>and()</code>는 <code>undefined</code>를 빼고 잇는다(<a href="03-drizzle-쿼리-문법.html#and-optional">db-and-drizzle 03 문서</a>).
-          </p>
+          <p><code>listCondition</code>은 두 조건을 <code>and()</code>로 묶는다.</p>
+          <ol>
+            <li>
+              <strong>판매 종료가 아니다.</strong> 늘 붙는다. <code>ne</code>(not equal)가 만들고, SQL로는
+              <code>sales_status &lt;&gt; 'ended'</code>다. <code>&lt;&gt;</code>는 "같지 않다", 자바스크립트의 <code>!==</code>다(<a
+                href="03-drizzle-쿼리-문법.html#ne"
+                >ne</a
+              >).
+            </li>
+            <li>
+              <strong>제목에 검색어가 들어 있다.</strong> 검색어가 있을 때만 붙는다. <code>q ? ilike(...) : undefined</code>가 검색어가 없으면
+              <code>undefined</code>를 넘기고, <code>and()</code>는 <code>undefined</code>를 빼고 잇는다(<a
+                href="03-drizzle-쿼리-문법.html#and-optional"
+                >and와 있을 수도 없을 수도 있는 조건</a
+              >).
+            </li>
+          </ol>
+          <p>그래서 요청에 따라 <code>where</code> 절이 이렇게 달라진다.</p>
           <div class="table-wrap">
             <table>
               <thead>
-                <tr><th>요청</th><th>서비스가 받은 <code>q</code></th><th><code>where</code> 절 (값을 채워 쓴 모습)</th></tr>
+                <tr><th>요청</th><th>서비스가 받은 <code>q</code></th><th><code>where</code> 절</th></tr>
               </thead>
               <tbody>
                 <tr><td><code>/shows?q=정원</code></td><td><code>'정원'</code></td><td><code>sales_status &lt;&gt; 'ended' and title ilike '%정원%'</code></td></tr>
@@ -90,22 +104,12 @@ function escapeLikePattern(value: string): string {
             </table>
           </div>
           <p>
-            <code>&lt;&gt;</code>는 SQL의 "같지 않다"로, 자바스크립트의 <code>!==</code>다. 첫 줄은 "판매 종료가 아니고 제목에 <code>정원</code>이 들어간
-            공연"이다. Drizzle의 <code>ne</code>(not equal)가 이 조건을 만든다(<a href="03-drizzle-쿼리-문법.html#ne">db-and-drizzle 03 문서</a>).
+            셋째 줄이 <code>q !== undefined</code>가 아니라 <code>q ?</code>로 검사하는 이유다. 공백만 보낸 검색어는 스키마의 <code>.trim()</code>을
+            거쳐 빈 글자 <code>''</code>가 되는데, 빈 글자는 거짓이라 제목 조건이 붙지 않는다. 티켓의 "빈 값이면 검색하지 않는다"가 이것이다.
           </p>
           <p>
-            읽기 쉽도록 값을 SQL 안에 채워 썼다. 실제로 DB에 가는 SQL에는 값 자리에 <code>$7</code>, <code>$8</code> 같은 번호가 있고, 값
-            <code>'ended'</code>, <code>'%정원%'</code>는 따로 간다(<a href="01-프론트엔드-개발자를-위한-DB-개념.html#parameter">파라미터</a>).
-            번호가 7부터인 것은 앞의 판매 상태 서브쿼리가 <code>$1</code>~<code>$6</code>(현재 시각)을 먼저 쓰기 때문이다.
-          </p>
-          <p>
-            조건 검사를 <code>q !== undefined</code>가 아니라 <code>q ?</code>로 쓴 이유는 셋째 줄이다. 공백만 보낸 <code>q</code>는 스키마의
-            <code>.trim()</code>을 거쳐 빈 글자 <code>''</code>가 된다. 빈 글자는 거짓으로 읽히므로 검색하지 않는다. 티켓의 "빈 검색어는
-            검색하지 않는다"가 이것이다.
-          </p>
-          <p>
-            조건을 변수 하나에 담아 두 쿼리에 넘기므로, 검색하면 목록과 전체 개수(<code>totalCount</code>)가 함께 줄어든다. 한쪽에만 넣으면
-            "공연 3개"라고 하면서 페이지 수는 검색 전 그대로인 화면이 된다.
+            이 조건은 목록 쿼리와 개수 쿼리에 함께 넘긴다. 그래야 검색했을 때 목록과 전체 개수(<code>totalCount</code>)가 같이 줄어든다. 목록에만
+            넣으면 공연 3개만 보이는데 페이지 수는 검색 전 그대로인 화면이 된다.
           </p>
         </section>
 
