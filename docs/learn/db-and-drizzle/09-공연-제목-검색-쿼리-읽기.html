@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>09 공연 제목 검색 쿼리 읽기</title>
+    <link rel="stylesheet" href="../learn.css" />
+    <script src="../vendor/highlightjs/highlight.min.js" defer></script>
+    <script src="../learn.js" defer></script>
+  </head>
+  <body>
+    <div class="layout">
+      <nav aria-label="목차">
+        <strong>목차</strong>
+        <ol>
+          <li><a href="#overview">한눈에 보기</a></li>
+          <li><a href="#condition">검색어가 있을 때만 붙는 조건</a></li>
+          <li><a href="#why-escape">이스케이프하지 않으면 생기는 일</a></li>
+          <li><a href="#regex">escapeLikePattern의 정규식</a></li>
+          <li><a href="#backslash">백슬래시는 몇 개인가</a></li>
+          <li><a href="#examples">입력에서 패턴까지</a></li>
+          <li><a href="#no-index">인덱스를 두지 않은 이유</a></li>
+          <li><a href="#tests">테스트가 확인하는 것</a></li>
+          <li><a href="#check">스스로 확인하기</a></li>
+        </ol>
+      </nav>
+
+      <main>
+        <h1>09 공연 제목 검색 쿼리 읽기</h1>
+        <p class="lead">
+          <code>GET /shows?q=정원</code>이 제목에 "정원"이 들어간 공연만 돌려주는 과정을 따라간다. 중심은
+          <code>findPage()</code>(<code>apps/api/src/shows/shows.service.ts</code>)의 두 줄과
+          <code>escapeLikePattern()</code>이다. LIKE와 이스케이프 개념은
+          <a href="01-프론트엔드-개발자를-위한-DB-개념.html#like">db-and-drizzle 01 문서</a>, <code>ilike</code>와 <code>and</code> 문법은
+          <a href="03-drizzle-쿼리-문법.html#ilike">db-and-drizzle 03 문서</a>, 목록 쿼리 전체는
+          <a href="05-공연-목록-쿼리-읽기.html">db-and-drizzle 05 문서</a>에 있다.
+        </p>
+
+        <section id="overview">
+          <h2>한눈에 보기</h2>
+          <div class="flow">
+            <div class="lane blue">
+              <div class="lane-title">검색어가 SQL이 되기까지</div>
+              <ol class="chain">
+                <li><span>주소의 <code>q=" 정원 "</code></span></li>
+                <li><span>zod 스키마가 앞뒤 공백을 지우고 50자 이하인지 검사한다 → <code>'정원'</code></span></li>
+                <li><span><code>escapeLikePattern</code>이 <code>%</code>, <code>_</code>, <code>\</code> 앞에 <code>\</code>를 붙인다</span></li>
+                <li><span>앞뒤에 <code>%</code>를 붙여 "포함" 패턴을 만든다 → <code>'%정원%'</code></span></li>
+                <li><span><code>ilike</code> 조건을 목록 쿼리와 개수 쿼리의 <code>where</code>에 함께 넣는다</span></li>
+              </ol>
+            </div>
+          </div>
+          <pre><code class="language-ts">// apps/api/src/shows/shows.service.ts
+async findPage({ page, size, sort, q }: ShowListQuery): Promise&lt;ShowPageDto&gt; {
+  ...
+  // 목록과 전체 개수가 같은 조건을 써야 페이지 수가 맞는다. 판매 종료 공연은 목록에서 뺀다.
+  const listCondition = and(
+    ne(salesStatus.salesStatus, 'ended'),
+    q ? ilike(shows.title, `%${escapeLikePattern(q)}%`) : undefined,
+  );
+  ...
+  .where(listCondition) // 목록 쿼리
+  ...
+  .where(listCondition) // 개수 쿼리
+}
+
+// LIKE 패턴에서 특별한 뜻을 가진 %(여러 글자), _(한 글자), \(이스케이프 문자)를 글자 그대로 찾도록 앞에 \를 붙인다.
+// PostgreSQL의 LIKE는 ESCAPE를 따로 적지 않으면 \를 이스케이프 문자로 쓴다.
+function escapeLikePattern(value: string): string {
+  return value.replace(/[\\%_]/g, '\\$&');
+}</code></pre>
+        </section>
+
+        <section id="condition">
+          <h2>검색어가 있을 때만 붙는 조건</h2>
+          <p>
+            <code>q ? ilike(...) : undefined</code>는 검색어가 있으면 제목 조건을 만들고, 없으면 <code>undefined</code>를 넘긴다.
+            <code>and()</code>는 <code>undefined</code>를 빼고 잇는다(<a href="03-drizzle-쿼리-문법.html#and-optional">db-and-drizzle 03 문서</a>).
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>요청</th><th><code>q</code></th><th><code>where</code> 절</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>/shows?q=정원</code></td><td><code>'정원'</code></td><td><code>("sales_status" &lt;&gt; $7 and "shows"."title" ilike $8)</code>, <code>$8</code>은 <code>'%정원%'</code></td></tr>
+                <tr><td><code>/shows</code></td><td><code>undefined</code></td><td><code>"sales_status" &lt;&gt; $7</code></td></tr>
+                <tr><td><code>/shows?q=%20%20</code></td><td><code>''</code></td><td><code>"sales_status" &lt;&gt; $7</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            조건 검사를 <code>q !== undefined</code>가 아니라 <code>q ?</code>로 쓴 이유는 셋째 줄이다. 공백만 보낸 <code>q</code>는 스키마의
+            <code>.trim()</code>을 거쳐 빈 글자 <code>''</code>가 된다. 빈 글자는 거짓으로 읽히므로 검색하지 않는다. 티켓의 "빈 검색어는
+            검색하지 않는다"가 이것이다.
+          </p>
+          <p>
+            조건을 변수 하나에 담아 두 쿼리에 넘기므로, 검색하면 목록과 전체 개수(<code>totalCount</code>)가 함께 줄어든다. 한쪽에만 넣으면
+            "공연 3개"라고 하면서 페이지 수는 검색 전 그대로인 화면이 된다.
+          </p>
+        </section>
+
+        <section id="why-escape">
+          <h2>이스케이프하지 않으면 생기는 일</h2>
+          <p>
+            Drizzle은 패턴을 손대지 않고 파라미터로 보낸다. 그래서 사용자가 입력한 <code>%</code>, <code>_</code>, <code>\</code>는 패턴의 특별한
+            글자로 읽힌다(<a href="01-프론트엔드-개발자를-위한-DB-개념.html#like-escape">이스케이프</a>). 아래는 이스케이프 없이
+            <code>`%${q}%`</code>만 썼을 때 실제 PostgreSQL에서 나온 결과다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>찾고 싶은 것</th><th>그대로 넣은 패턴</th><th>DB가 읽는 뜻</th><th>잘못 나오는 제목</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>100%</code></td><td><code>%100%%</code></td><td><code>100</code> 포함</td><td><code>1000 라이브</code></td></tr>
+                <tr><td><code>a_b</code></td><td><code>%a_b%</code></td><td><code>a</code>, 아무 한 글자, <code>b</code> 포함</td><td><code>axb 쇼</code></td></tr>
+                <tr><td><code>c\d</code></td><td><code>%c\d%</code></td><td><code>cd</code> 포함</td><td><code>cd 쇼</code>만 나오고 <code>c\d 쇼</code>는 빠진다</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout warn">
+            <p>
+              SQL 인젝션과는 다른 문제다. 검색어는 <a href="01-프론트엔드-개발자를-위한-DB-개념.html#parameter">파라미터</a>로 가므로 SQL 문장은
+              바뀌지 않는다. 바뀌는 것은 <strong>패턴의 뜻</strong>이다. 결과가 틀릴 뿐 DB가 위험해지지는 않는다.
+            </p>
+          </div>
+        </section>
+
+        <section id="regex">
+          <h2>escapeLikePattern의 정규식</h2>
+          <pre><code class="language-ts">value.replace(/[\\%_]/g, '\\$&amp;');</code></pre>
+          <p>"<code>\</code>, <code>%</code>, <code>_</code>를 모두 찾아, 각각 앞에 <code>\</code>를 하나 붙여라"라는 뜻이다. 조각별로 보면 이렇다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>조각</th><th>뜻</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>/ ... /</code></td><td>정규식 리터럴</td></tr>
+                <tr><td><code>[ ... ]</code></td><td>문자 클래스. 대괄호 안의 글자 중 <strong>하나</strong>와 맞는다</td></tr>
+                <tr><td><code>\\</code></td><td>백슬래시 한 글자. 정규식에서도 <code>\</code>는 특별한 글자라 두 번 쓴다</td></tr>
+                <tr><td><code>%</code>, <code>_</code></td><td>그 글자 그대로. 정규식에서는 특별한 뜻이 없다</td></tr>
+                <tr><td><code>g</code></td><td>첫 번째만이 아니라 맞는 곳을 <strong>모두</strong> 바꾼다</td></tr>
+                <tr><td><code>'\\$&amp;'</code></td><td>바꿀 글자. <code>'\\'</code>는 백슬래시 한 글자, <code>$&amp;</code>는 "방금 맞은 글자"다</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            <code>$&amp;</code>는 <code>replace</code>의 두 번째 인자가 글자일 때 쓰는 특별한 표기다. 함수로 쓰면 이렇게 된다.
+          </p>
+          <pre><code class="language-ts">value.replace(/[\\%_]/g, (matched) =&gt; '\\' + matched);</code></pre>
+          <h3 id="one-pass">한 번에 바꾸는 이유</h3>
+          <p>
+            <code>replace</code>를 글자마다 세 번 부르면 순서에 따라 이미 붙인 <code>\</code>를 다시 이스케이프할 수 있다. 정규식 하나로 원래 글자를
+            한 번만 훑으면, 새로 붙인 <code>\</code>는 다시 보지 않는다. <a href="#check">스스로 확인하기</a> 3번에서 순서를 틀린 경우를 따라간다.
+          </p>
+        </section>
+
+        <section id="backslash">
+          <h2>백슬래시는 몇 개인가</h2>
+          <p>
+            이 코드가 헷갈리는 가장 큰 이유는 같은 <code>\</code>가 자리마다 다른 개수로 보이기 때문이다. 문자열이 여러 층을 지나는데, 층마다
+            <code>\</code>를 특별하게 다룬다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>층</th><th>보이는 모습</th><th>실제 글자</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>TS 소스의 정규식</td><td><code>/[\\%_]/</code></td><td>문자 클래스 <code>\</code>, <code>%</code>, <code>_</code></td></tr>
+                <tr><td>TS 소스의 문자열</td><td><code>'\\$&amp;'</code></td><td><code>\$&amp;</code> (세 글자)</td></tr>
+                <tr><td>테스트 코드의 <code>'c\\d'</code></td><td><code>'c\\d'</code></td><td><code>c\d</code> (세 글자)</td></tr>
+                <tr><td><code>toSQL()</code>을 JSON으로 찍은 params</td><td><code>"%100\\%%"</code></td><td><code>%100\%%</code>. JSON도 <code>\</code>를 두 번 쓴다</td></tr>
+                <tr><td>DB가 받은 패턴</td><td><code>%100\%%</code></td><td>LIKE가 <code>\%</code>를 글자 <code>%</code>로 읽는다</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout">
+            <p>
+              코드에서 <code>\\</code>가 보이면 대부분 "실제로는 <code>\</code> 하나"다. DB까지 가는 값에는 사용자가 입력한 글자 앞에 붙인
+              <code>\</code> <strong>하나</strong>만 더해진다.
+            </p>
+          </div>
+        </section>
+
+        <section id="examples">
+          <h2>입력에서 패턴까지</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>사용자 입력</th><th><code>escapeLikePattern</code> 뒤</th><th>DB가 받는 패턴</th><th>찾는 것</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>정원</code></td><td><code>정원</code></td><td><code>%정원%</code></td><td><code>정원</code> 포함</td></tr>
+                <tr><td><code>100%</code></td><td><code>100\%</code></td><td><code>%100\%%</code></td><td><code>100%</code> 포함</td></tr>
+                <tr><td><code>a_b</code></td><td><code>a\_b</code></td><td><code>%a\_b%</code></td><td><code>a_b</code> 포함</td></tr>
+                <tr><td><code>c\d</code></td><td><code>c\\d</code></td><td><code>%c\\d%</code></td><td><code>c\d</code> 포함</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            이 표의 "뒤"와 "패턴" 열은 실제 글자다. <a href="#backslash">앞 절</a>처럼 코드로 옮기면 <code>\</code>가 두 배로 보인다.
+          </p>
+        </section>
+
+        <section id="no-index">
+          <h2>인덱스를 두지 않은 이유</h2>
+          <p>
+            <code>'%정원%'</code>처럼 앞에 <code>%</code>가 붙은 패턴은 B-tree 인덱스를 쓰지 못해, DB가 공연을 모두 읽으며 맞춰 본다(<a
+              href="01-프론트엔드-개발자를-위한-DB-개념.html#like-index"
+              >앞에 %가 붙으면</a
+            >). 그래도 지금은 검색용 인덱스를 두지 않는다. 스펙(#36)이 검색 인덱스(<code>pg_trgm</code> 등)를 9단계로 미뤘다. 9단계에서 공연
+            1만 개 규모의 시드로 실행 계획을 보고, 인덱스를 넣기 전과 후를 측정한 뒤 정한다.
+          </p>
+        </section>
+
+        <section id="tests">
+          <h2>테스트가 확인하는 것</h2>
+          <p>
+            <code>apps/api/test/shows.int.spec.ts</code>의 <code>제목 검색</code> 묶음은 실제 PostgreSQL(Testcontainers)에 공연을 넣고
+            <code>GET /shows?q=...</code>를 부른다. 이스케이프를 확인하는 테스트는 세 글자마다 "맞아야 하는 제목"과 "와일드카드로 읽으면 잘못 맞는
+            제목"을 짝으로 넣는다.
+          </p>
+          <pre><code class="language-ts">it.each([
+  { char: '%', q: '100%', expected: ['100% 라이브'] },
+  { char: '_', q: 'a_b', expected: ['a_b 쇼'] },
+  { char: '\\', q: 'c\\d', expected: ['c\\d 쇼'] },
+])('$char 글자를 그대로 찾는다', async ({ q, expected }) =&gt; {
+  await insertShowsTitled(['100% 라이브', '1000 라이브', 'a_b 쇼', 'axb 쇼', 'c\\d 쇼', 'cd 쇼']);
+  ...
+});</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>글자</th><th>맞아야 하는 제목</th><th>이스케이프가 없으면 함께 나오는 제목</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>%</code></td><td><code>100% 라이브</code></td><td><code>1000 라이브</code></td></tr>
+                <tr><td><code>_</code></td><td><code>a_b 쇼</code></td><td><code>axb 쇼</code></td></tr>
+                <tr><td><code>\</code></td><td><code>c\d 쇼</code></td><td><code>cd 쇼</code>가 대신 나온다</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            DB를 흉내 내지 않고 실제 PostgreSQL로 확인하는 이유는, 패턴을 어떻게 읽는지가 DB의 규칙이기 때문이다. <code>escapeLikePattern</code>만
+            따로 테스트하면 "<code>\</code>를 붙였다"는 것만 확인할 뿐, DB가 그 <code>\</code>를 이스케이프로 읽는지는 확인하지 못한다.
+          </p>
+        </section>
+
+        <section id="check">
+          <h2>스스로 확인하기</h2>
+
+          <div class="quiz">
+            <p class="quiz-q">1. 정규식에서 <code>\\</code>를 빼면 어떤 테스트가 실패하고, 무엇이 나오는가?</p>
+            <p class="quiz-context"><a href="#tests">테스트가 확인하는 것</a>의 <code>\</code> 경우를 생각한다.</p>
+            <pre><code class="language-diff">-  return value.replace(/[\\%_]/g, '\\$&amp;');
++  return value.replace(/[%_]/g, '\\$&amp;');</code></pre>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  <code>\ 글자를 그대로 찾는다</code>가 실패한다. <code>c\d</code>가 그대로 가서 패턴이 <code>%c\d%</code>가 된다. DB는 <code>\d</code>를
+                  "글자 <code>d</code>"로 읽어 <code>cd</code> 포함을 찾는다. 결과는 <code>['c\d 쇼']</code>가 아니라 <code>['cd 쇼']</code>다.
+                </p>
+              </div>
+            </details>
+          </div>
+
+          <div class="quiz">
+            <p class="quiz-q">2. 공백만 있는 검색어(<code>q=%20%20</code>)로 요청하면 <code>listCondition</code>은 무엇이 되는가?</p>
+            <p class="quiz-context"><a href="#condition">검색어가 있을 때만 붙는 조건</a>. 스키마는 <code>z.string().trim().max(50).optional()</code>이다.</p>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  스키마의 <code>.trim()</code>이 <code>q</code>를 <code>''</code>로 바꾼다. <code>''</code>는 거짓이라 <code>undefined</code>가 넘어가고,
+                  <code>and()</code>는 판매 종료 조건 하나만 돌려준다. 검색하지 않은 것과 같은 결과다.
+                </p>
+              </div>
+            </details>
+          </div>
+
+          <div class="quiz">
+            <p class="quiz-q">3. 정규식 하나 대신 아래처럼 바꾸면 <code>100%</code>를 검색할 때 무엇을 찾게 되는가?</p>
+            <p class="quiz-context"><a href="#one-pass">한 번에 바꾸는 이유</a>. <code>%</code>를 먼저, <code>\</code>를 나중에 이스케이프한다.</p>
+            <pre><code class="language-diff">-  return value.replace(/[\\%_]/g, '\\$&amp;');
++  return value
++    .replace(/%/g, '\\%')
++    .replace(/_/g, '\\_')
++    .replace(/\\/g, '\\\\');</code></pre>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  <code>100%</code> → <code>100\%</code> → 마지막 줄이 방금 붙인 <code>\</code>를 다시 이스케이프해 <code>100\\%</code>가 된다. 패턴
+                  <code>%100\\%%</code>를 DB는 "글자 <code>\</code>" 다음에 와일드카드 <code>%</code>로 읽는다. 그래서 <code>100\</code>를 포함하는 제목을
+                  찾는다. <code>100% 라이브</code>는 나오지 않고, <code>100\x 쇼</code> 같은 제목이 나온다. <code>\</code>를 맨 먼저 바꾸면 맞지만,
+                  정규식 하나로 한 번에 바꾸면 순서를 신경 쓸 일이 없다.
+                </p>
+              </div>
+            </details>
+          </div>
+
+          <details>
+            <summary>4. 검색 조건을 목록 쿼리의 <code>where</code>에만 넣으면 화면에서 무엇이 틀리는가?</summary>
+            <p>
+              목록은 맞는 공연만 나오지만 개수 쿼리는 검색 전 전체를 센다. "공연 N개"와 전체 페이지 수가 검색 전 그대로라, 빈 페이지로 가는 페이지
+              링크가 생긴다.
+            </p>
+          </details>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

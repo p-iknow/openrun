@@ -32,6 +32,7 @@
           <li><a href="#filter">집계의 FILTER</a></li>
           <li><a href="#bool-or">bool_or, bool_and</a></li>
           <li><a href="#subquery">서브쿼리</a></li>
+          <li><a href="#like">LIKE와 ILIKE</a></li>
           <li><a href="#parameter">파라미터</a></li>
           <li><a href="#transaction">트랜잭션</a></li>
         </ol>
@@ -968,6 +969,87 @@ inner join (
           <p>
             <code>as start</code>는 계산한 값에 붙이는 이름(<strong>별칭</strong>)이다. <code>min(starts_at)</code> 같은 계산
             결과에는 컬럼 이름이 없으므로, 바깥 쿼리에서 <code>period.start</code>로 부르려면 이름을 붙여야 한다.
+          </p>
+        </section>
+
+        <section id="like">
+          <h2>LIKE와 ILIKE: 글자 패턴으로 찾기</h2>
+          <p>
+            <code>=</code>는 값 전체가 같아야 참이다. 글자의 일부가 맞는지 보려면 <strong>LIKE</strong>를 쓴다. 오른쪽에 쓰는 글자를
+            <strong>패턴</strong>이라고 하며, 패턴 안의 두 글자는 특별한 뜻을 가진다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>패턴 글자</th><th>뜻</th><th>정규식으로 치면</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>%</code></td><td>아무 글자나 0개 이상</td><td><code>.*</code></td></tr>
+                <tr><td><code>_</code></td><td>아무 글자나 정확히 1개</td><td><code>.</code></td></tr>
+                <tr><td>그 밖의 글자</td><td>그 글자 그대로</td><td>그 글자 그대로</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            패턴은 값 <strong>전체</strong>와 맞춰 본다. 정규식에 <code>^...$</code>가 늘 붙어 있는 셈이다. 그래서 "포함"을 찾으려면
+            앞뒤에 <code>%</code>를 붙인다.
+          </p>
+          <pre><code class="language-sql">title like '정원'     -- 제목이 정확히 '정원'
+title like '정원%'    -- '정원'으로 시작
+title like '%정원'    -- '정원'으로 끝남
+title like '%정원%'   -- '정원'을 포함</code></pre>
+          <pre><code class="language-ts">// '%정원%'을 자바스크립트로 쓰면
+title.includes('정원');</code></pre>
+          <p>
+            <strong>ILIKE</strong>는 대소문자를 구분하지 않는 LIKE다. PostgreSQL에만 있다. <code>title ilike '%hamlet%'</code>는
+            <code>Hamlet</code>도 찾는다. 자바스크립트로 치면 <code>title.toLowerCase().includes(q.toLowerCase())</code>다.
+          </p>
+
+          <h3 id="like-escape">%와 _를 글자 그대로 찾기: 이스케이프</h3>
+          <p>
+            사용자가 입력한 검색어를 패턴에 그대로 넣으면, 검색어 안의 <code>%</code>와 <code>_</code>가 특별한 뜻으로 읽힌다. 아래는
+            실제 PostgreSQL에서 확인한 결과다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>사용자 입력</th><th>그대로 넣은 패턴</th><th>실제로 찾는 것</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>_</code></td><td><code>%_%</code></td><td>1글자 이상인 모든 제목. 즉 <strong>전부</strong></td></tr>
+                <tr><td><code>100%</code></td><td><code>%100%%</code></td><td><code>100</code>을 포함하는 제목. <code>1000일의 기록</code>도 나온다</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            특별한 뜻을 끄고 글자 그대로 찾게 하는 것을 <strong>이스케이프</strong>라고 한다. 이스케이프 문자를 앞에 붙이면 그 다음 글자는
+            일반 글자가 된다. PostgreSQL의 LIKE는 <code>ESCAPE</code>를 따로 적지 않으면 <code>\</code>를 이스케이프 문자로 쓴다.
+            정규식에서 <code>\.</code>가 "아무 글자"가 아니라 진짜 점인 것과 같다.
+          </p>
+          <pre><code class="language-sql">title like '%100\%%'   -- '100%'를 포함
+title like '%\_%'      -- '_'를 포함</code></pre>
+          <p>
+            이스케이프 문자 <code>\</code> 자신도 이스케이프해야 한다. 그렇지 않으면 사용자가 입력한 <code>\</code>가 뒤 글자의 뜻을 바꾼다.
+            예를 들어 <code>50\</code>를 그대로 넣으면 패턴이 <code>%50\%</code>가 되어, 끝의 <code>%</code>가 일반 글자로 바뀐다. "<code>50\</code>를
+            포함"이 아니라 "<code>50%</code>로 끝남"을 찾게 된다. 글자 그대로의 <code>\</code>는 <code>\\</code>로 쓴다.
+          </p>
+          <div class="callout">
+            <p>
+              이스케이프는 <a href="#parameter">파라미터</a>와 다른 문제를 푼다. 파라미터는 값이 <strong>SQL 문장</strong>을 바꾸지 못하게 막고,
+              LIKE 이스케이프는 값이 <strong>패턴의 뜻</strong>을 바꾸지 못하게 막는다. 검색어를 파라미터로 보내도 <code>%</code>와
+              <code>_</code>는 여전히 와일드카드로 읽힌다.
+            </p>
+          </div>
+
+          <h3 id="like-index">앞에 %가 붙으면 B-tree 인덱스를 쓰지 못한다</h3>
+          <p>
+            <a href="#index">B-tree 인덱스</a>는 값을 정렬해 둔 목록이라, "<code>정원</code>으로 시작"(<code>'정원%'</code>)은 사전에서 단어를 찾듯
+            쓸 수 있다. 하지만 "<code>정원</code>을 포함"(<code>'%정원%'</code>)은 시작 글자를 모르니 정렬이 도움이 되지 않는다. DB는 모든 행을
+            읽으며 하나씩 맞춰 본다(<a href="#explain">Seq Scan</a>). 행이 많아 이게 느려지면 PostgreSQL의 <code>pg_trgm</code> 확장으로
+            "포함" 검색에 쓰는 GIN 인덱스를 만들 수 있다.
+          </p>
+          <p>
+            Drizzle에서는 <code>like</code>, <code>ilike</code> 함수로 쓴다(<a href="03-drizzle-쿼리-문법.html#ilike">db-and-drizzle 03 문서</a>).
           </p>
         </section>
 
