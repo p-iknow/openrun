@@ -25,6 +25,7 @@ const learnFolders = [
       { file: '02-의존성-주입.html', title: '02 의존성 주입', tags: ['nestjs'] },
       { file: '03-통합-테스트-구성.html', title: '03 통합 테스트 구성', tags: ['testing'] },
       { file: '04-예외-필터와-APP_FILTER.html', title: '04 예외 필터와 APP_FILTER', tags: ['nestjs'] },
+      { file: '05-파이프와-검증.html', title: '05 파이프와 검증', tags: ['nestjs', 'openapi'] },
     ],
   },
   {
