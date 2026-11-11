@@ -48,7 +48,7 @@ export class ShowsService {
           end: period.end,
           salesStatus: salesStatus.salesStatus,
           salesOpenAt: salesStatus.salesOpenAt,
-          posterKey: shows.posterKey,
+          posterPath: shows.posterPath,
         })
         .from(shows)
         .innerJoin(venues, eq(venues.id, shows.venueId))
@@ -68,11 +68,11 @@ export class ShowsService {
 
     const totalCount = total?.count ?? 0;
     return {
-      items: rows.map(({ start, end, salesOpenAt, posterKey, ...show }) => ({
+      items: rows.map(({ start, end, salesOpenAt, posterPath, ...show }) => ({
         ...show,
         period: { start: toIso(start), end: toIso(end) },
         salesOpenAt: salesOpenAt?.toISOString() ?? null,
-        posterUrl: posterUrlOf(posterKey, { baseUrl: this.posterBaseUrl }),
+        posterUrl: posterUrlOf(posterPath, { baseUrl: this.posterBaseUrl }),
       })),
       page: PAGE,
       size: PAGE_SIZE,

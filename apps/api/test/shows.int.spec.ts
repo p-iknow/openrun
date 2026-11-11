@@ -30,7 +30,7 @@ const DEFAULT_NOW = '2026-02-01T00:00:00Z';
 const DEFAULT_SALES_OPEN_AT = '2026-01-01T01:00:00Z';
 // 공연장 하나의 좌석 수.
 const VENUE_SEAT_COUNT = 20;
-// 포스터 URL은 이 값과 포스터 키를 합친다. 끝의 /는 있어도 없어도 같은 URL이 나온다.
+// 포스터 URL은 이 값과 포스터 경로를 합친다. 끝의 /는 있어도 없어도 같은 URL이 나온다.
 const POSTER_BASE_URL = 'https://posters.example.com/openrun/';
 
 interface PerformanceInput {
@@ -52,13 +52,13 @@ describe('GET /shows', () => {
   async function insertShow({
     venueId,
     title,
-    posterKey = 'poster.png',
+    posterPath = 'poster.png',
     performanceStarts = [],
     performances: performanceInputs = [],
   }: {
     venueId: number;
     title: string;
-    posterKey?: string;
+    posterPath?: string;
     performanceStarts?: string[];
     performances?: PerformanceInput[];
   }): Promise<number> {
@@ -71,7 +71,7 @@ describe('GET /shows', () => {
         minAge: 8,
         runningMinutes: 150,
         description: '소개',
-        posterKey,
+        posterPath,
       })
       .returning({ id: shows.id });
     if (!show) {
@@ -191,7 +191,7 @@ describe('GET /shows', () => {
     await insertShow({
       venueId,
       title: '달빛 정원',
-      posterKey: 'show-01.png',
+      posterPath: 'show-01.png',
       // 넣는 순서와 상관없이 가장 이른 회차와 가장 늦은 회차를 고른다.
       performanceStarts: [
         '2026-03-10T10:30:00Z',

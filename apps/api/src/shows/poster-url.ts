@@ -8,10 +8,10 @@ export const posterBaseUrlProvider = {
   useFactory: (): string => readPosterBaseUrl(),
 };
 
-// 주소 끝에 /가 있어도 없어도 키 앞에 /를 하나만 둔다.
+// 주소 끝에 /가 있어도 없어도 경로 앞에 /를 하나만 둔다.
 export function posterUrlOf(
-  posterKey: string,
+  posterPath: string,
   { baseUrl }: { baseUrl: string },
 ): string {
-  return `${baseUrl.replace(/\/+$/, '')}/${posterKey}`;
+  return `${baseUrl.replace(/\/+$/, '')}/${posterPath}`;
 }

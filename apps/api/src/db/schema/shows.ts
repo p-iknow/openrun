@@ -36,7 +36,7 @@ export const shows = pgTable(
     runningMinutes: integer('running_minutes').notNull(),
     description: text().notNull(),
     // 포스터 파일의 저장소 안 경로다. 완전한 URL은 API가 POSTER_BASE_URL과 합쳐 만든다.
-    posterKey: text('poster_key').notNull(),
+    posterPath: text('poster_path').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),

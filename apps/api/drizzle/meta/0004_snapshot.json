@@ -217,8 +217,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "poster_key": {
-          "name": "poster_key",
+        "poster_path": {
+          "name": "poster_path",
           "type": "text",
           "primaryKey": false,
           "notNull": true

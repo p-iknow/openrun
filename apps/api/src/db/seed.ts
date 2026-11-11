@@ -20,7 +20,7 @@ import { renderPoster } from './seed-poster.js';
 const FAKER_SEED = 20261109;
 const SHOW_COUNT = 20;
 
-// 포스터는 스토어의 정적 파일 폴더에 쓰고, 스토어가 /posters/<포스터 키>로 내보낸다(POSTER_BASE_URL).
+// 포스터는 스토어의 정적 파일 폴더에 쓰고, 스토어가 /posters/<포스터 경로>로 내보낸다(POSTER_BASE_URL).
 // 이 폴더는 git에 올리지 않고 시드를 돌릴 때마다 비우고 다시 만든다. 1.7에서 MinIO 업로드로 바꾼다.
 const POSTER_DIR = new URL('../../../store/public/posters/', import.meta.url);
 
@@ -388,8 +388,8 @@ function posterPeriodOf(list: { startsAt: Date }[]): string {
 }
 
 // DB보다 먼저 쓴다. DB 트랜잭션이 실패해도 남는 것은 다음 시드가 지울 파일뿐이고,
-// 반대 순서면 커밋된 공연의 포스터 키가 없는 파일을 가리킬 수 있다.
-// 포스터에 날짜가 들어가 시드를 돌린 날에 따라 내용이 바뀐다. 키에 내용 해시를 넣어, 내용이 바뀌면 URL도 바뀌게 한다.
+// 반대 순서면 커밋된 공연의 포스터 경로가 없는 파일을 가리킬 수 있다.
+// 포스터에 날짜가 들어가 시드를 돌린 날에 따라 내용이 바뀐다. 경로에 내용 해시를 넣어, 내용이 바뀌면 URL도 바뀌게 한다.
 // 그래야 next/image가 URL 기준으로 캐시한 예전 포스터를 보여 주지 않는다.
 const posters = await Promise.all(
   seedShows.map(async ({ show, performances: list }, index) => {
@@ -403,7 +403,7 @@ const posters = await Promise.all(
     });
     const hash = createHash('sha256').update(png).digest('hex').slice(0, 8);
     return {
-      key: `show-${String(index + 1).padStart(2, '0')}-${hash}.png`,
+      path: `show-${String(index + 1).padStart(2, '0')}-${hash}.png`,
       png,
     };
   }),
@@ -411,7 +411,7 @@ const posters = await Promise.all(
 await rm(POSTER_DIR, { recursive: true, force: true });
 await mkdir(POSTER_DIR, { recursive: true });
 await Promise.all(
-  posters.map(({ key, png }) => writeFile(new URL(key, POSTER_DIR), png)),
+  posters.map(({ path, png }) => writeFile(new URL(path, POSTER_DIR), png)),
 );
 
 const db = drizzle(readDatabaseUrl());
@@ -478,7 +478,7 @@ try {
       }
       const [inserted] = await tx
         .insert(shows)
-        .values({ ...values, venueId: venue.venueId, posterKey: poster.key })
+        .values({ ...values, venueId: venue.venueId, posterPath: poster.path })
         .returning({ id: shows.id });
       if (!inserted) {
         throw new Error(`공연을 넣지 못했습니다: ${show.title}`);
