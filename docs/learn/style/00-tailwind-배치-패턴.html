@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>00 Tailwind 배치 패턴</title>
+    <link rel="stylesheet" href="../learn.css" />
+    <script src="../vendor/highlightjs/highlight.min.js" defer></script>
+    <script src="../learn.js" defer></script>
+  </head>
+  <body>
+    <div class="layout">
+      <nav aria-label="목차">
+        <strong>목차</strong>
+        <ol>
+          <li><a href="#overview">한눈에 보기</a></li>
+          <li><a href="#aspect">aspect: 비율로 자리 먼저 잡기</a></li>
+          <li><a href="#fill-parent">relative: fill 이미지의 기준 상자</a></li>
+          <li><a href="#clip">overflow-hidden: 둥근 모서리로 자식 자르기</a></li>
+          <li><a href="#fixed-in-flex">shrink-0과 min-w-0: flex 줄의 고정 폭</a></li>
+          <li><a href="#responsive-direction">sm:flex-col: 화면 폭으로 방향 바꾸기</a></li>
+        </ol>
+        <strong>마무리</strong>
+        <ol>
+          <li><a href="#check">스스로 확인하기</a></li>
+          <li><a href="#more">더 읽을거리</a></li>
+        </ol>
+      </nav>
+
+      <main>
+        <h1>00 Tailwind 배치 패턴</h1>
+        <p class="lead">
+          클래스 하나로는 안 되고 몇 개가 함께 있어야 의도대로 배치되는 조합을 패턴별로 모은다. 패턴마다 푸는 문제,
+          클래스가 만드는 CSS, 이 저장소의 사례, 하나를 빼면 생기는 일을 적는다. 처음 패턴들은 공연 카드의 포스터 틀
+          (<code>apps/store/src/shows/show-card.tsx</code>의 <code>ShowCardFrame</code>)에서 나왔다.
+        </p>
+
+        <section id="overview">
+          <h2>한눈에 보기</h2>
+          <pre><code class="language-tsx">&lt;li className="flex gap-md sm:flex-col sm:gap-sm"&gt;
+  &lt;div className="relative aspect-3/4 w-[96px] shrink-0 overflow-hidden rounded-card bg-surface-muted sm:w-full"&gt;
+    &lt;Image src={card.posterUrl} alt="" fill sizes={POSTER_SIZES} className="object-cover" /&gt;
+  &lt;/div&gt;
+  &lt;div className="flex min-w-0 flex-1 flex-col gap-xs"&gt;{children}&lt;/div&gt;
+&lt;/li&gt;</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>클래스</th>
+                  <th>하는 일</th>
+                  <th>패턴</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>aspect-3/4 w-[96px]</code></td>
+                  <td>이미지가 오기 전에 포스터 자리의 크기를 정한다</td>
+                  <td><a href="#aspect">비율로 자리 먼저 잡기</a></td>
+                </tr>
+                <tr>
+                  <td><code>bg-surface-muted</code></td>
+                  <td>이미지가 오기 전에 보이는 자리 표시자</td>
+                  <td><a href="#aspect">비율로 자리 먼저 잡기</a></td>
+                </tr>
+                <tr>
+                  <td><code>relative</code></td>
+                  <td><code>fill</code> 이미지가 이 틀을 꽉 채우게 한다</td>
+                  <td><a href="#fill-parent">fill 이미지의 기준 상자</a></td>
+                </tr>
+                <tr>
+                  <td><code>overflow-hidden rounded-card</code></td>
+                  <td>이미지 모서리까지 둥글게 자른다</td>
+                  <td><a href="#clip">둥근 모서리로 자식 자르기</a></td>
+                </tr>
+                <tr>
+                  <td><code>shrink-0</code>, <code>min-w-0 flex-1</code></td>
+                  <td>모바일 가로 줄에서 포스터는 96px로 두고 글자 칸만 줄인다</td>
+                  <td><a href="#fixed-in-flex">flex 줄의 고정 폭</a></td>
+                </tr>
+                <tr>
+                  <td><code>sm:flex-col</code>, <code>sm:w-full</code></td>
+                  <td>모바일은 가로 행, <code>sm</code>부터 세로 카드</td>
+                  <td><a href="#responsive-direction">화면 폭으로 방향 바꾸기</a></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="aspect">
+          <h2>aspect: 비율로 자리 먼저 잡기</h2>
+          <pre><code class="language-css">.aspect-3\/4 { aspect-ratio: 3 / 4; }
+.w-\[96px\]  { width: 96px; }   /* 폭이 정해지면 높이는 비율로 128px이 된다 */</code></pre>
+          <p>
+            이미지는 내려받기 전까지 크기를 모른다. 크기를 모르는 <code>&lt;img&gt;</code>는 처음에 높이 0으로 그려졌다가
+            이미지가 오면 커지고, 그 아래 내용이 한꺼번에 밀린다. 이 흔들림을 CLS(Cumulative Layout Shift)라고 부른다.
+          </p>
+          <ol class="steps blue">
+            <li>
+              <strong>틀이 크기를 정한다</strong>
+              폭과 <code>aspect-ratio</code>만 있으면 브라우저가 높이를 계산한다. 틀의 크기가 이미지와 상관없이 정해져서
+              이미지가 늦게 와도 아무것도 밀리지 않는다.
+            </li>
+            <li>
+              <strong>배경색이 자리 표시자가 된다</strong>
+              이미지가 오기 전에는 틀의 <code>bg-surface-muted</code>가 보인다. 정적인 색이라 서버 컴포넌트로 그릴 수 있다.
+            </li>
+            <li>
+              <strong>로딩 카드도 같은 틀을 쓴다</strong>
+              <code>ShowCardSkeleton</code>도 같은 <code>ShowCardFrame</code>에 <code>Skeleton</code>을 넣는다. 응답이 와서
+              로딩 카드가 진짜 카드로 바뀔 때도 자리가 그대로다.
+            </li>
+          </ol>
+          <div class="callout warn">
+            <p>
+              <code>aspect-ratio</code>는 높이가 정해지지 않았을 때만 쓰인다. 같은 요소에 <code>h-*</code>를 함께 주면
+              비율은 무시된다.
+            </p>
+          </div>
+        </section>
+
+        <section id="fill-parent">
+          <h2>relative: fill 이미지의 기준 상자</h2>
+          <p>
+            <code>next/image</code>의 <code>fill</code>은 크기를 모르는 이미지를 부모 크기에 맞춘다. 그려지는
+            <code>&lt;img&gt;</code>에는 아래 스타일이 붙는다.
+          </p>
+          <pre><code class="language-css">img { position: absolute; inset: 0; width: 100%; height: 100%; }</code></pre>
+          <p>
+            absolute 요소는 <code>position</code>이 <code>static</code>이 아닌 가장 가까운 조상을 기준으로 놓인다(자세한 동작은
+            <a href="01-버튼으로-보는-tailwind-배치와-상태-패턴.html#overlay">style 01 문서</a>). 그래서
+            틀에 <code>relative</code>를 붙여 기준을 틀로 만든다.
+          </p>
+          <ul>
+            <li>
+              <strong>빼면:</strong> 이미지가 카드 바깥의 다른 조상을 기준으로 커진다. 그런 조상이 없으면 첫 화면 크기의
+              상자를 기준으로 화면을 덮는다. Next도 개발 중에 부모의 position이 없다고 콘솔에 경고한다.
+            </li>
+            <li>
+              <strong>함께 쓰는 것:</strong> 틀이 크기를 가져야 한다(<a href="#aspect">aspect 패턴</a>). absolute 이미지는
+              틀의 크기를 키우지 않으므로, 틀에 크기가 없으면 높이 0인 상자를 채운다.
+            </li>
+            <li>
+              <strong><code>object-cover</code>:</strong> 이미지 비율이 틀과 다르면 비율을 지킨 채 틀을 꽉 채우고 넘치는 부분을
+              자른다. 지금 포스터는 틀과 같은 3:4라 잘리는 부분이 없다.
+            </li>
+          </ul>
+        </section>
+
+        <section id="clip">
+          <h2>overflow-hidden: 둥근 모서리로 자식 자르기</h2>
+          <pre><code class="language-css">.rounded-card    { border-radius: var(--radius-card); }
+.overflow-hidden { overflow: hidden; }   /* 둥근 모서리 밖으로 나간 자식을 자른다 */</code></pre>
+          <p>
+            <code>border-radius</code>는 그 요소의 배경과 테두리만 둥글게 한다. 자식은 자기 모서리대로 그려지므로, 틀을 꽉
+            채운 이미지의 직각 모서리가 틀의 둥근 모서리 위에 그대로 보인다. <code>overflow: hidden</code>을 주면 자식이 틀의
+            둥근 모양 안쪽만 보인다.
+          </p>
+          <ul>
+            <li>
+              <strong>모서리는 틀 한 곳에서만 정한다:</strong> 로딩 카드의 <code>Skeleton</code>은 기본으로 둥근 모서리를
+              갖지만 <code>rounded-none</code>으로 지운다. 모서리는 틀이 자르므로, 틀의 반지름을 바꿀 때 한 곳만 고치면 된다.
+            </li>
+            <li>
+              <strong>주의:</strong> <code>overflow-hidden</code>은 틀 밖으로 나가야 하는 것(툴팁, 포커스 링, 그림자가 있는
+              자식)도 자른다. 이런 것이 들어갈 틀이면 자식에 같은 <code>rounded-*</code>를 주는 쪽을 고른다.
+            </li>
+          </ul>
+        </section>
+
+        <section id="fixed-in-flex">
+          <h2>shrink-0과 min-w-0: flex 줄의 고정 폭</h2>
+          <pre><code class="language-css">.shrink-0 { flex-shrink: 0; }      /* 줄이 좁아도 줄어들지 않는다 */
+.flex-1   { flex: 1; }             /* = 1 1 0%: 남는 폭을 가져가고, 시작 폭은 0 */
+.min-w-0  { min-width: 0; }        /* 내용보다 좁아질 수 있게 한다 */</code></pre>
+          <p>
+            모바일 카드는 포스터와 글자 칸이 한 줄에 놓이는 <code>flex</code> 행이다. 포스터는 96px로 고정하고, 남는 폭을 글자
+            칸이 가져가며, 좁아질 때도 글자 칸만 줄게 하려고 세 클래스를 함께 쓴다.
+          </p>
+          <ol class="steps blue">
+            <li>
+              <strong>flex 항목은 기본으로 줄어든다</strong>
+              <code>flex-shrink</code>의 기본값은 1이다. 줄이 모자라면 <code>w-[96px]</code>를 준 포스터도 96px보다 좁아질 수
+              있고, <code>aspect-ratio</code> 때문에 높이도 같이 준다. <code>shrink-0</code>이 이걸 막는다.
+            </li>
+            <li>
+              <strong>글자 칸은 남는 폭을 가져간다</strong>
+              <code>flex-1</code>은 시작 폭을 0으로 두고 남는 폭을 모두 가져간다.
+            </li>
+            <li>
+              <strong>min-width: auto가 줄어들기를 막는다</strong>
+              flex 항목의 <code>min-width</code> 기본값은 <code>auto</code>, 즉 내용의 최소 폭이다. 줄바꿈이 안 되는 긴 글자
+              (<code>truncate</code>를 쓴 공연장 이름)가 있으면 글자 칸이 그보다 좁아지지 않아 줄 밖으로 넘친다.
+              <code>min-w-0</code>을 주어야 글자 칸이 줄고 <code>truncate</code>의 말줄임표가 나타난다.
+            </li>
+          </ol>
+          <div class="callout">
+            <p>
+              지금 구조에서는 글자 칸이 <code>min-w-0</code>이라 먼저 줄어들어서, 화면이 96px보다 좁지 않으면
+              <code>shrink-0</code>이 없어도 차이가 거의 없다. 내용이 바뀌어도 포스터 폭을 보장하려는 방어용이다. 반대로
+              <code>min-w-0</code>은 빼면 긴 공연장 이름에서 바로 넘친다.
+            </p>
+          </div>
+        </section>
+
+        <section id="responsive-direction">
+          <h2>sm:flex-col: 화면 폭으로 방향 바꾸기</h2>
+          <pre><code class="language-css">.flex       { display: flex; }                 /* 기본: 가로 행 */
+@media (width &gt;= 40rem) {
+  .sm\:flex-col { flex-direction: column; }    /* sm부터: 포스터 위, 글자 아래 */
+  .sm\:w-full   { width: 100%; }               /* 포스터가 카드 폭을 채운다 */
+}</code></pre>
+          <p>
+            Tailwind는 모바일 먼저다. 접두어 없는 클래스가 가장 좁은 화면의 모습이고, <code>sm:</code>은 그 폭 이상에서 덮어쓴다.
+            한 마크업으로 모바일의 가로 행 목록과 데스크톱의 포스터 카드 그리드를 만든다. JS로 화면 폭을 읽지 않으므로 서버
+            렌더링 결과와 첫 화면이 같다.
+          </p>
+          <ul>
+            <li>
+              <strong>세로가 되면 shrink-0은 의미가 없다:</strong> <code>flex-shrink</code>는 주축(세로 배치에서는 높이)에
+              적용된다. <code>sm</code>부터 포스터 폭은 <code>sm:w-full</code>이 정한다.
+            </li>
+            <li>
+              <strong>이미지 <code>sizes</code>를 열 수와 맞춘다:</strong> 이미지 폭은 CSS가 정하지만, 브라우저는 CSS를 읽기
+              전에 어떤 크기의 파일을 받을지 골라야 한다. <code>sizes</code>에 화면 폭별 표시 폭(모바일 96px, <code>sm</code>
+              3열 약 33vw, <code>lg</code> 4열 약 280px)을 적어 두어야 모바일에서 큰 파일을 받지 않는다. 그리드 열 수를 바꾸면
+              <code>POSTER_SIZES</code>도 함께 바꾼다.
+            </li>
+          </ul>
+        </section>
+
+        <section id="check">
+          <h2>스스로 확인하기</h2>
+          <div class="quiz">
+            <p class="quiz-q">1. 포스터 틀에서 relative를 빼면 데스크톱 화면에서 무엇이 보이나?</p>
+            <p class="quiz-context"><a href="#fill-parent">fill 이미지의 기준 상자</a>. 바꾸는 코드:</p>
+            <pre><code class="language-diff">-&lt;div className="relative aspect-3/4 w-[96px] shrink-0 overflow-hidden rounded-card ..."&gt;
++&lt;div className="aspect-3/4 w-[96px] shrink-0 overflow-hidden rounded-card ..."&gt;</code></pre>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  이미지가 틀이 아니라 position이 있는 바깥 조상, 없으면 첫 화면 크기의 상자를 기준으로 커진다. 카드마다
+                  포스터가 같은 자리에 겹쳐 화면을 덮는다. 틀은 크기를 그대로 가지므로 빈 회색 틀만 남는다.
+                </p>
+              </div>
+            </details>
+          </div>
+          <div class="quiz">
+            <p class="quiz-q">2. 글자 칸에서 min-w-0을 빼면 360px 화면에서 무엇이 달라지나?</p>
+            <p class="quiz-context">
+              <a href="#fixed-in-flex">flex 줄의 고정 폭</a>. 공연장 이름이 화면 폭보다 길고, 공연장 줄은
+              <code>truncate</code>다.
+            </p>
+            <pre><code class="language-diff">-&lt;div className="flex min-w-0 flex-1 flex-col gap-xs"&gt;
++&lt;div className="flex flex-1 flex-col gap-xs"&gt;</code></pre>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  글자 칸의 최소 폭이 공연장 이름 전체 길이가 되어 줄 밖으로 넘친다. 말줄임표가 나타나지 않고 가로
+                  스크롤이 생긴다. 포스터는 <code>shrink-0</code>이라 그대로 96px이다.
+                </p>
+              </div>
+            </details>
+          </div>
+          <details>
+            <summary>3. Skeleton에서 rounded-none을 빼도 화면이 같아 보이는 이유는?</summary>
+            <p>
+              틀이 <code>overflow-hidden</code>으로 자식을 자기 둥근 모서리 안쪽만 보이게 자르기 때문이다. 다만 Skeleton의
+              반지름이 틀보다 크면 모서리 안쪽에 틈이 보인다. 모서리를 한 곳에서 정하려고 지운다.
+            </p>
+          </details>
+        </section>
+
+        <section id="more">
+          <h2>더 읽을거리</h2>
+          <ol>
+            <li><a href="https://tailwindcss.com/docs/aspect-ratio">Tailwind CSS: aspect-ratio</a></li>
+            <li><a href="https://tailwindcss.com/docs/flex-shrink">Tailwind CSS: flex-shrink</a></li>
+            <li><a href="https://tailwindcss.com/docs/responsive-design">Tailwind CSS: Responsive design</a></li>
+            <li><a href="https://nextjs.org/docs/app/api-reference/components/image#fill">Next.js: Image fill</a></li>
+            <li>
+              <a href="https://developer.mozilla.org/en-US/docs/Web/CSS/min-width#auto">MDN: min-width auto</a>
+            </li>
+            <li><a href="https://web.dev/articles/cls">web.dev: Cumulative Layout Shift</a></li>
+          </ol>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

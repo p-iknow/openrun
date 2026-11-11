@@ -29,6 +29,13 @@
       "when": 1794295473473,
       "tag": "0003_unique_section_name_per_venue",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794329443618,
+      "tag": "0004_add_poster_path_to_shows",
+      "breakpoints": true
     }
   ]
 }

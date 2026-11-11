@@ -126,6 +126,11 @@
             "format": "date-time",
             "nullable": true,
             "description": "판매 예정일 때 가장 이른 판매 오픈 일시. 판매 예정이 아니면 null이다."
+          },
+          "posterUrl": {
+            "type": "string",
+            "format": "uri",
+            "description": "3:4 포스터 이미지의 완전한 URL"
           }
         },
         "required": [
@@ -135,7 +140,8 @@
           "venueName",
           "period",
           "salesStatus",
-          "salesOpenAt"
+          "salesOpenAt",
+          "posterUrl"
         ]
       },
       "ShowPageDto": {

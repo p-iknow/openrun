@@ -12,6 +12,7 @@
 | `nest/` | NestJS, API 테스트 |
 | `db-and-drizzle/` | DB와 SQL 개념, Drizzle 스키마와 쿼리, 마이그레이션 |
 | `design-system/` | `store-ui`의 토큰, 컴포넌트, Storybook, 라이브러리 빌드 |
+| `style/` | CSS와 Tailwind로 배치하고 꾸미는 패턴(앱과 `store-ui` 공통) |
 
 공통 파일(`learn.css`, `learn.js`, `vendor/`, `index.html`, `template.html`)은 이 폴더 바로 아래에 둔다. 폴더를 새로 만들어야 하면 이 표와 `learn.js`의 `learnFolders`에 먼저 추가한다.
 
@@ -31,6 +32,7 @@
 | `db-and-drizzle/02-drizzle-스키마-문법.html` | Drizzle 스키마 파일에 쓰는 문법(빌더, 수식어, `references`, `index`, `pgEnum` 등). 문법마다 코드, 생성되는 SQL, TS 타입에 주는 영향을 적는다. 이 저장소가 왜 그 문법을 골랐는지는 적지 않는다 |
 | `db-and-drizzle/03-drizzle-쿼리-문법.html` | 서비스, 시드, 테스트에서 DB를 읽고 쓰는 Drizzle 쿼리 문법(`select`, `innerJoin`, `orderBy`, 집계, 서브쿼리, `insert`, `transaction` 등). 문법마다 이 저장소의 코드, 생성되는 SQL, 결과 타입을 적는다 |
 | `db-and-drizzle/08-마이그레이션.html` | 마이그레이션 개념, drizzle-kit 명령의 순서, 실수하기 쉬운 곳, 그리고 이 저장소의 마이그레이션 사례. 마이그레이션을 만들 때마다 `이 저장소의 사례` 절에 `h3`로 한 항목씩 더한다 |
+| `style/00-tailwind-배치-패턴.html` | 클래스 몇 개가 함께 있어야 의도대로 배치되는 조합(예: `relative` + `fill` 이미지, `rounded-*` + `overflow-hidden`). 패턴마다 푸는 문제, 만들어지는 CSS, 이 저장소의 사례, 하나를 빼면 생기는 일을 적는다. 리뷰에서 클래스가 왜 붙었는지 설명하면 그 패턴을 `h2` 절로 더하고, 이미 있으면 사례만 더한다 |
 
 - 다른 문서를 쓰다가 설명이 필요한 DB 개념이나 Drizzle 스키마·쿼리 문법이 나오면, 해당 참고 문서에 있는지 먼저 찾는다. 없으면 그 문서에 `h2` 절을 하나 더하고 목차에도 넣는다. 절의 `id`는 짧은 영어로 짓는다(예: `fk`, `index`).
 - 쓰고 있는 문서에서는 개념이나 문법을 다시 풀지 않고 `<a href="../db-and-drizzle/01-프론트엔드-개발자를-위한-DB-개념.html#fk">외래 키</a>`처럼 절로 링크한다. 그 문서에는 이 저장소의 코드와 선택의 이유만 쓴다. 예: `db-and-drizzle/04-공연장-공연-회차-스키마.html`.
@@ -54,6 +56,7 @@
 | `openapi` | OpenAPI 계약, 생성 클라이언트, API 호출 방식 |
 | `design-system` | `store-ui`의 토큰, 컴포넌트, Storybook |
 | `base-ui` | Base UI의 API와 동작(`useRender`, 컴포넌트 부품, 데이터 속성 등) |
+| `css` | CSS와 Tailwind의 배치, 꾸미기 패턴 |
 
 ## 모듈
 

@@ -18,6 +18,8 @@ export interface ShowCardData {
   salesStatus: SalesStatusBadgeData;
   /** 판매 예정일 때 한국 시각으로 바꾼 판매 오픈 일시. 예: `2026.03.01 14:00 판매 오픈` */
   salesOpenAt: string | null;
+  /** 3:4 포스터의 완전한 URL */
+  posterUrl: string;
 }
 
 // Record로 적어 API에 판매 상태가 추가되면 여기서 타입 오류가 난다.
@@ -51,7 +53,7 @@ function formatKst(iso: string) {
 
 export function selectShowCards(page: ShowPage): ShowCardData[] {
   return page.items.map(
-    ({ id, title, venueName, period, salesStatus, salesOpenAt }) => {
+    ({ id, title, venueName, period, salesStatus, salesOpenAt, posterUrl }) => {
       const start = formatKst(period.start).date;
       const end = formatKst(period.end).date;
       const open = salesOpenAt === null ? null : formatKst(salesOpenAt);
@@ -63,6 +65,7 @@ export function selectShowCards(page: ShowPage): ShowCardData[] {
         salesStatus: SALES_STATUS_BADGES[salesStatus],
         salesOpenAt:
           open === null ? null : `${open.date} ${open.time} 판매 오픈`,
+        posterUrl,
       };
     },
   );

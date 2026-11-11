@@ -1,7 +1,9 @@
 import { fakerKO as faker } from '@faker-js/faker';
+import { createHash } from 'node:crypto';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/node-postgres';
-import { readEnv } from '../config/env.js';
+import { readDatabaseUrl } from '../config/env.js';
 import {
   GENRES,
   type Genre,
@@ -10,12 +12,17 @@ import {
   shows,
 } from './schema/shows.js';
 import { seats, sections, venues } from './schema/venues.js';
+import { renderPoster } from './seed-poster.js';
 
 // 개발용 시드다. 매번 비우고 같은 id부터 다시 넣는다.
 // Faker 시드 값을 고정하고 Faker를 부르는 순서가 실행 시각과 무관하므로, 공연 구성(제목, 장르, 공연장, 회차 수)은 늘 같다.
 // 날짜만 실행 시각 기준 상대값이라, 몇 주가 지나도 판매 예정부터 판매 종료까지, 매진 회차와 매진 임박 회차까지 모든 경우가 남는다.
 const FAKER_SEED = 20261109;
 const SHOW_COUNT = 20;
+
+// 포스터는 스토어의 정적 파일 폴더에 쓰고, 스토어가 /posters/<포스터 경로>로 내보낸다(POSTER_BASE_URL).
+// 이 폴더는 git에 올리지 않고 시드를 돌릴 때마다 비우고 다시 만든다. 1.7에서 MinIO 업로드로 바꾼다.
+const POSTER_DIR = new URL('../../../store/public/posters/', import.meta.url);
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MINUTE_MS = 60 * 1000;
@@ -367,7 +374,47 @@ function buildSeedShows(now: number) {
 faker.seed(FAKER_SEED);
 const seedShows = buildSeedShows(Date.now());
 
-const db = drizzle(readEnv().databaseUrl);
+// 포스터에 적을 공연 기간. 카드와 같이 첫 회차부터 마지막 회차까지의 한국 날짜다.
+function formatPosterPeriod(list: { startsAt: Date }[]): string {
+  const times = list.map(({ startsAt }) => startsAt.getTime());
+  const kstDate = (time: number) =>
+    new Date(time + KST_OFFSET_MS)
+      .toISOString()
+      .slice(0, 10)
+      .replaceAll('-', '.');
+  const start = kstDate(Math.min(...times));
+  const end = kstDate(Math.max(...times));
+  return start === end ? start : `${start} – ${end}`;
+}
+
+// DB보다 먼저 쓴다. DB 트랜잭션이 실패해도 남는 것은 다음 시드가 지울 파일뿐이고,
+// 반대 순서면 커밋된 공연의 포스터 경로가 없는 파일을 가리킬 수 있다.
+// 포스터에 날짜가 들어가 시드를 돌린 날에 따라 내용이 바뀐다. 경로에 내용 해시를 넣어, 내용이 바뀌면 URL도 바뀌게 한다.
+// 그래야 next/image가 URL 기준으로 캐시한 예전 포스터를 보여 주지 않는다.
+const posters = await Promise.all(
+  seedShows.map(async ({ show, performances: list }, index) => {
+    const png = await renderPoster({
+      title: show.title,
+      genre: show.genre,
+      venueName: VENUE_LAYOUTS[show.venueIndex]?.name ?? '',
+      period: formatPosterPeriod(list),
+      // 장르를 순번대로 돌려 붙이므로, 같은 장르 안에서 몇 번째인지로 색과 구도를 바꾼다.
+      variant: Math.floor(index / GENRES.length),
+    });
+    const hash = createHash('sha256').update(png).digest('hex').slice(0, 8);
+    return {
+      path: `show-${String(index + 1).padStart(2, '0')}-${hash}.png`,
+      png,
+    };
+  }),
+);
+await rm(POSTER_DIR, { recursive: true, force: true });
+await mkdir(POSTER_DIR, { recursive: true });
+await Promise.all(
+  posters.map(({ path, png }) => writeFile(new URL(path, POSTER_DIR), png)),
+);
+
+const db = drizzle(readDatabaseUrl());
 
 try {
   const performanceSeatCount = await db.transaction(async (tx) => {
@@ -416,15 +463,22 @@ try {
       seatId: number;
       isSold: boolean;
     }[] = [];
-    for (const { show, performances: showPerformances } of seedShows) {
+    for (const [
+      index,
+      { show, performances: showPerformances },
+    ] of seedShows.entries()) {
       const { venueIndex, ...values } = show;
+      const poster = posters[index];
+      if (!poster) {
+        throw new Error(`포스터를 만들지 못했습니다: ${show.title}`);
+      }
       const venue = venueSeats[venueIndex];
       if (!venue) {
         throw new Error(`공연장 순번이 범위를 벗어났습니다: ${venueIndex}`);
       }
       const [inserted] = await tx
         .insert(shows)
-        .values({ ...values, venueId: venue.venueId })
+        .values({ ...values, venueId: venue.venueId, posterPath: poster.path })
         .returning({ id: shows.id });
       if (!inserted) {
         throw new Error(`공연을 넣지 못했습니다: ${show.title}`);
@@ -469,7 +523,7 @@ try {
     0,
   );
   console.log(
-    `공연장 ${VENUE_LAYOUTS.length}곳(좌석 ${seatCount}석), 공연 ${seedShows.length}개, 회차 ${performanceCount}개, 회차 좌석 ${performanceSeatCount}개를 넣었습니다.`,
+    `공연장 ${VENUE_LAYOUTS.length}곳(좌석 ${seatCount}석), 공연 ${seedShows.length}개, 회차 ${performanceCount}개, 회차 좌석 ${performanceSeatCount}개를 넣고 포스터 ${posters.length}장을 만들었습니다.`,
   );
 } finally {
   await db.$client.end();

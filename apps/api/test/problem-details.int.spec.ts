@@ -64,6 +64,8 @@ describe('오류 응답', () => {
 
   beforeAll(() => {
     vi.stubEnv('DATABASE_URL', inject('databaseUrl'));
+    // 앱이 부팅 때 포스터 주소 프로바이더를 만들므로 값이 있어야 한다.
+    vi.stubEnv('POSTER_BASE_URL', 'https://posters.example.com/openrun');
   });
 
   afterAll(() => {

@@ -53,6 +53,13 @@ export class ShowSummaryDto {
       '판매 예정일 때 가장 이른 판매 오픈 일시. 판매 예정이 아니면 null이다.',
   })
   salesOpenAt: string | null;
+
+  @ApiProperty({
+    type: String,
+    format: 'uri',
+    description: '3:4 포스터 이미지의 완전한 URL',
+  })
+  posterUrl: string;
 }
 
 export class ShowPageDto {

@@ -5,6 +5,7 @@ import { DATABASE, type Database } from '../db/database.module.js';
 import { performances, shows } from '../db/schema/shows.js';
 import { venues } from '../db/schema/venues.js';
 import type { ShowPageDto } from './show.dto.js';
+import { POSTER_BASE_URL, buildPosterUrl } from './poster-url.js';
 import { showSalesStatusSubquery } from './show-sales-status.js';
 
 // 쿼리 파라미터는 뒤 티켓에서 받는다. 지금은 항상 첫 페이지 20개다.
@@ -16,6 +17,7 @@ export class ShowsService {
   constructor(
     @Inject(DATABASE) private readonly db: Database,
     private readonly clock: Clock,
+    @Inject(POSTER_BASE_URL) private readonly posterBaseUrl: string,
   ) {}
 
   async findPage(): Promise<ShowPageDto> {
@@ -46,6 +48,7 @@ export class ShowsService {
           end: period.end,
           salesStatus: salesStatus.salesStatus,
           salesOpenAt: salesStatus.salesOpenAt,
+          posterPath: shows.posterPath,
         })
         .from(shows)
         .innerJoin(venues, eq(venues.id, shows.venueId))
@@ -65,10 +68,11 @@ export class ShowsService {
 
     const totalCount = total?.count ?? 0;
     return {
-      items: rows.map(({ start, end, salesOpenAt, ...show }) => ({
+      items: rows.map(({ start, end, salesOpenAt, posterPath, ...show }) => ({
         ...show,
         period: { start: toIso(start), end: toIso(end) },
         salesOpenAt: salesOpenAt?.toISOString() ?? null,
+        posterUrl: buildPosterUrl({ baseUrl: this.posterBaseUrl, posterPath }),
       })),
       page: PAGE,
       size: PAGE_SIZE,
