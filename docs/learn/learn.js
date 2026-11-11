@@ -48,9 +48,8 @@ const learnFolders = [
       { file: '00-토큰-CSS를-읽는-파서.html', title: '00 토큰 CSS를 읽는 파서', tags: ['design-system', 'testing'] },
       { file: '01-storybook-설정과-스토리-문법.html', title: '01 Storybook 설정과 스토리 문법', tags: ['design-system'] },
       { file: '02-cn과-tailwind-merge-확장.html', title: '02 cn과 tailwind-merge 확장', tags: ['design-system'] },
-      { file: '03-버튼으로-보는-tailwind-배치와-상태-패턴.html', title: '03 Button으로 보는 Tailwind 배치와 상태 패턴', tags: ['design-system'] },
-      { file: '04-라이브러리-빌드와-use-client-경계.html', title: "04 라이브러리 빌드와 'use client' 경계", tags: ['design-system', 'nextjs'] },
-      { file: '05-useRender로-요소-바꿔-끼우기.html', title: '05 useRender로 요소 바꿔 끼우기', tags: ['base-ui', 'design-system'] },
+      { file: '03-라이브러리-빌드와-use-client-경계.html', title: "03 라이브러리 빌드와 'use client' 경계", tags: ['design-system', 'nextjs'] },
+      { file: '04-useRender로-요소-바꿔-끼우기.html', title: '04 useRender로 요소 바꿔 끼우기', tags: ['base-ui', 'design-system'] },
     ],
   },
   {
@@ -58,6 +57,7 @@ const learnFolders = [
     title: '스타일',
     documents: [
       { file: '00-tailwind-배치-패턴.html', title: '00 Tailwind 배치 패턴', tags: ['css'] },
+      { file: '01-버튼으로-보는-tailwind-배치와-상태-패턴.html', title: '01 Button으로 보는 Tailwind 배치와 상태 패턴', tags: ['css', 'design-system'] },
     ],
   },
 ];
