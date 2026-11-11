@@ -9,7 +9,7 @@ export const posterBaseUrlProvider = {
 };
 
 // 주소 끝에 /가 있어도 없어도 경로 앞에 /를 하나만 둔다.
-export function posterUrlOf(
+export function buildPosterUrl(
   posterPath: string,
   { baseUrl }: { baseUrl: string },
 ): string {

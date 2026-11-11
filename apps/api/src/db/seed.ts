@@ -375,7 +375,7 @@ faker.seed(FAKER_SEED);
 const seedShows = buildSeedShows(Date.now());
 
 // 포스터에 적을 공연 기간. 카드와 같이 첫 회차부터 마지막 회차까지의 한국 날짜다.
-function posterPeriodOf(list: { startsAt: Date }[]): string {
+function formatPosterPeriod(list: { startsAt: Date }[]): string {
   const times = list.map(({ startsAt }) => startsAt.getTime());
   const kstDate = (time: number) =>
     new Date(time + KST_OFFSET_MS)
@@ -397,7 +397,7 @@ const posters = await Promise.all(
       title: show.title,
       genre: show.genre,
       venueName: VENUE_LAYOUTS[show.venueIndex]?.name ?? '',
-      period: posterPeriodOf(list),
+      period: formatPosterPeriod(list),
       // 장르를 순번대로 돌려 붙이므로, 같은 장르 안에서 몇 번째인지로 색과 구도를 바꾼다.
       variant: Math.floor(index / GENRES.length),
     });
