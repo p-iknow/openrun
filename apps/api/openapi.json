@@ -333,20 +333,10 @@
             "type": "string",
             "format": "uri",
             "description": "상세 이미지의 완전한 URL"
-          },
-          "width": {
-            "type": "integer",
-            "description": "원본 폭(px)"
-          },
-          "height": {
-            "type": "integer",
-            "description": "원본 높이(px)"
           }
         },
         "required": [
-          "url",
-          "width",
-          "height"
+          "url"
         ]
       },
       "PerformanceSalesStatus": {

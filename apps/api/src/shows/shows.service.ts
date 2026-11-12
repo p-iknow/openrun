@@ -150,11 +150,7 @@ export class ShowsService {
         .innerJoin(salesStatus, eq(salesStatus.showId, shows.id))
         .where(eq(shows.id, id)),
       this.db
-        .select({
-          path: showDetailImages.path,
-          width: showDetailImages.width,
-          height: showDetailImages.height,
-        })
+        .select({ path: showDetailImages.path })
         .from(showDetailImages)
         .where(eq(showDetailImages.showId, id))
         .orderBy(asc(showDetailImages.position)),
@@ -196,9 +192,8 @@ export class ShowsService {
       venue: { id: venueId, name: venueName },
       period: { start: toIso(start), end: toIso(end) },
       salesOpenAt: salesOpenAt?.toISOString() ?? null,
-      detailImages: detailImageRows.map(({ path, ...size }) => ({
+      detailImages: detailImageRows.map(({ path }) => ({
         url: buildShowImageUrl({ baseUrl: this.showImageBaseUrl, path }),
-        ...size,
       })),
       performances: performanceRows.map(({ startsAt, ...performance }) => ({
         ...performance,

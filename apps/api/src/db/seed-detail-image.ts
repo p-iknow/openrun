@@ -19,12 +19,6 @@ const SECONDARY_COLOR = '#4e5968';
 
 type TextImage = Awaited<ReturnType<typeof textImage>>;
 
-export interface DetailImage {
-  png: Buffer;
-  width: number;
-  height: number;
-}
-
 // 글자 이미지를 위에서부터 쌓을 자리를 정한다. 각 항목 앞에 gap만큼 띄운다.
 function stack({
   items,
@@ -67,7 +61,7 @@ async function renderStoryImage({
   content: SeedShowContent;
   label: string;
   palette: Palette;
-}): Promise<DetailImage> {
+}): Promise<Buffer> {
   const [labelText, titleText, taglineText, heading, ...paragraphs] =
     await Promise.all([
       textImage(label, {
@@ -133,11 +127,10 @@ async function renderStoryImage({
   ${headingBarSvg({ top: body.tops[0] ?? 0, palette })}
 </svg>`;
 
-  const png = await sharp(Buffer.from(svg))
+  return sharp(Buffer.from(svg))
     .composite([...header.placements, ...body.placements])
     .png()
     .toBuffer();
-  return { png, width: WIDTH, height };
 }
 
 async function renderHighlightsImage({
@@ -146,7 +139,7 @@ async function renderHighlightsImage({
 }: {
   content: SeedShowContent;
   palette: Palette;
-}): Promise<DetailImage> {
+}): Promise<Buffer> {
   const NUMBER_SIZE = 56;
   const ITEM_LEFT = PADDING + NUMBER_SIZE + 20;
   const [heading, footer, ...items] = await Promise.all([
@@ -207,7 +200,7 @@ async function renderHighlightsImage({
     left: PADDING + Math.round((NUMBER_SIZE - number.info.width) / 2),
     top: (itemTops[index] ?? 0) + 21 - Math.round(number.info.height / 2),
   }));
-  const png = await sharp(Buffer.from(svg))
+  return sharp(Buffer.from(svg))
     .composite([
       ...body.placements,
       ...numberPlacements,
@@ -215,7 +208,6 @@ async function renderHighlightsImage({
     ])
     .png()
     .toBuffer();
-  return { png, width: WIDTH, height };
 }
 
 // 안내는 소개와 구분되도록 옅은 회색 바탕에 그린다. 항목 앞에는 작은 점을 찍는다.
@@ -225,7 +217,7 @@ async function renderNoticeImage({
 }: {
   content: SeedShowContent;
   palette: Palette;
-}): Promise<DetailImage> {
+}): Promise<Buffer> {
   const BULLET_LEFT = PADDING + 8;
   const ITEM_LEFT = PADDING + 32;
   const sections = await Promise.all(
@@ -280,11 +272,7 @@ async function renderNoticeImage({
   <rect width="100%" height="100%" fill="#f2f4f6"/>
   ${shapes.join('')}
 </svg>`;
-  const png = await sharp(Buffer.from(svg))
-    .composite(placements)
-    .png()
-    .toBuffer();
-  return { png, width: WIDTH, height };
+  return sharp(Buffer.from(svg)).composite(placements).png().toBuffer();
 }
 
 /** 공연 하나의 상세 이미지를 보여 줄 순서대로 돌려준다. */
@@ -295,7 +283,7 @@ export async function renderDetailImages({
   content: SeedShowContent;
   /** 포스터와 같은 색을 고르는 순번 */
   variant: number;
-}): Promise<DetailImage[]> {
+}): Promise<Buffer[]> {
   const { label, palette } = getShowPalette({ genre: content.genre, variant });
   return Promise.all([
     renderStoryImage({ content, label, palette }),

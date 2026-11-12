@@ -76,12 +76,7 @@ async function insertShow({
   performanceStarts?: string[];
   performances?: PerformanceInput[];
   // 상세 이미지. position은 넣은 순서와 따로 준다.
-  detailImages?: {
-    position: number;
-    path: string;
-    width: number;
-    height: number;
-  }[];
+  detailImages?: { position: number; path: string }[];
 }): Promise<number> {
   const [show] = await db
     .insert(shows)
@@ -948,7 +943,7 @@ describe('GET /shows/:id', () => {
     });
   });
 
-  it('상세 이미지를 순서대로 완전한 URL과 크기로 담는다', async () => {
+  it('상세 이미지를 순서대로 완전한 URL로 담는다', async () => {
     const venueId = await insertVenue('샤롯데씨어터');
     const showId = await insertShow({
       venueId,
@@ -956,34 +951,16 @@ describe('GET /shows/:id', () => {
       performanceStarts: ['2026-03-01T05:00:00Z'],
       // 넣는 순서와 상관없이 position 순으로 담는다.
       detailImages: [
-        {
-          position: 2,
-          path: 'details/show-01-2.png',
-          width: 860,
-          height: 2400,
-        },
-        {
-          position: 1,
-          path: 'details/show-01-1.png',
-          width: 860,
-          height: 3200,
-        },
+        { position: 2, path: 'details/show-01-2.png' },
+        { position: 1, path: 'details/show-01-1.png' },
       ],
     });
 
     const response = await request(app.getHttpServer()).get(`/shows/${showId}`);
 
     expect(response.body.detailImages).toEqual([
-      {
-        url: 'https://images.example.com/openrun/details/show-01-1.png',
-        width: 860,
-        height: 3200,
-      },
-      {
-        url: 'https://images.example.com/openrun/details/show-01-2.png',
-        width: 860,
-        height: 2400,
-      },
+      { url: 'https://images.example.com/openrun/details/show-01-1.png' },
+      { url: 'https://images.example.com/openrun/details/show-01-2.png' },
     ]);
   });
 

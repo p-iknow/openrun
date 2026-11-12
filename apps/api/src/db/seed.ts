@@ -378,13 +378,11 @@ const detailImages = await Promise.all(
       content,
       variant: Math.floor(index / GENRES.length),
     });
-    return images.map(({ png, width, height }, imageIndex) => {
+    return images.map((png, imageIndex) => {
       const hash = createHash('sha256').update(png).digest('hex').slice(0, 8);
       return {
         position: imageIndex + 1,
         path: `details/show-${String(index + 1).padStart(2, '0')}-${imageIndex + 1}-${hash}.png`,
-        width,
-        height,
         png,
       };
     });

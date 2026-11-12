@@ -3,8 +3,6 @@ CREATE TABLE "show_detail_images" (
 	"show_id" integer NOT NULL,
 	"position" integer NOT NULL,
 	"path" text NOT NULL,
-	"width" integer NOT NULL,
-	"height" integer NOT NULL,
 	CONSTRAINT "show_detail_images_show_id_position_unique" UNIQUE("show_id","position")
 );
 --> statement-breakpoint

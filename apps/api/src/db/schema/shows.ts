@@ -92,9 +92,6 @@ export const showDetailImages = pgTable(
     position: integer().notNull(),
     // 공연 이미지 저장소 안 경로다(예: details/show-01-1.png). 완전한 URL은 API가 SHOW_IMAGE_BASE_URL과 합쳐 만든다.
     path: text().notNull(),
-    // 픽셀 단위 원본 크기다. 화면이 이미지를 받기 전에 비율대로 자리를 잡아, 긴 이미지가 늦게 와도 아래 내용이 밀리지 않는다.
-    width: integer().notNull(),
-    height: integer().notNull(),
   },
   // 한 공연에 같은 순서가 두 번 들어가지 않게 막는다.
   // 이 제약이 만드는 인덱스가 show_id로 시작하므로, 공연 하나의 상세 이미지를 순서대로 찾을 때도 쓰인다.

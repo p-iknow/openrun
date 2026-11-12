@@ -134,12 +134,6 @@ export class ShowDetailImageDto {
     description: '상세 이미지의 완전한 URL',
   })
   url: string;
-
-  @ApiProperty({ type: 'integer', description: '원본 폭(px)' })
-  width: number;
-
-  @ApiProperty({ type: 'integer', description: '원본 높이(px)' })
-  height: number;
 }
 
 export class ShowDetailDto {

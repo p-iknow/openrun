@@ -68,8 +68,6 @@ function ShowInfoFrame({
 // 포스터 칸의 폭. 모바일은 배경 상자(화면 폭 - 좌우 여백, 6:5) 높이의 85%에 3:4를 곱해 화면 폭의 약 50%,
 // sm부터는 배경 상자(2:1)가 본문 폭을 따라 가장 넓을 때 약 780px이라 포스터 폭이 250px 남짓이다.
 const POSTER_SIZES = '(min-width: 640px) 250px, 55vw';
-// 데스크톱(lg)은 본문 최대 폭 1200px에서 회차 패널(360px)과 간격을 뺀 약 780px, 그보다 좁으면 화면 폭을 채운다.
-const DETAIL_IMAGE_SIZES = '(min-width: 1024px) 780px, 100vw';
 export function ShowInfo({ show }: { show: ShowDetailData }) {
   const facts = [
     { term: '장르', value: show.genre },
@@ -137,19 +135,19 @@ export function ShowInfo({ show }: { show: ShowDetailData }) {
             {/* NOL 티켓처럼 소개는 상세 이미지로 보여 준다. 이미지 속 글은 화면 낭독기가 읽지 못하므로,
                 같은 내용을 글로 옮긴 소개 본문을 화면에는 보이지 않게 두고 이미지는 장식으로 둔다(WCAG 1.1.1). */}
             <p className="sr-only">{show.description}</p>
-            {/* 이미지 사이를 띄우지 않아 여러 장이 한 장처럼 이어진다. 폭과 높이로 비율대로 자리를 먼저 잡아,
-                긴 이미지가 늦게 와도 아래 내용이 밀리지 않는다.
-                첫 장은 첫 화면 끝에 걸려 가장 큰 그림(LCP)이 되기 쉬우므로 바로 불러오고, 나머지는 기본값대로 늦게 불러온다. */}
+            {/* 이미지 사이를 띄우지 않아 여러 장이 한 장처럼 이어진다.
+                NOL 티켓처럼 원본 크기를 받지 않아 일반 img로 원본을 그대로 그린다. 비율을 몰라 자리를 미리 잡지 못하지만,
+                접힌 상자가 최대 높이에서 잘리므로 늦게 온 이미지가 아래 내용을 밀어내는 폭도 그 높이까지로 묶인다.
+                첫 장은 첫 화면 끝에 걸려 가장 큰 그림(LCP)이 되기 쉬우므로 바로 불러오고, 나머지는 늦게 불러온다. */}
             <CollapsibleDetailImages>
               <div className="flex flex-col items-center">
                 {show.detailImages.map((image, index) => (
-                  <Image
+                  // next/image는 원본 크기나 크기가 정해진 부모가 있어야 하는데, 상세 이미지는 둘 다 없다.
+                  // oxlint-disable-next-line nextjs/no-img-element
+                  <img
                     key={image.url}
                     src={image.url}
                     alt=""
-                    width={image.width}
-                    height={image.height}
-                    sizes={DETAIL_IMAGE_SIZES}
                     loading={index === 0 ? 'eager' : 'lazy'}
                     className="h-auto w-full max-w-[860px]"
                   />
