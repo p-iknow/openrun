@@ -11,7 +11,6 @@ import {
   max,
   min,
   ne,
-  sql,
 } from 'drizzle-orm';
 import { Clock } from '../clock/clock.module.js';
 import { DATABASE, type Database } from '../db/database.module.js';
@@ -20,11 +19,12 @@ import { venues } from '../db/schema/venues.js';
 import type { ShowListQuery } from './show-list-query.js';
 import type { ShowDetailDto, ShowPageDto } from './show.dto.js';
 import {
-  almostSoldOutCondition,
-  performanceSalesStatus,
+  buildAlmostSoldOutCondition,
+  buildPerformanceSalesStatus,
+  buildSeatCounts,
 } from './performance-sales-status.js';
 import { POSTER_BASE_URL, buildPosterUrl } from './poster-url.js';
-import { createShowNotFoundException } from './show-id.js';
+import { createShowNotFoundException } from './show-not-found.js';
 import { showSalesStatusSubquery } from './show-sales-status.js';
 
 @Injectable()
@@ -44,7 +44,7 @@ export class ShowsService {
     status,
   }: ShowListQuery): Promise<ShowPageDto> {
     // 회차가 없는 공연은 기간 서브쿼리에 행이 없어 목록에 나오지 않는다.
-    const period = showPeriodSubquery(this.db);
+    const period = buildShowPeriodSubquery(this.db);
     const salesStatus = showSalesStatusSubquery(this.db, {
       now: this.clock.now(),
     });
@@ -110,17 +110,13 @@ export class ShowsService {
   async findDetail(id: number): Promise<ShowDetailDto> {
     const now = this.clock.now();
     // 목록과 같은 서브쿼리로 공연 기간과 공연 판매 상태를 구해, 두 화면의 값이 어긋나지 않는다.
-    const period = showPeriodSubquery(this.db);
+    const period = buildShowPeriodSubquery(this.db);
     const salesStatus = showSalesStatusSubquery(this.db, { now });
-    // 남은 좌석은 회차 좌석만 세서 구한다.
-    const totalSeats = sql<number>`count(${performanceSeats.id})`.mapWith(
-      Number,
-    );
-    const remainingSeats =
-      sql<number>`count(${performanceSeats.id}) filter (where not ${performanceSeats.isSold})`.mapWith(
-        Number,
-      );
-    const performanceStatus = performanceSalesStatus({ now, remainingSeats });
+    const { totalSeats, remainingSeats } = buildSeatCounts();
+    const performanceStatus = buildPerformanceSalesStatus({
+      now,
+      remainingSeats,
+    });
 
     const [[show], performanceRows] = await Promise.all([
       this.db
@@ -152,7 +148,7 @@ export class ShowsService {
           salesStatus: performanceStatus,
           remainingSeats,
           totalSeats,
-          isAlmostSoldOut: almostSoldOutCondition({
+          isAlmostSoldOut: buildAlmostSoldOutCondition({
             salesStatus: performanceStatus,
             remainingSeats,
             totalSeats,
@@ -190,7 +186,7 @@ export class ShowsService {
 
 // 공연마다 공연 기간(첫 회차부터 마지막 회차까지의 시작 일시)을 계산하는 서브쿼리다.
 // 공연 기간은 저장하지 않고 회차에서 계산한다. 회차가 없는 공연은 행이 없다.
-function showPeriodSubquery(db: Database) {
+function buildShowPeriodSubquery(db: Database) {
   return db
     .select({
       showId: performances.showId,
