@@ -4,8 +4,8 @@
 // 새 문서를 만들면 그 폴더의 documents에 한 줄 추가한다. 태그 이름은 README.md의 태그 목록을 따른다.
 const learnFolders = [
   {
-    folder: 'next',
-    title: 'Next.js',
+    folder: 'react-next',
+    title: 'React와 Next.js',
     documents: [
       { file: '00-nextjs-렌더링-시점과-캐시.html', title: '00 Next.js 렌더링 시점과 캐시', tags: ['nextjs'] },
       { file: '01-openapi-fetch로-API-호출과-오류-처리.html', title: '01 openapi-fetch 호출과 오류 처리', tags: ['openapi', 'nextjs'] },
@@ -18,6 +18,7 @@ const learnFolders = [
       { file: '08-useSearchParams와-Suspense-경계.html', title: '08 useSearchParams와 Suspense 경계', tags: ['nextjs'] },
       { file: '09-검색-폼-제출과-비제어-입력.html', title: '09 검색 폼: 제출, 비제어 입력과 key', tags: ['nextjs'] },
       { file: '10-숨은-입력-칸으로-쿼리-보존하기.html', title: '10 숨은 입력 칸으로 쿼리 보존하기', tags: ['nextjs'] },
+      { file: '11-useOptimistic이-해결하는-문제와-원리.html', title: '11 useOptimistic이 해결하는 문제와 원리', tags: ['react'] },
     ],
   },
   {
@@ -35,7 +36,11 @@ const learnFolders = [
   {
     folder: 'zod',
     title: 'zod',
-    documents: [{ file: '00-zod-기초.html', title: '00 zod 기초: 실행 중에도 남는 타입', tags: ['zod'] }],
+    documents: [
+      { file: '00-zod-기초.html', title: '00 zod 기초: 실행 중에도 남는 타입', tags: ['zod'] },
+      { file: '01-반복-쿼리를-배열로-받기.html', title: '01 반복 쿼리를 배열로 받기: preprocess, array, enum', tags: ['zod', 'url-state', 'openapi'] },
+      { file: '02-체이닝의-실행-순서.html', title: '02 체이닝의 실행 순서: 이어 붙이기와 문지기', tags: ['zod'] },
+    ],
   },
   {
     folder: 'db-and-drizzle',
@@ -51,6 +56,7 @@ const learnFolders = [
       { file: '07-구역-좌석-회차-좌석-스키마.html', title: '07 구역·좌석·회차 좌석 스키마', tags: ['drizzle', 'database'] },
       { file: '08-마이그레이션.html', title: '08 마이그레이션', tags: ['drizzle', 'database'] },
       { file: '09-공연-제목-검색-쿼리-읽기.html', title: '09 공연 제목 검색 쿼리 읽기', tags: ['drizzle', 'database'] },
+      { file: '10-장르-판매-상태-필터-쿼리-읽기.html', title: '10 장르·판매 상태 필터 쿼리 읽기', tags: ['drizzle', 'database'] },
     ],
   },
   {
@@ -69,6 +75,7 @@ const learnFolders = [
     title: '스토어 로직',
     documents: [
       { file: '00-공연-목록-쿼리-정리와-주소-만들기.html', title: '00 공연 목록 쿼리: 정리하고 주소 만들기', tags: ['url-state'] },
+      { file: '01-필터-칩-제어-컴포넌트와-useOptimistic.html', title: '01 필터 칩: 제어 컴포넌트와 useOptimistic', tags: ['url-state', 'react'] },
     ],
   },
   {

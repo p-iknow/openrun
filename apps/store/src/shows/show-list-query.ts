@@ -1,13 +1,15 @@
-import type { paths } from '@openrun/api-client';
+import type { components, paths } from '@openrun/api-client';
 
-// 공연 목록 주소(`/?q=정원&sort=newest&page=2`)의 쿼리를 다룬다. 주소에는 기본값과 다른 값만 남긴다.
+// 공연 목록 주소(`/?q=정원&genre=musical&status=on_sale&sort=newest&page=2`)의 쿼리를 다룬다. 주소에는 기본값과 다른 값만 남긴다.
 
 /** 페이지 크기는 고정이라 주소에 넣지 않는다. */
 export const SHOW_PAGE_SIZE = 20;
 
-type ApiShowSort = NonNullable<
-  NonNullable<paths['/shows']['get']['parameters']['query']>['sort']
+type ApiShowListQuery = NonNullable<
+  paths['/shows']['get']['parameters']['query']
 >;
+type ApiShowSort = NonNullable<ApiShowListQuery['sort']>;
+type ApiShowListSalesStatus = NonNullable<ApiShowListQuery['status']>[number];
 
 /** 정렬 선택지. API 계약이 바뀌면 `satisfies`가 타입 검사에서 알린다. */
 export const SHOW_SORTS = [
@@ -15,6 +17,26 @@ export const SHOW_SORTS = [
   'newest',
 ] as const satisfies readonly ApiShowSort[];
 export type ShowSort = (typeof SHOW_SORTS)[number];
+
+/** 장르 선택지. 주소와 칩은 이 순서를 따른다. API에 장르가 더해지면 `satisfies`가 빠진 것을 알린다. */
+export const GENRES = [
+  'musical',
+  'play',
+  'concert',
+  'classical_dance',
+  'kids_family',
+] as const satisfies readonly Genre[];
+export type Genre = components['schemas']['Genre'];
+
+/**
+ * 판매 상태 선택지. 판매 종료 공연은 목록에 나오지 않으므로 선택지가 아니다(API도 받지 않는다).
+ * 주소와 칩은 이 순서를 따른다.
+ */
+export const SHOW_LIST_SALES_STATUSES = [
+  'on_sale',
+  'upcoming',
+] as const satisfies readonly ApiShowListSalesStatus[];
+export type ShowListSalesStatus = (typeof SHOW_LIST_SALES_STATUSES)[number];
 
 /**
  * API가 받는 검색어의 최대 길이. 넘는 값을 보내면 400이 오므로 미리 버린다.
@@ -31,6 +53,10 @@ export interface ShowListQuery {
   page: number;
   /** 공연 제목 검색어. 앞뒤 공백을 지운 값이고, 검색하지 않으면 `null`이다. */
   q: string | null;
+  /** 고른 장르. 겹치지 않고 `GENRES` 순서이며, 비었으면 장르로 거르지 않는다. */
+  genre: Genre[];
+  /** 고른 판매 상태. 겹치지 않고 `SHOW_LIST_SALES_STATUSES` 순서이며, 비었으면 판매 상태로 거르지 않는다. */
+  status: ShowListSalesStatus[];
   sort: ShowSort;
 }
 
@@ -47,6 +73,11 @@ export function normalizeShowListQuery(searchParams: SearchParams): {
   const query = {
     page: parsePage(searchParams.page),
     q: parseTitleQuery(searchParams.q),
+    genre: parseChoices({ value: searchParams.genre, choices: GENRES }),
+    status: parseChoices({
+      value: searchParams.status,
+      choices: SHOW_LIST_SALES_STATUSES,
+    }),
     sort: parseSort(searchParams.sort),
   };
   const href = getShowListHref(query);
@@ -72,7 +103,7 @@ export function getShowListQueryFromSearch(
 }
 
 /**
- * 목록 쿼리로 주소를 만든다. 기본값은 주소에서 빼고, 순서는 q, sort, page로 고정한다.
+ * 목록 쿼리로 주소를 만든다. 기본값은 주소에서 빼고, 순서는 q, genre, status, sort, page로 고정한다.
  * 페이지 링크는 현재 쿼리에서 `page`만 바꿔 넘긴다.
  */
 export function getShowListHref(query: ShowListQuery): string {
@@ -98,6 +129,66 @@ export function getSortChangeHref({
 }
 
 /**
+ * 장르 칩을 눌렀을 때 옮겨 갈 쿼리를 만든다. 다른 조건은 두고 1페이지로 돌아간다. 주소는 `getShowListHref`로 만든다.
+ * 모르는 장르는 주소의 genre와 같은 규칙으로 버린다.
+ */
+export function getGenreChangeQuery({
+  query,
+  value,
+}: {
+  query: ShowListQuery;
+  /** ToggleGroup이 넘긴 고른 값 전체 */
+  value: string[];
+}): ShowListQuery {
+  return {
+    ...query,
+    genre: parseChoices({ value, choices: GENRES }),
+    page: DEFAULT_PAGE,
+  };
+}
+
+/**
+ * 판매 상태 칩을 눌렀을 때 옮겨 갈 쿼리를 만든다. 다른 조건은 두고 1페이지로 돌아간다. 주소는 `getShowListHref`로 만든다.
+ * 모르는 판매 상태는 주소의 status와 같은 규칙으로 버린다.
+ */
+export function getStatusChangeQuery({
+  query,
+  value,
+}: {
+  query: ShowListQuery;
+  /** ToggleGroup이 넘긴 고른 값 전체 */
+  value: string[];
+}): ShowListQuery {
+  return {
+    ...query,
+    status: parseChoices({ value, choices: SHOW_LIST_SALES_STATUSES }),
+    page: DEFAULT_PAGE,
+  };
+}
+
+/**
+ * 결과를 좁히는 조건(검색어, 장르, 판매 상태)이 하나라도 있는지 본다. 정렬과 page는 결과를 줄이지 않는다.
+ * 결과가 없을 때 "조건 초기화" 링크를 보일지 고를 때 쓴다. 지우는 조건은 `getConditionResetHref`와 같다.
+ */
+export function hasNarrowingCondition(query: ShowListQuery): boolean {
+  return query.q !== null || query.genre.length > 0 || query.status.length > 0;
+}
+
+/**
+ * 결과가 없을 때 보여 주는 "조건 초기화" 링크의 주소를 만든다.
+ * 결과를 좁히는 조건(검색어, 장르, 판매 상태)만 지운다. 정렬은 결과를 줄이지 않으므로 그대로 둔다.
+ */
+export function getConditionResetHref(query: ShowListQuery): string {
+  return getShowListHref({
+    ...query,
+    q: null,
+    genre: [],
+    status: [],
+    page: DEFAULT_PAGE,
+  });
+}
+
+/**
  * 제목 검색 폼을 제출할 때 옮겨 갈 주소를 만든다. 정렬은 두고 page는 빼서 결과의 1페이지로 간다.
  * 검색어는 주소의 q와 같은 규칙으로 정리한다. 앞뒤 공백을 지우고, 비었으면 검색어를 뺀다.
  */
@@ -120,6 +211,12 @@ function getShowListSearchParams(query: ShowListQuery): URLSearchParams {
   const search = new URLSearchParams();
   if (query.q !== null) {
     search.set('q', query.q);
+  }
+  for (const genre of query.genre) {
+    search.append('genre', genre);
+  }
+  for (const status of query.status) {
+    search.append('status', status);
   }
   if (query.sort !== DEFAULT_SORT) {
     search.set('sort', query.sort);
@@ -165,6 +262,19 @@ function parseTitleQuery(value: string | string[] | undefined): string | null {
   }
   const q = value.trim();
   return q === '' || q.length > SHOW_TITLE_QUERY_MAX_LENGTH ? null : q;
+}
+
+// 같은 이름이 한 번이면 글자, 여러 번이면 배열로 온다. 선택지에 있는 값만 남기고,
+// 겹친 값은 하나로, 순서는 선택지 순서로 맞춰 같은 조건이 늘 같은 주소가 되게 한다.
+function parseChoices<T extends string>({
+  value,
+  choices,
+}: {
+  value: string | string[] | undefined;
+  choices: readonly T[];
+}): T[] {
+  const values = new Set([value ?? []].flat());
+  return choices.filter((choice) => values.has(choice));
 }
 
 function parseSort(value: string | string[] | undefined): ShowSort {

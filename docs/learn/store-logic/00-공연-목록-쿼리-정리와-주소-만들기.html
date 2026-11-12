@@ -289,7 +289,7 @@ function toSearch(searchParams: SearchParams): URLSearchParams {
           <p>
             page.tsx는 <code>redirectTo</code>가 있으면 API를 부르기 전에 <code>redirect</code>한다. 그래서 API는 늘
             정리된 값만 받고, 사용자는 오류 화면 대신 정리된 목록을 본다. <code>redirect</code>가 흐름을 어떻게 끊는지는
-            <a href="../next/07-redirect와-notFound-흐름을-끊는-함수.html#redirect">next 07 문서</a>에 있다.
+            <a href="../react-next/07-redirect와-notFound-흐름을-끊는-함수.html#redirect">react-next 07 문서</a>에 있다.
           </p>
           <div class="callout warn">
             <p>
@@ -304,7 +304,7 @@ function toSearch(searchParams: SearchParams): URLSearchParams {
           <h2>getShowListQueryFromSearch: 클라이언트에서 읽기</h2>
           <p>
             헤더의 <code>HeaderSearch</code>는 레이아웃에 있어 <code>searchParams</code>를 받지 못하므로
-            <code>useSearchParams()</code>로 주소를 읽는다(<a href="../next/08-useSearchParams와-Suspense-경계.html#layout">next 08 문서</a>).
+            <code>useSearchParams()</code>로 주소를 읽는다(<a href="../react-next/08-useSearchParams와-Suspense-경계.html#layout">react-next 08 문서</a>).
             그 값은 <code>URLSearchParams</code>라서, Next의 <code>searchParams</code>와 같은 모양(한 번이면 글자,
             여러 번이면 배열)으로 바꾼 뒤 <a href="#normalize">normalizeShowListQuery</a>에 넘긴다. 규칙을 두 번 쓰지
             않고 한 함수를 함께 쓰기 위해서다. 클라이언트에서는 리다이렉트하지 않으므로 <code>query</code>만 쓴다.
@@ -510,7 +510,7 @@ export function getSortChangeHref({
           <p>
             검색 폼을 제출하면 <code>ShowListSearchForm</code>이 이 함수로 주소를 만들어 <code>router.push</code>한다.
             정렬은 두고, 입력한 글자를 <a href="#parse">q의 규칙</a>(<code>parseTitleQuery</code>)으로 정리하고, page를
-            1로 돌린다. 제출 흐름은 <a href="../next/09-검색-폼-제출과-비제어-입력.html#submit">next 09 문서</a>에 있다.
+            1로 돌린다. 제출 흐름은 <a href="../react-next/09-검색-폼-제출과-비제어-입력.html#submit">react-next 09 문서</a>에 있다.
           </p>
           <pre><code class="language-ts">/**
  * 제목 검색 폼을 제출할 때 옮겨 갈 주소를 만든다. 정렬은 두고 page는 빼서 결과의 1페이지로 간다.
@@ -769,11 +769,11 @@ export function getLastPageRedirectHref({
             <li><code>apps/store/src/shows/show-list-query.ts</code>: 이 문서의 함수들</li>
             <li><code>apps/store/src/shows/show-list-query.spec.ts</code>: 같은 규칙을 단위 테스트로 적은 것</li>
             <li>
-              <a href="../next/09-검색-폼-제출과-비제어-입력.html">next 09 문서</a>: 검색 폼과 정렬 Select가 이 함수들로
+              <a href="../react-next/09-검색-폼-제출과-비제어-입력.html">react-next 09 문서</a>: 검색 폼과 정렬 Select가 이 함수들로
               옮겨 가는 방법과, 주소가 바뀔 때 칸을 다시 채우는 <code>key</code>
             </li>
             <li>
-              <a href="../next/10-숨은-입력-칸으로-쿼리-보존하기.html">next 10 문서</a>: 함수 대신 HTML 폼만으로 쿼리를
+              <a href="../react-next/10-숨은-입력-칸으로-쿼리-보존하기.html">react-next 10 문서</a>: 함수 대신 HTML 폼만으로 쿼리를
               지키는 방법
             </li>
           </ul>

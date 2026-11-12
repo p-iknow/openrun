@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  getConditionResetHref,
+  getGenreChangeQuery,
   getSearchSubmitHref,
+  getStatusChangeQuery,
+  hasNarrowingCondition,
   getShowListQueryFromSearch,
   getShowListHref,
   getSortChangeHref,
@@ -9,7 +13,13 @@ import {
   type ShowListQuery,
 } from './show-list-query';
 
-const DEFAULT_QUERY: ShowListQuery = { page: 1, q: null, sort: 'start_date' };
+const DEFAULT_QUERY: ShowListQuery = {
+  page: 1,
+  q: null,
+  genre: [],
+  status: [],
+  sort: 'start_date',
+};
 
 describe('normalizeShowListQuery', () => {
   it('page가 없으면 1페이지이고 리다이렉트하지 않는다', () => {
@@ -86,6 +96,62 @@ describe('normalizeShowListQuery', () => {
     });
   });
 
+  describe('genre', () => {
+    it('장르 하나는 배열로 담고 리다이렉트하지 않는다', () => {
+      expect(normalizeShowListQuery({ genre: 'musical' })).toEqual({
+        query: { ...DEFAULT_QUERY, genre: ['musical'] },
+        redirectTo: null,
+      });
+    });
+
+    it('여러 장르를 장르 목록 순서대로 둔 주소는 리다이렉트하지 않는다', () => {
+      expect(normalizeShowListQuery({ genre: ['musical', 'concert'] })).toEqual(
+        {
+          query: { ...DEFAULT_QUERY, genre: ['musical', 'concert'] },
+          redirectTo: null,
+        },
+      );
+    });
+
+    it('모르는 장르는 버리도록 리다이렉트한다', () => {
+      expect(normalizeShowListQuery({ genre: ['opera', 'play'] })).toEqual({
+        query: { ...DEFAULT_QUERY, genre: ['play'] },
+        redirectTo: '/?genre=play',
+      });
+    });
+
+    it('겹친 장르는 하나로 줄이고 장르 목록 순서로 고치도록 리다이렉트한다', () => {
+      expect(
+        normalizeShowListQuery({ genre: ['concert', 'musical', 'concert'] }),
+      ).toEqual({
+        query: { ...DEFAULT_QUERY, genre: ['musical', 'concert'] },
+        redirectTo: '/?genre=musical&genre=concert',
+      });
+    });
+  });
+
+  describe('status', () => {
+    it('판매 중과 판매 예정은 판매 상태 목록 순서대로 담는다', () => {
+      expect(
+        normalizeShowListQuery({ status: ['upcoming', 'on_sale'] }),
+      ).toEqual({
+        query: { ...DEFAULT_QUERY, status: ['on_sale', 'upcoming'] },
+        redirectTo: '/?status=on_sale&status=upcoming',
+      });
+    });
+
+    it.each([
+      { name: '모르는 값', status: 'sold_out' },
+      // 판매 종료 공연은 목록에 없으므로 선택지가 아니다.
+      { name: '판매 종료', status: 'ended' },
+    ])('$name: 버리도록 리다이렉트한다', ({ status }) => {
+      expect(normalizeShowListQuery({ status })).toEqual({
+        query: DEFAULT_QUERY,
+        redirectTo: '/',
+      });
+    });
+  });
+
   describe('sort', () => {
     it('기본 정렬이 아닌 정렬은 그대로 두고 리다이렉트하지 않는다', () => {
       expect(normalizeShowListQuery({ sort: 'newest' })).toEqual({
@@ -115,11 +181,23 @@ describe('normalizeShowListQuery', () => {
     );
   });
 
-  it('q, sort, page를 함께 둔 주소는 그대로 두고 리다이렉트하지 않는다', () => {
+  it('q, genre, status, sort, page를 함께 둔 주소는 그대로 두고 리다이렉트하지 않는다', () => {
     expect(
-      normalizeShowListQuery({ q: '정원', sort: 'newest', page: '2' }),
+      normalizeShowListQuery({
+        q: '정원',
+        genre: 'play',
+        status: 'upcoming',
+        sort: 'newest',
+        page: '2',
+      }),
     ).toEqual({
-      query: { q: '정원', sort: 'newest', page: 2 },
+      query: {
+        q: '정원',
+        genre: ['play'],
+        status: ['upcoming'],
+        sort: 'newest',
+        page: 2,
+      },
       redirectTo: null,
     });
   });
@@ -138,7 +216,7 @@ describe('getShowListQueryFromSearch', () => {
       getShowListQueryFromSearch(
         new URLSearchParams('q=+%EC%A0%95%EC%9B%90+&sort=newest&page=2&foo=1'),
       ),
-    ).toEqual({ q: '정원', sort: 'newest', page: 2 });
+    ).toEqual({ ...DEFAULT_QUERY, q: '정원', sort: 'newest', page: 2 });
   });
 
   it('여러 번 들어온 값은 잘못된 값으로 본다', () => {
@@ -151,10 +229,18 @@ describe('getShowListQueryFromSearch', () => {
 });
 
 describe('getShowListHref', () => {
-  it('기본값은 빼고 q, sort, page 순서로 주소를 만든다', () => {
+  it('기본값은 빼고 q, genre, status, sort, page 순서로 주소를 만든다', () => {
     expect(getShowListHref(DEFAULT_QUERY)).toBe('/');
-    expect(getShowListHref({ page: 3, q: 'a&b', sort: 'newest' })).toBe(
-      '/?q=a%26b&sort=newest&page=3',
+    expect(
+      getShowListHref({
+        page: 3,
+        q: 'a&b',
+        genre: ['play'],
+        status: ['on_sale', 'upcoming'],
+        sort: 'newest',
+      }),
+    ).toBe(
+      '/?q=a%26b&genre=play&status=on_sale&status=upcoming&sort=newest&page=3',
     );
   });
 });
@@ -163,7 +249,7 @@ describe('getSortChangeHref', () => {
   it('검색어는 두고 정렬을 바꾸며 page를 빼서 1페이지로 돌아간다', () => {
     expect(
       getSortChangeHref({
-        query: { page: 3, q: '정원', sort: 'start_date' },
+        query: { ...DEFAULT_QUERY, page: 3, q: '정원' },
         value: 'newest',
       }),
     ).toBe('/?q=%EC%A0%95%EC%9B%90&sort=newest');
@@ -176,11 +262,101 @@ describe('getSortChangeHref', () => {
   });
 });
 
+describe('getGenreChangeQuery', () => {
+  it('다른 조건은 두고 고른 장르로 바꾸며 1페이지로 돌아간다', () => {
+    expect(
+      getGenreChangeQuery({
+        query: {
+          ...DEFAULT_QUERY,
+          page: 3,
+          q: '정원',
+          status: ['on_sale'],
+          sort: 'newest',
+        },
+        value: ['concert', 'musical'],
+      }),
+    ).toEqual({
+      page: 1,
+      q: '정원',
+      genre: ['musical', 'concert'],
+      status: ['on_sale'],
+      sort: 'newest',
+    });
+  });
+
+  it('모르는 장르는 버린다', () => {
+    expect(
+      getGenreChangeQuery({ query: DEFAULT_QUERY, value: ['opera', 'play'] })
+        .genre,
+    ).toEqual(['play']);
+  });
+
+  it('장르를 모두 풀면 장르로 거르지 않는다', () => {
+    expect(
+      getShowListHref(
+        getGenreChangeQuery({
+          query: { ...DEFAULT_QUERY, genre: ['play'], page: 2 },
+          value: [],
+        }),
+      ),
+    ).toBe('/');
+  });
+});
+
+describe('getStatusChangeQuery', () => {
+  it('다른 조건은 두고 고른 판매 상태로 바꾸며 1페이지로 돌아간다', () => {
+    expect(
+      getStatusChangeQuery({
+        query: { ...DEFAULT_QUERY, page: 3, genre: ['play'] },
+        value: ['upcoming', 'ended'],
+      }),
+    ).toEqual({ ...DEFAULT_QUERY, genre: ['play'], status: ['upcoming'] });
+  });
+});
+
+describe('hasNarrowingCondition', () => {
+  it.each([
+    { name: '조건이 없을 때', query: DEFAULT_QUERY, expected: false },
+    {
+      name: '정렬과 page만 있을 때',
+      query: { ...DEFAULT_QUERY, sort: 'newest' as const, page: 2 },
+      expected: false,
+    },
+    { name: '검색어', query: { ...DEFAULT_QUERY, q: '정원' }, expected: true },
+    {
+      name: '장르',
+      query: { ...DEFAULT_QUERY, genre: ['play' as const] },
+      expected: true,
+    },
+    {
+      name: '판매 상태',
+      query: { ...DEFAULT_QUERY, status: ['upcoming' as const] },
+      expected: true,
+    },
+  ])('$name: $expected', ({ query, expected }) => {
+    expect(hasNarrowingCondition(query)).toBe(expected);
+  });
+});
+
+describe('getConditionResetHref', () => {
+  it('결과를 좁히는 검색어, 장르, 판매 상태를 지우고 정렬은 두며 1페이지로 간다', () => {
+    expect(
+      getConditionResetHref({
+        page: 2,
+        q: '정원',
+        genre: ['play'],
+        status: ['on_sale'],
+        sort: 'newest',
+      }),
+    ).toBe('/?sort=newest');
+  });
+});
+
 describe('getSearchSubmitHref', () => {
   it('정렬은 두고 검색어를 바꾸며 page를 빼서 1페이지로 돌아간다', () => {
     expect(
       getSearchSubmitHref({
-        query: { page: 3, q: '정원', sort: 'newest' },
+        query: { ...DEFAULT_QUERY, page: 3, q: '정원', sort: 'newest' },
         value: '햄릿',
       }),
     ).toBe('/?q=%ED%96%84%EB%A6%BF&sort=newest');
@@ -195,7 +371,7 @@ describe('getSearchSubmitHref', () => {
   it('공백만 있는 검색어면 검색어를 뺀다', () => {
     expect(
       getSearchSubmitHref({
-        query: { page: 2, q: '정원', sort: 'newest' },
+        query: { ...DEFAULT_QUERY, page: 2, q: '정원', sort: 'newest' },
         value: '   ',
       }),
     ).toBe('/?sort=newest');
@@ -215,7 +391,7 @@ describe('getLastPageRedirectHref', () => {
   it('마지막 페이지를 넘으면 다른 조건은 두고 마지막 페이지로 리다이렉트한다', () => {
     expect(
       getLastPageRedirectHref({
-        query: { page: 9, q: '정원', sort: 'newest' },
+        query: { ...DEFAULT_QUERY, page: 9, q: '정원', sort: 'newest' },
         totalPages: 3,
       }),
     ).toBe('/?q=%EC%A0%95%EC%9B%90&sort=newest&page=3');

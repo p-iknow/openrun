@@ -52,7 +52,7 @@
           <ol class="steps blue">
             <li>
               <strong>"서버는 'use client' 파일을 실행하지 않는다"</strong>
-              <a href="02-서버가-받는-use-client-이름표.html">next 02 문서</a>에서 본 대로, 서버는 <code>'use client'</code> 파일
+              <a href="02-서버가-받는-use-client-이름표.html">react-next 02 문서</a>에서 본 대로, 서버는 <code>'use client'</code> 파일
               대신 이름표 붙은 가짜를 받는다. 그래서 <code>Drawer.Root</code>가 undefined가 됐다.
             </li>
             <li>
@@ -179,7 +179,7 @@
               1단계에서 실행할 서버용 코드(<code>page.js</code>와 그 묶음)를 만든다. 이때 import를 따라가다
               <code>'use client'</code> 파일을 만나면, 그 파일의 내용을 넣지 않고
               <strong>export 이름마다 이름표 붙은 가짜</strong>(<code>registerClientReference(…)</code>)로 바꿔 끼운다.
-              <a href="02-서버가-받는-use-client-이름표.html#stub">next 02 문서에서 꺼내 본 대역 코드</a>가 이것이다.
+              <a href="02-서버가-받는-use-client-이름표.html#stub">react-next 02 문서에서 꺼내 본 대역 코드</a>가 이것이다.
             </li>
             <li>
               <strong>브라우저용 JS 만들기</strong>
@@ -635,7 +635,7 @@ export default function ProbeStages() {
             </table>
           </div>
           <p>
-            이 이름표는 <a href="02-서버가-받는-use-client-이름표.html#stub">next 02 문서</a>에서 본 서버용 가짜
+            이 이름표는 <a href="02-서버가-받는-use-client-이름표.html#stub">react-next 02 문서</a>에서 본 서버용 가짜
             (<code>registerClientReference(…, "button.js", "Button")</code>)가 설계도에 적힌 모습이다.
             <a href="02-서버가-받는-use-client-이름표.html#manifest">manifest</a>에 적혀 있던 번호와 JS 파일도 그대로다.
           </p>
@@ -1244,7 +1244,7 @@ export default async function ProbeStream() {
             <li>정적 페이지는 1·2단계를 빌드 때 미리 해 둔 것이다. 요청이 오면 서버는 파일을 보내기만 하므로 빠르다.</li>
             <li>
               어떤 조건에서 정적·동적이 갈리는지, 정적 결과물을 다시 만드는 방법(재검증) 같은 내용은
-              <a href="00-nextjs-렌더링-시점과-캐시.html">next 00 Next.js 렌더링 시점과 캐시</a>에서 다룬다.
+              <a href="00-nextjs-렌더링-시점과-캐시.html">react-next 00 Next.js 렌더링 시점과 캐시</a>에서 다룬다.
             </li>
           </ul>
           <div class="callout">
@@ -1518,9 +1518,9 @@ export default async function ProbeDyn() {
               <a href="https://react.dev/reference/react-dom/client/hydrateRoot">React: hydrateRoot</a> (하이드레이션과 결과
               불일치)
             </li>
-            <li><a href="00-nextjs-렌더링-시점과-캐시.html">next 00 Next.js 렌더링 시점과 캐시</a> (언제 만드는가)</li>
+            <li><a href="00-nextjs-렌더링-시점과-캐시.html">react-next 00 Next.js 렌더링 시점과 캐시</a> (언제 만드는가)</li>
             <li><a href="../design-system/03-라이브러리-빌드와-use-client-경계.html">design-system 03 라이브러리 빌드와 'use client' 경계</a></li>
-            <li><a href="02-서버가-받는-use-client-이름표.html">next 02 서버가 받는 'use client' 파일: 이름표 붙은 가짜</a></li>
+            <li><a href="02-서버가-받는-use-client-이름표.html">react-next 02 서버가 받는 'use client' 파일: 이름표 붙은 가짜</a></li>
           </ol>
         </section>
       </main>

@@ -172,6 +172,26 @@ if (result.success) {
             <code>'30'</code>(글자)은 <code>z.number()</code>를 통과하지 못한다. zod는 기본으로 값을 바꾸지 않고 검사만 한다. 글자를
             숫자로 바꾸려면 <a href="#coerce"><code>coerce</code></a>를 쓴다.
           </p>
+          <h3 id="schema-word">"스키마"는 검사기다</h3>
+          <p>
+            스키마는 원래 "데이터가 어떤 모양이어야 하는지 적은 설명"이다(DB 스키마, JSON Schema처럼). zod는 이 설명을 <strong>직접 검사까지 하는 객체</strong>로
+            만들고, 그 객체를 스키마라고 부른다. 그래서 zod 문서에서 "스키마"는 <strong>검사기</strong>로 바꿔 읽으면 된다.
+          </p>
+          <ul>
+            <li><strong>스키마를 만든다</strong> = 검사기를 조립한다. <code>z.object(...)</code>, <code>.int()</code>, <code>.default()</code>가 하는 일이다. 서버가 켜질 때 한 번 한다.</li>
+            <li><strong>스키마로 검사한다</strong> = 조립한 검사기에 값을 넣는다. <code>parse</code>, <code>safeParse</code>가 하는 일이다. 요청이 올 때마다 한다.</li>
+          </ul>
+          <pre><code class="language-ts">// 조립: User라는 검사기를 만든다. 아직 아무 값도 검사하지 않았다.
+const User = z.object({ name: z.string(), age: z.number() });
+
+// 검사: 값을 넣는다.
+User.safeParse({ name: '영창', age: 30 }); // { success: true, data: ... }</code></pre>
+          <p>
+            스키마 객체 안에는 검사 함수(<code>_zod.parse</code>)가 들어 있고, <code>parse</code>와 <code>safeParse</code>가 그 함수를 실행한다. 큰 검사기는 작은 검사기를
+            품는다. <code>User</code>는 <code>name</code>을 맡은 <code>z.string()</code>과 <code>age</code>를 맡은 <code>z.number()</code>를 품고 있고, 이 저장소의
+            <code>showListQuerySchema</code>도 <code>page</code>, <code>size</code> 같은 필드마다 작은 검사기를 품은 큰 검사기다. 검사기를 함수로 흉내 내 보는 방법은
+            <a href="02-체이닝의-실행-순서.html#make">zod 02 문서</a>에 있다.
+          </p>
         </section>
 
         <section id="chain">
@@ -186,6 +206,10 @@ const positive = base.min(1);
 base.safeParse(-5).success;     // true  (base는 그대로다)
 positive.safeParse(-5).success; // false</code></pre>
           <p>그래서 공통 규칙을 변수로 두고 필드마다 이어 붙여 써도 서로 영향을 주지 않는다.</p>
+          <p>
+            이어 붙인 메서드가 늘 쓴 순서대로 실행되지는 않는다. <code>.default()</code>, <code>.optional()</code>은 맨 뒤에 써도 가장 먼저 값을 본다. 메서드별 실행 순서는
+            <a href="02-체이닝의-실행-순서.html">zod 02 문서</a>에 있다.
+          </p>
         </section>
 
         <section id="number">
@@ -313,7 +337,7 @@ page.parse(null);      // 실패: too_small (null도 "없음"이 아니다. Numb
               <strong>위치는 맨 뒤여도 판단은 가장 먼저</strong> 한다. <code>.default(1)</code>은 앞의 스키마 전체를 감싸는 껍질이라,
               값이 <code>undefined</code>면 안쪽(<code>coerce</code>, <code>int</code>, <code>min</code>)을 부르지 않고 바로
               <code>1</code>을 돌려준다. <code>Number(undefined)</code>는 <code>NaN</code>이니, 이 순서가 아니었다면 쿼리를 생략한
-              요청이 실패했을 것이다.
+              요청이 실패했을 것이다. 왜 그렇게 되는지는 <a href="02-체이닝의-실행-순서.html#gate">zod 02 문서</a>에 있다.
             </li>
           </ul>
           <p>값이 없어도 되지만 기본값을 넣고 싶지 않으면 <code>.optional()</code>을 쓴다.</p>

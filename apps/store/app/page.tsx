@@ -6,9 +6,11 @@ import { fetchShows } from '../src/shows/fetch-shows';
 import { selectShowCards } from '../src/shows/select-show-cards';
 import { ShowCard, ShowCardList } from '../src/shows/show-card';
 import { ShowListPagination } from '../src/shows/show-list-pagination';
+import { ShowFilterChips } from '../src/shows/show-filter-chips';
 import {
+  getConditionResetHref,
   getLastPageRedirectHref,
-  getShowListHref,
+  hasNarrowingCondition,
   normalizeShowListQuery,
 } from '../src/shows/show-list-query';
 import { ShowSortSelect } from '../src/shows/show-sort-select';
@@ -31,11 +33,13 @@ export default async function HomePage({ searchParams }: PageProps<'/'>) {
     redirect(lastPageHref);
   }
   const cards = selectShowCards(showPage);
-  const hasTitleQuery = query.q !== null;
 
   return (
     <main>
       <h1 className="mb-lg text-heading font-bold">공연</h1>
+      <div className="mb-xl">
+        <ShowFilterChips query={query} />
+      </div>
       {/* 예매 사이트처럼 결과 수와 정렬을 목록 바로 위 한 줄에 둔다. 제목 검색은 헤더에 있다. */}
       <div className="mb-md flex items-center justify-between gap-md">
         <p className="font-semibold">공연 {showPage.totalCount}개</p>
@@ -44,14 +48,13 @@ export default async function HomePage({ searchParams }: PageProps<'/'>) {
       </div>
       {cards.length === 0 ? (
         <div className="py-2xl text-center">
-          {hasTitleQuery ? (
+          {hasNarrowingCondition(query) ? (
             <>
               <p className="text-text-secondary">
                 조건에 맞는 공연이 없습니다.
               </p>
-              {/* 결과를 좁히는 조건만 지운다. 정렬은 결과를 줄이지 않으므로 그대로 둔다. */}
               <Link
-                href={getShowListHref({ ...query, q: null, page: 1 })}
+                href={getConditionResetHref(query)}
                 className="mt-md inline-block font-semibold text-primary-strong hover:underline"
               >
                 조건 초기화
