@@ -3,6 +3,7 @@
 import { cn } from '@openrun/store-ui';
 import { type ReactNode, useId, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
+import { ChevronDownIcon } from './filter-bar-button';
 
 // NOL 티켓처럼 상세 이미지는 처음에 일정 높이까지만 보여 주고, 아래 버튼으로 펼치고 접는다.
 // 상세 이미지가 길어 회차나 다른 정보까지 한참 스크롤해야 하는 것을 막는다.
@@ -46,9 +47,15 @@ export function CollapsibleDetailImages({ children }: { children: ReactNode }) {
         aria-expanded={isExpanded}
         aria-controls={contentId}
         onClick={toggle}
-        className="h-[52px] rounded-button border border-border font-semibold outline-primary transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2"
+        className="flex h-[44px] items-center justify-center gap-xs rounded-button border border-border text-body-sm font-semibold outline-primary transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2"
       >
         {isExpanded ? '공연 소개 접기' : '공연 소개 더보기'}
+        {/* 펼치면 화살표를 뒤집어 위를 가리키게 한다. */}
+        <span
+          className={cn('transition-transform', isExpanded && 'rotate-180')}
+        >
+          <ChevronDownIcon />
+        </span>
       </button>
     </div>
   );

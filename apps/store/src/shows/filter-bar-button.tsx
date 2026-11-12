@@ -29,7 +29,7 @@ export function FilterBarButton({
   );
 }
 
-/** 칩이 시트를 연다는 것을 보이는 아래 화살표. */
+/** 누르면 아래로 무언가 열린다는 것을 보이는 아래 화살표. 칩의 시트, 공연 소개 더보기에 쓴다. */
 export function ChevronDownIcon() {
   return (
     <svg
