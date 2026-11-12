@@ -129,6 +129,27 @@ const makeEnum = (allowed) =&gt; (value) =&gt;
 const schema = makeDefault(makePreprocess(wrapInArray, makeArray(makeEnum(GENRES))), []);
 
 schema(undefined); // []: makeDefault의 안쪽 화살표가 inner를 부르지 않고 끝낸다</code></pre>
+          <p>
+            여기서 <code>make...</code>가 돌려주는 <code>(value) =&gt; ...</code> 함수 하나하나가 <strong>스키마</strong>, 곧 값을 받아 검사하고 (바뀐) 값을 돌려주거나 실패하는
+            <strong>검사기</strong>다(<a href="00-zod-기초.html#schema-word">zod 00 문서</a>). <code>schema</code>라는 변수는 마지막에 조립한 검사기를 담았을 뿐이라, 이름이
+            <code>checker</code>여도 같다. 실제 zod와는 이렇게 대응한다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>함수 모델</th>
+                  <th>실제 zod</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td><code>makeEnum(GENRES)</code></td><td><code>z.enum(GENRES)</code></td></tr>
+                <tr><td><code>makeDefault(inner, [])</code></td><td><code>inner.default([])</code></td></tr>
+                <tr><td>돌려받은 함수 <code>(value) =&gt; ...</code></td><td>스키마 객체. 안에 검사 함수 <code>_zod.parse</code>와 안쪽 스키마 <code>innerType</code>이 들어 있다</td></tr>
+                <tr><td><code>schema(value)</code></td><td><code>schema.parse(value)</code>, <code>schema.safeParse(value)</code></td></tr>
+              </tbody>
+            </table>
+          </div>
           <p>각 함수에 로그를 넣어 실행하면 zod와 같은 순서가 찍힌다.</p>
           <pre><code>schema(undefined)
     default 검사: undefined
