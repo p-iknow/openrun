@@ -97,11 +97,11 @@ startTransition(() =&gt; {
             목록 화면(<code>apps/store/app/page.tsx</code>)은 화면 폭과 관계없이 필터 줄 하나(<code>ShowFilterBar</code>)를 둔다. NOL 티켓 모바일 검색 결과처럼 왼쪽에
             <code>[장르 ▾][판매 상태 ▾]</code> 칩을 두고(넘치면 가로 스크롤), 오른쪽에 <code>[필터]</code>와 <code>[정렬]</code> 버튼을 고정한다. 칩과 필터 버튼은 같은 필터
             시트를 열고, 칩으로 열면 그 칩의 부분으로 스크롤한다. 좁은 화면에서는 아래에서 올라오는 시트(store-ui <code>Drawer</code>)로, 넓은 화면(<code>sm</code>, 640px
-            이상)에서는 가운데 뜨는 창(store-ui <code>Dialog</code>)으로 연다(<code>picker-sheet.tsx</code>). 어느 쪽으로 열지는 여는 순간 <code>openPickerSheet</code>가 <code>matchMedia</code>로
+            이상)에서는 가운데 뜨는 창(store-ui <code>Dialog</code>)으로 연다(<code>picker-sheet.tsx</code>). 어느 쪽으로 열지는 여는 순간 <code>isWideScreen()</code>(<code>matchMedia</code>)으로
             정하므로, 그릴 때 화면 폭을 읽지 않는다. 정렬은 따로 정렬 시트(<code>show-sort-sheet.tsx</code>)를 연다.
           </p>
           <p>
-            시트는 <code>openPickerSheet</code>로 연다. 이 함수는 창 종류를 정한 뒤 overlay-kit의 <code>overlay.openAsync</code>로 시트를 그리고 Promise를 돌려준다. 시트가
+            시트는 overlay-kit의 <code>overlay.openAsync</code>로 연다. 이 함수는 시트를 그리고 Promise를 돌려준다. 시트가
             <code>controller.close(값)</code>을 부르면 Promise가 그 값으로 끝난다. 필터 시트는 "적용"이면 고친 쿼리를, 그 밖의 방법으로 닫으면 <code>null</code>을 돌려준다. 필터 줄은 그 결과를 받아 주소를 바꾼다. 그래서 열림 상태와
             고르는 중인 값은 시트가 갖고, 필터 줄은 여는 일과 결과를 적용하는 일만 한다.
           </p>
@@ -202,13 +202,16 @@ startTransition(() =&gt; {
         <section id="reopen">
           <h2>닫으면 버리고, 열 때마다 새로 시작한다</h2>
           <pre><code class="language-tsx">async function openFilterSheet(section: FilterSection) {
-  const next = await openPickerSheet&lt;ShowListQuery&gt;((controller) =&gt; (
-    &lt;ShowFilterSheet
-      controller={controller}
-      initialQuery={shownQuery}
-      section={section}
-    /&gt;
-  ));
+  const wide = isWideScreen();
+  const next = await overlay.openAsync&lt;ShowListQuery | null&gt;(
+    ({ isOpen, close, unmount }) =&gt; (
+      &lt;ShowFilterSheet
+        controller={{ wide, isOpen, close, unmount }}
+        initialQuery={shownQuery}
+        section={section}
+      /&gt;
+    ),
+  );
   if (next === null) return;
   applyQuery({ next, href: getFilterApplyHref(next) });
 }
@@ -412,7 +415,7 @@ function navigate(...) {
             <p class="quiz-q">2. 시트의 처음 값을 아래처럼 <code>query</code>로 넘기면, 적용한 직후 서버가 답하기 전에 시트를 다시 열 때 무엇이 보이는가?</p>
             <p class="quiz-context"><a href="#reopen">닫으면 버리고, 열 때마다 새로 시작한다</a> 절. 장르가 없는 상태에서 "연극"을 골라 적용하고, 서버 응답은 2초 걸린다.</p>
             <pre><code class="language-diff"> &lt;ShowFilterSheet
-   controller={controller}
+   controller={{ wide, isOpen, close, unmount }}
 -  initialQuery={shownQuery}
 +  initialQuery={query}
    section={section}</code></pre>

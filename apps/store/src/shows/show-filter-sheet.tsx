@@ -13,7 +13,7 @@ import {
 /** 창을 열 때 보여 줄 부분. 필터 버튼으로 열면 맨 위부터 보인다. */
 export type FilterSection = 'top' | 'genre' | 'status';
 
-// 필터 창의 내용. ShowFilterBar가 `openPickerSheet`로 열고, 이 창은 결과를 `controller.close`로 돌려준다.
+// 필터 창의 내용. ShowFilterBar가 overlay-kit의 `overlay.openAsync`로 열고, 이 창은 결과를 `controller.close`로 돌려준다.
 // "적용"을 누르면 고친 임시 쿼리를, 적용하지 않고 닫으면 `null`을 돌려준다. 주소를 바꾸는 일은 여는 쪽이 한다.
 //
 // 고른 값은 주소와 따로 둔 임시 쿼리(draft)에만 둔다. 칩을 누를 때마다 주소를 바꾸면 창에 가린 목록이 칩마다 다시 그려지기 때문이다.

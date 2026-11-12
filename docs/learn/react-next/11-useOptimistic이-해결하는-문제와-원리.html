@@ -431,7 +431,7 @@ export function NotificationSwitch({ on }: { on: boolean }) {
           <pre><code class="language-tsx">const [shownQuery, setShownQuery] = useOptimistic(query);
 
 // 시트를 열고, "적용"으로 돌려준 쿼리를 받는다. 적용하지 않고 닫으면 null이다
-const next = await openPickerSheet&lt;ShowListQuery&gt;(/* 필터 시트 */);
+const next = await overlay.openAsync&lt;ShowListQuery | null&gt;(/* 필터 시트 */);
 if (next === null) return;
 startTransition(() =&gt; {
   setShownQuery(next);
