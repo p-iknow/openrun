@@ -7,6 +7,7 @@ import { selectShowCards } from '../src/shows/select-show-cards';
 import { ShowCard, ShowCardList } from '../src/shows/show-card';
 import { ShowListPagination } from '../src/shows/show-list-pagination';
 import { ShowFilterChips } from '../src/shows/show-filter-chips';
+import { ShowFilterSheet } from '../src/shows/show-filter-sheet';
 import {
   getConditionResetHref,
   getLastPageRedirectHref,
@@ -37,8 +38,13 @@ export default async function HomePage({ searchParams }: PageProps<'/'>) {
   return (
     <main>
       <h1 className="mb-lg text-heading font-bold">공연</h1>
-      <div className="mb-xl">
+      {/* 넓은 화면은 칩 줄, 좁은 화면은 필터 버튼과 시트다. 화면 폭을 JS로 읽으면 서버가 그린 HTML과 첫 렌더링이 달라져
+          hydration 불일치가 나므로, 둘 다 그리고 CSS로 하나만 보인다. 브레이크포인트는 공연 카드 배치와 같은 sm이다. */}
+      <div className="mb-xl hidden sm:block">
         <ShowFilterChips query={query} />
+      </div>
+      <div className="mb-xl sm:hidden">
+        <ShowFilterSheet query={query} />
       </div>
       {/* 예매 사이트처럼 결과 수와 정렬을 목록 바로 위 한 줄에 둔다. 제목 검색은 헤더에 있다. */}
       <div className="mb-md flex items-center justify-between gap-md">

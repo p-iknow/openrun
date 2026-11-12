@@ -3,41 +3,15 @@
 import { ToggleGroup } from '@openrun/store-ui';
 import { useRouter } from 'next/navigation';
 import { startTransition, useOptimistic } from 'react';
+import { GENRE_ITEMS, STATUS_ITEMS } from './show-filter-items';
 import {
-  GENRES,
-  type Genre,
   getGenreChangeQuery,
   getShowListHref,
   getStatusChangeQuery,
-  SHOW_LIST_SALES_STATUSES,
   type ShowListQuery,
-  type ShowListSalesStatus,
 } from './show-list-query';
 
-const GENRE_LABELS: Record<Genre, string> = {
-  musical: '뮤지컬',
-  play: '연극',
-  concert: '콘서트',
-  classical_dance: '클래식·무용',
-  kids_family: '아동·가족',
-};
-
-const STATUS_LABELS: Record<ShowListSalesStatus, string> = {
-  on_sale: '판매 중',
-  upcoming: '판매 예정',
-};
-
-const GENRE_ITEMS = GENRES.map((genre) => ({
-  value: genre,
-  label: GENRE_LABELS[genre],
-}));
-
-const STATUS_ITEMS = SHOW_LIST_SALES_STATUSES.map((status) => ({
-  value: status,
-  label: STATUS_LABELS[status],
-}));
-
-// 장르와 판매 상태 칩 줄. 칩을 누르는 즉시 주소를 바꿔 적용한다. 바뀐 주소로 page.tsx가 서버에서 목록을 다시 그린다.
+// 넓은 화면의 장르와 판매 상태 칩 줄. 좁은 화면에서는 ShowFilterSheet가 대신한다. 칩을 누르는 즉시 주소를 바꿔 적용한다. 바뀐 주소로 page.tsx가 서버에서 목록을 다시 그린다.
 // 주소는 router.replace로 바꿔 방문 기록을 쌓지 않는다. 필터를 여러 번 바꾼 뒤에도 뒤로 가기 한 번이면 목록에 오기 전 화면으로 간다.
 // 주소에는 남기므로 새로고침, 공유, 상세에서 돌아오기에서도 필터가 그대로다. NOL 티켓 검색 결과의 필터도 이렇게 동작한다.
 // 칩은 주소의 값을 그대로 보이는 제어 컴포넌트다. 정렬 Select처럼 key로 새로 만들면(리마운트) 누른 칩의 포커스가 사라지기 때문이다.

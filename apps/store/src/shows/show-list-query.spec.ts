@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   getConditionResetHref,
+  getFilterApplyHref,
   getGenreChangeQuery,
   getSearchSubmitHref,
   getStatusChangeQuery,
@@ -311,6 +312,46 @@ describe('getStatusChangeQuery', () => {
         value: ['upcoming', 'ended'],
       }),
     ).toEqual({ ...DEFAULT_QUERY, genre: ['play'], status: ['upcoming'] });
+  });
+});
+
+describe('getFilterApplyHref', () => {
+  it('고른 값을 바꾸지 않고 적용해도 page를 빼서 1페이지로 간다', () => {
+    expect(
+      getFilterApplyHref({
+        query: { ...DEFAULT_QUERY, genre: ['play'], page: 3 },
+        genre: ['play'],
+        status: [],
+      }),
+    ).toBe('/?genre=play');
+  });
+
+  it('검색어와 정렬은 두고 장르와 판매 상태를 시트에서 고른 값으로 바꾼다', () => {
+    expect(
+      getFilterApplyHref({
+        query: {
+          ...DEFAULT_QUERY,
+          q: '정원',
+          genre: ['play'],
+          status: ['upcoming'],
+          sort: 'newest',
+        },
+        genre: ['musical', 'concert'],
+        status: [],
+      }),
+    ).toBe(
+      `/?q=${encodeURIComponent('정원')}&genre=musical&genre=concert&sort=newest`,
+    );
+  });
+
+  it('모르는 값과 겹친 값은 버리고 선택지 순서로 맞춘다', () => {
+    expect(
+      getFilterApplyHref({
+        query: DEFAULT_QUERY,
+        genre: ['concert', 'unknown', 'musical', 'concert'],
+        status: ['upcoming', 'ended', 'on_sale'],
+      }),
+    ).toBe('/?genre=musical&genre=concert&status=on_sale&status=upcoming');
   });
 });
 
