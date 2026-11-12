@@ -74,6 +74,7 @@ const learnFolders = [
     title: '스토어 로직',
     documents: [
       { file: '00-공연-목록-쿼리-정리와-주소-만들기.html', title: '00 공연 목록 쿼리: 정리하고 주소 만들기', tags: ['url-state'] },
+      { file: '01-필터-칩-제어-컴포넌트와-useOptimistic.html', title: '01 필터 칩: 제어 컴포넌트와 useOptimistic', tags: ['url-state', 'react'] },
     ],
   },
   {

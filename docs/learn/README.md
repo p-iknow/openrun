@@ -14,7 +14,7 @@
 | `db-and-drizzle/` | DB와 SQL 개념, Drizzle 스키마와 쿼리, 마이그레이션 |
 | `design-system/` | `store-ui`의 토큰, 컴포넌트, Storybook, 라이브러리 빌드 |
 | `style/` | CSS와 Tailwind로 배치하고 꾸미는 패턴(앱과 `store-ui` 공통) |
-| `store-logic/` | 스토어 앱이 화면과 상관없이 값을 다루는 로직(주소 쿼리 정리, 주소 만들기 등) |
+| `store-logic/` | 스토어 앱이 값을 다루는 로직(주소 쿼리 정리, 주소 만들기, 주소의 값과 화면 컴포넌트의 상태 맞추기 등) |
 
 공통 파일(`learn.css`, `learn.js`, `vendor/`, `index.html`, `template.html`)은 이 폴더 바로 아래에 둔다. 폴더를 새로 만들어야 하면 이 표와 `learn.js`의 `learnFolders`에 먼저 추가한다.
 
@@ -61,6 +61,7 @@
 | `base-ui` | Base UI의 API와 동작(`useRender`, 컴포넌트 부품, 데이터 속성 등) |
 | `css` | CSS와 Tailwind의 배치, 꾸미기 패턴 |
 | `url-state` | 화면 상태(검색어, 정렬, 페이지)를 주소의 쿼리에 담고 읽고 만드는 방식 |
+| `react` | React의 상태와 훅, 렌더링 동작(제어·비제어 컴포넌트, `key`, transition 등) |
 
 ## 모듈
 
