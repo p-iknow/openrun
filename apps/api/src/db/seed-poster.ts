@@ -1,11 +1,10 @@
-import { createRequire } from 'node:module';
 import sharp from 'sharp';
 import type { Genre } from './schema/shows.js';
+import { textImage } from './seed-text.js';
 
 // 시드가 공연마다 만드는 가상의 포스터다. 실제 공연 포스터는 쓰지 않는다.
 // 실제 공연 포스터처럼 위쪽에 큰 그림(키 비주얼)을 두고, 아래쪽에 제목과 공연 기간, 공연장을 적는다.
-// 그림은 SVG로 그리고, 글자는 sharp의 text 입력으로 따로 그려 위에 얹는다.
-// SVG 안의 <text>는 시스템 글꼴(fontconfig)에 기대므로, 한글 글꼴이 없는 환경에서도 같게 나오도록 글꼴 파일을 직접 지정한다.
+// 그림은 SVG로 그리고, 글자는 sharp의 text 입력으로 따로 그려 위에 얹는다(seed-text.ts).
 
 // 3:4 비율. 카드에서 가장 넓게 그려지는 폭(데스크톱 4열 약 280px)의 2배 밀도를 덮는다.
 const WIDTH = 600;
@@ -13,23 +12,7 @@ const HEIGHT = 800;
 const PADDING = 44;
 const TEXT_WIDTH = WIDTH - PADDING * 2;
 
-const requireFromHere = createRequire(import.meta.url);
-const FONTS = {
-  bold: {
-    family: 'Pretendard Bold',
-    file: requireFromHere.resolve(
-      'pretendard/dist/public/static/Pretendard-Bold.otf',
-    ),
-  },
-  medium: {
-    family: 'Pretendard Medium',
-    file: requireFromHere.resolve(
-      'pretendard/dist/public/static/Pretendard-Medium.otf',
-    ),
-  },
-};
-
-interface Palette {
+export interface Palette {
   // 배경 그라데이션의 위, 아래 색
   top: string;
   bottom: string;
@@ -227,44 +210,20 @@ function backgroundSvg({
 </svg>`;
 }
 
-// Pango 마크업으로 글자색과 자간을 정하므로 마크업 특수 문자를 이스케이프한다.
-function escapeMarkup(text: string): string {
-  return text
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;');
-}
-
-// 글자 크기(px)를 고정해 공연마다 제목 크기가 같다. 폭을 넘으면 단어 단위로 줄을 바꾼다.
-async function textImage(
-  text: string,
-  {
-    font,
-    size,
-    opacity = 100,
-    letterSpacing = 0,
-  }: {
-    font: keyof typeof FONTS;
-    size: number;
-    opacity?: number;
-    letterSpacing?: number;
-  },
-) {
-  const { family, file } = FONTS[font];
-  return sharp({
-    text: {
-      // letter_spacing은 1/1024pt 단위다.
-      text: `<span foreground="#ffffff" alpha="${opacity}%" letter_spacing="${letterSpacing * 1024}">${escapeMarkup(text)}</span>`,
-      font: `${family} ${size}`,
-      fontfile: file,
-      width: TEXT_WIDTH,
-      dpi: 72,
-      rgba: true,
-      wrap: 'word',
-    },
-  })
-    .png()
-    .toBuffer({ resolveWithObject: true });
+// 장르와 순번으로 고른 색. 상세 이미지도 포스터와 같은 색을 써서 한 공연처럼 보이게 한다.
+export function getShowPalette({
+  genre,
+  variant,
+}: {
+  genre: Genre;
+  variant: number;
+}): { label: string; palette: Palette } {
+  const style: GenreStyle = GENRE_STYLES[genre];
+  return {
+    label: style.label,
+    palette:
+      style.palettes[variant % style.palettes.length] ?? style.palettes[0],
+  };
 }
 
 export async function renderPoster({
@@ -283,19 +242,30 @@ export async function renderPoster({
   variant: number;
 }): Promise<Buffer> {
   const style: GenreStyle = GENRE_STYLES[genre];
-  const palette =
-    style.palettes[variant % style.palettes.length] ?? style.palettes[0];
+  const { palette } = getShowPalette({ genre, variant });
 
   const [label, heading, periodText, venueText] = await Promise.all([
     textImage(style.label, {
       font: 'medium',
       size: 15,
+      width: TEXT_WIDTH,
       opacity: 85,
-      letterSpacing: 4,
+      // 글자 사이의 WORD JOINER에도 자간이 붙어 실제 간격은 이 값의 두 배다(seed-text.ts).
+      letterSpacing: 2,
     }),
-    textImage(title, { font: 'bold', size: 52 }),
-    textImage(period, { font: 'medium', size: 20, opacity: 90 }),
-    textImage(venueName, { font: 'medium', size: 20, opacity: 75 }),
+    textImage(title, { font: 'bold', size: 52, width: TEXT_WIDTH }),
+    textImage(period, {
+      font: 'medium',
+      size: 20,
+      width: TEXT_WIDTH,
+      opacity: 90,
+    }),
+    textImage(venueName, {
+      font: 'medium',
+      size: 20,
+      width: TEXT_WIDTH,
+      opacity: 75,
+    }),
   ]);
 
   // 아래부터 쌓는다: 공연장, 공연 기간, 구분선(SVG), 제목
