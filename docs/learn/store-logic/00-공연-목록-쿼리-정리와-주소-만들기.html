@@ -20,6 +20,7 @@
           <li><a href="#from-search">getShowListQueryFromSearch</a></li>
           <li><a href="#href">getShowListHref</a></li>
           <li><a href="#sort-change">getSortChangeHref</a></li>
+          <li><a href="#filter-apply">getFilterApplyHref</a></li>
           <li><a href="#search-submit">getSearchSubmitHref</a></li>
           <li><a href="#last-page">getLastPageRedirectHref</a></li>
           <li><a href="#api">API로 넘기기</a></li>
@@ -54,7 +55,8 @@
               <div class="lane-title">쿼리 → 주소 (만들기, 모두 getShowListHref를 거침)</div>
               <ol class="chain">
                 <li><span>페이지 번호와 조건 초기화 링크</span></li>
-                <li><span>정렬 Select: getSortChangeHref</span></li>
+                <li><span>정렬 시트: getSortChangeHref</span></li>
+                <li><span>필터 시트 적용: getFilterApplyHref</span></li>
                 <li><span>검색 제출: getSearchSubmitHref</span></li>
                 <li><span>마지막 페이지 보정: getLastPageRedirectHref</span></li>
               </ol>
@@ -456,34 +458,28 @@ function toHref(search: URLSearchParams): string {
         </section>
 
         <section id="sort-change">
-          <h2>getSortChangeHref: 정렬 Select</h2>
+          <h2>getSortChangeHref: 정렬 시트</h2>
           <p>
-            Select에서 고른 값이 선택지면, 검색어는 두고 정렬을 바꾸고 page를 1로 돌린다. 정렬이 바뀌면 3페이지의
-            내용이 전혀 다른 공연이 되므로 1페이지부터 보여 준다. 선택지가 아닌 값이면 <code>null</code>을 돌려주고,
-            <code>ShowSortSelect</code>는 이동하지 않는다. 지금 쿼리가 <code>{ page: 3, q: '정원', sort: 'newest' }</code>일 때:
+            정렬 시트(<code>ShowSortSheet</code>)에서 선택지를 누르면 시트가 고른 정렬을 돌려주고, 필터 줄(<code>ShowFilterBar</code>)이 이 함수로 주소를 만들어 <code>router.replace</code>한다.
+            다른 조건은 두고 정렬을 바꾸고 page를 1로 돌린다. 정렬이 바뀌면 3페이지의 내용이 전혀 다른 공연이 되므로 1페이지부터 보여 준다.
+            시트는 선택지(<code>SHOW_SORTS</code>)로만 버튼을 그리므로 <code>sort</code>는 늘 <code>ShowSort</code>이고, 잘못된 값을 걸러 낼 일이 없다.
+            지금 쿼리가 page 3, 검색어 <code>'정원'</code>, 정렬 <code>'newest'</code>일 때:
           </p>
-          <pre><code class="language-ts">/**
- * 정렬 Select에서 고른 값으로 옮겨 갈 주소를 만든다. 검색어는 두고 page는 빼서 1페이지로 돌아간다.
- * 고른 값이 정렬 선택지가 아니면 `null`이다.
- */
+          <pre><code class="language-ts">/** 정렬 시트에서 고른 정렬로 옮겨 갈 주소를 만든다. 다른 조건은 두고 page는 빼서 1페이지로 돌아간다. */
 export function getSortChangeHref({
   query,
-  value,
+  sort,
 }: {
   query: ShowListQuery;
-  /** Select가 넘긴 값 */
-  value: string;
-}): string | null {
-  const sort = findShowSort(value);
-  return sort === undefined
-    ? null
-    : getShowListHref({ ...query, sort, page: DEFAULT_PAGE });
+  sort: ShowSort;
+}): string {
+  return getShowListHref({ ...query, sort, page: DEFAULT_PAGE });
 }</code></pre>
           <div class="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th>Select 값</th>
+                  <th>고른 정렬</th>
                   <th>결과</th>
                 </tr>
               </thead>
@@ -494,15 +490,30 @@ export function getSortChangeHref({
                 </tr>
                 <tr>
                   <td><code>'newest'</code></td>
-                  <td><code>/?q=정원&amp;sort=newest</code></td>
-                </tr>
-                <tr>
-                  <td><code>'popular'</code></td>
-                  <td><code>null</code>: 이동하지 않는다</td>
+                  <td><code>/?q=정원&amp;sort=newest</code>: 정렬은 같고 page만 빠진다</td>
                 </tr>
               </tbody>
             </table>
           </div>
+        </section>
+
+        <section id="filter-apply">
+          <h2>getFilterApplyHref: 필터 시트 적용</h2>
+          <p>
+            필터 시트에서 "적용"을 누르면 시트가 고친 임시 쿼리(draft)를 돌려주고, 필터 줄이 이 함수로 주소를 만든다. 정렬과 같이 page를 빼서 1페이지로 간다.
+            임시 쿼리를 어떻게 고치고 언제 적용하는지는 <a href="01-필터-시트-임시-쿼리와-useOptimistic.html">store-logic 01 문서</a>에 있다.
+          </p>
+          <pre><code class="language-ts">/**
+ * 필터 시트에서 "적용"을 눌렀을 때 옮겨 갈 주소를 만든다. 시트에서 고친 임시 쿼리를 받는다.
+ * 임시 쿼리는 `getGenreChangeQuery`, `getStatusChangeQuery`로 고치지만, 칩을 바꾸지 않고 적용하면 주소의 page가 남아 있으므로 여기서 뺀다.
+ */
+export function getFilterApplyHref(draft: ShowListQuery): string {
+  return getShowListHref({ ...draft, page: DEFAULT_PAGE });
+}</code></pre>
+          <p>
+            단위 테스트는 page 3, 검색어 <code>'정원'</code>, 장르 <code>['musical', 'concert']</code>, 판매 상태 <code>['on_sale']</code>, 정렬 <code>'newest'</code>인
+            임시 쿼리가 <code>/?q=정원&amp;genre=musical&amp;genre=concert&amp;status=on_sale&amp;sort=newest</code>가 되는지 본다.
+          </p>
         </section>
 
         <section id="search-submit">
@@ -726,10 +737,8 @@ export function getLastPageRedirectHref({
           <div class="quiz">
             <p class="quiz-q">2. 정렬을 바꿀 때 page를 그대로 두면 무엇이 어색한가?</p>
             <p class="quiz-context"><a href="#sort-change">getSortChangeHref</a>를 이렇게 바꾼다고 생각한다.</p>
-            <pre><code class="language-diff"> return sort === undefined
-   ? null
--  : getShowListHref({ ...query, sort, page: DEFAULT_PAGE });
-+  : getShowListHref({ ...query, sort });</code></pre>
+            <pre><code class="language-diff">-  return getShowListHref({ ...query, sort, page: DEFAULT_PAGE });
++  return getShowListHref({ ...query, sort });</code></pre>
             <details class="quiz-answer">
               <summary>답 보기</summary>
               <div class="fold-body">
@@ -769,7 +778,7 @@ export function getLastPageRedirectHref({
             <li><code>apps/store/src/shows/show-list-query.ts</code>: 이 문서의 함수들</li>
             <li><code>apps/store/src/shows/show-list-query.spec.ts</code>: 같은 규칙을 단위 테스트로 적은 것</li>
             <li>
-              <a href="../react-next/09-검색-폼-제출과-비제어-입력.html">react-next 09 문서</a>: 검색 폼과 정렬 Select가 이 함수들로
+              <a href="../react-next/09-검색-폼-제출과-비제어-입력.html">react-next 09 문서</a>: 검색 폼과 정렬 시트가 이 함수들로
               옮겨 가는 방법과, 주소가 바뀔 때 칸을 다시 채우는 <code>key</code>
             </li>
             <li>
