@@ -14,7 +14,12 @@ import {
 } from 'drizzle-orm';
 import { Clock } from '../clock/clock.module.js';
 import { DATABASE, type Database } from '../db/database.module.js';
-import { performanceSeats, performances, shows } from '../db/schema/shows.js';
+import {
+  performanceSeats,
+  performances,
+  showDetailImages,
+  shows,
+} from '../db/schema/shows.js';
 import { venues } from '../db/schema/venues.js';
 import type { ShowListQuery } from './show-list-query.js';
 import type { ShowDetailDto, ShowPageDto } from './show.dto.js';
@@ -121,7 +126,7 @@ export class ShowsService {
       remainingSeats,
     });
 
-    const [[show], performanceRows] = await Promise.all([
+    const [[show], detailImageRows, performanceRows] = await Promise.all([
       this.db
         .select({
           id: shows.id,
@@ -144,6 +149,15 @@ export class ShowsService {
         .innerJoin(period, eq(period.showId, shows.id))
         .innerJoin(salesStatus, eq(salesStatus.showId, shows.id))
         .where(eq(shows.id, id)),
+      this.db
+        .select({
+          path: showDetailImages.path,
+          width: showDetailImages.width,
+          height: showDetailImages.height,
+        })
+        .from(showDetailImages)
+        .where(eq(showDetailImages.showId, id))
+        .orderBy(asc(showDetailImages.position)),
       this.db
         .select({
           id: performances.id,
@@ -182,6 +196,10 @@ export class ShowsService {
       venue: { id: venueId, name: venueName },
       period: { start: toIso(start), end: toIso(end) },
       salesOpenAt: salesOpenAt?.toISOString() ?? null,
+      detailImages: detailImageRows.map(({ path, ...size }) => ({
+        url: buildShowImageUrl({ baseUrl: this.showImageBaseUrl, path }),
+        ...size,
+      })),
       performances: performanceRows.map(({ startsAt, ...performance }) => ({
         ...performance,
         startsAt: startsAt.toISOString(),

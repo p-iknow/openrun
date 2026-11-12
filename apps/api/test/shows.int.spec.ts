@@ -21,6 +21,7 @@ import {
   type Genre,
   performanceSeats,
   performances,
+  showDetailImages,
   shows,
 } from '../src/db/schema/shows.js';
 import { seats, sections, venues } from '../src/db/schema/venues.js';
@@ -62,6 +63,7 @@ async function insertShow({
   description = '소개',
   performanceStarts = [],
   performances: performanceInputs = [],
+  detailImages = [],
 }: {
   venueId: number;
   title: string;
@@ -73,6 +75,13 @@ async function insertShow({
   description?: string;
   performanceStarts?: string[];
   performances?: PerformanceInput[];
+  // 상세 이미지. position은 넣은 순서와 따로 준다.
+  detailImages?: {
+    position: number;
+    path: string;
+    width: number;
+    height: number;
+  }[];
 }): Promise<number> {
   const [show] = await db
     .insert(shows)
@@ -126,6 +135,11 @@ async function insertShow({
       })),
     );
   }
+  if (detailImages.length > 0) {
+    await db
+      .insert(showDetailImages)
+      .values(detailImages.map((image) => ({ ...image, showId: show.id })));
+  }
   return show.id;
 }
 
@@ -167,7 +181,7 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await db.execute(
-    'TRUNCATE performance_seats, performances, shows, seats, sections, venues RESTART IDENTITY CASCADE',
+    'TRUNCATE show_detail_images, performance_seats, performances, shows, seats, sections, venues RESTART IDENTITY CASCADE',
   );
 
   now = new Date(DEFAULT_NOW);
@@ -912,6 +926,7 @@ describe('GET /shows/:id', () => {
       },
       salesStatus: 'on_sale',
       salesOpenAt: null,
+      detailImages: [],
       performances: [
         {
           id: 2,
@@ -931,6 +946,45 @@ describe('GET /shows/:id', () => {
         },
       ],
     });
+  });
+
+  it('상세 이미지를 순서대로 완전한 URL과 크기로 담는다', async () => {
+    const venueId = await insertVenue('샤롯데씨어터');
+    const showId = await insertShow({
+      venueId,
+      title: '달빛 정원',
+      performanceStarts: ['2026-03-01T05:00:00Z'],
+      // 넣는 순서와 상관없이 position 순으로 담는다.
+      detailImages: [
+        {
+          position: 2,
+          path: 'details/show-01-2.png',
+          width: 860,
+          height: 2400,
+        },
+        {
+          position: 1,
+          path: 'details/show-01-1.png',
+          width: 860,
+          height: 3200,
+        },
+      ],
+    });
+
+    const response = await request(app.getHttpServer()).get(`/shows/${showId}`);
+
+    expect(response.body.detailImages).toEqual([
+      {
+        url: 'https://images.example.com/openrun/details/show-01-1.png',
+        width: 860,
+        height: 3200,
+      },
+      {
+        url: 'https://images.example.com/openrun/details/show-01-2.png',
+        width: 860,
+        height: 2400,
+      },
+    ]);
   });
 
   describe('회차 목록', () => {

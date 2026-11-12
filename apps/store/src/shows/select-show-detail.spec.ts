@@ -20,6 +20,7 @@ function showOf(overrides: Partial<ShowDetail>): ShowDetail {
     },
     salesStatus: 'on_sale',
     salesOpenAt: null,
+    detailImages: [],
     performances: [],
     ...overrides,
   };

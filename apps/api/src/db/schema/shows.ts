@@ -78,3 +78,25 @@ export const performanceSeats = pgTable(
   // 이 제약이 만드는 인덱스가 performance_id로 시작하므로, 회차 하나의 좌석을 찾을 때도 쓰인다.
   (table) => [unique().on(table.performanceId, table.seatId)],
 );
+
+// 공연 소개를 담은 세로로 긴 이미지(상세 이미지)다. 실제 예매 서비스처럼 공연마다 순서대로 여러 장을 둔다.
+// 이미지 속 글은 공연의 소개 본문(description)에 글로 옮겨 둔다. 화면 낭독기는 이미지 대신 그 글을 읽는다.
+export const showDetailImages = pgTable(
+  'show_detail_images',
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    showId: integer('show_id')
+      .notNull()
+      .references(() => shows.id),
+    // 공연 안에서 보여 줄 순서(1부터)다.
+    position: integer().notNull(),
+    // 공연 이미지 저장소 안 경로다(예: details/show-01-1.png). 완전한 URL은 API가 SHOW_IMAGE_BASE_URL과 합쳐 만든다.
+    path: text().notNull(),
+    // 픽셀 단위 원본 크기다. 화면이 이미지를 받기 전에 비율대로 자리를 잡아, 긴 이미지가 늦게 와도 아래 내용이 밀리지 않는다.
+    width: integer().notNull(),
+    height: integer().notNull(),
+  },
+  // 한 공연에 같은 순서가 두 번 들어가지 않게 막는다.
+  // 이 제약이 만드는 인덱스가 show_id로 시작하므로, 공연 하나의 상세 이미지를 순서대로 찾을 때도 쓰인다.
+  (table) => [unique().on(table.showId, table.position)],
+);

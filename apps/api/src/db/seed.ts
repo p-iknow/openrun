@@ -9,6 +9,7 @@ import {
   type Genre,
   performanceSeats,
   performances,
+  showDetailImages,
   shows,
 } from './schema/shows.js';
 import { seats, sections, venues } from './schema/venues.js';
@@ -422,7 +423,7 @@ const db = drizzle(readDatabaseUrl());
 try {
   const performanceSeatCount = await db.transaction(async (tx) => {
     await tx.execute(
-      sql`TRUNCATE ${performanceSeats}, ${performances}, ${shows}, ${seats}, ${sections}, ${venues} RESTART IDENTITY`,
+      sql`TRUNCATE ${showDetailImages}, ${performanceSeats}, ${performances}, ${shows}, ${seats}, ${sections}, ${venues} RESTART IDENTITY`,
     );
 
     // 공연장마다 좌석 id 목록. 회차 좌석은 이 목록의 좌석 수만큼 만든다.

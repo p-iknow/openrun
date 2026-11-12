@@ -127,6 +127,21 @@ export class PerformanceDto {
   isAlmostSoldOut: boolean;
 }
 
+export class ShowDetailImageDto {
+  @ApiProperty({
+    type: String,
+    format: 'uri',
+    description: '상세 이미지의 완전한 URL',
+  })
+  url: string;
+
+  @ApiProperty({ type: 'integer', description: '원본 폭(px)' })
+  width: number;
+
+  @ApiProperty({ type: 'integer', description: '원본 높이(px)' })
+  height: number;
+}
+
 export class ShowDetailDto {
   @ApiProperty({ type: 'integer', description: '공연 ID' })
   id: number;
@@ -146,7 +161,11 @@ export class ShowDetailDto {
   @ApiProperty({ type: 'integer', description: '러닝타임(분)' })
   runningMinutes: number;
 
-  @ApiProperty({ type: String, description: '공연 소개 본문' })
+  @ApiProperty({
+    type: String,
+    description:
+      '공연 소개 본문. 상세 이미지에 담긴 소개를 글로 옮긴 것으로, 화면에는 이미지를 보이고 화면 낭독기에는 이 글을 읽힌다.',
+  })
   description: string;
 
   @ApiProperty({
@@ -178,6 +197,13 @@ export class ShowDetailDto {
       '판매 예정일 때 가장 이른 판매 오픈 일시. 판매 예정이 아니면 null이다.',
   })
   salesOpenAt: string | null;
+
+  @ApiProperty({
+    type: [ShowDetailImageDto],
+    description:
+      '공연 소개를 담은 세로로 긴 이미지들. 보여 줄 순서대로 담는다.',
+  })
+  detailImages: ShowDetailImageDto[];
 
   @ApiProperty({
     type: [PerformanceDto],
