@@ -13,4 +13,4 @@ packages/api-client/src/generated/
 .next/
 next-env.d.ts
 # pnpm db:seed가 만든다. 시드를 다시 돌리면 다시 만든다.
-apps/store/public/posters/
+apps/store/public/show-images/

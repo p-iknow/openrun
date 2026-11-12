@@ -7,11 +7,11 @@ export function readDatabaseUrl(
   return getOrThrow({ source, name: 'DATABASE_URL' });
 }
 
-/** 포스터 경로 앞에 붙여 포스터의 완전한 URL을 만드는 주소. 예: `http://localhost:3001/posters` */
-export function readPosterBaseUrl(
+/** 공연 이미지(포스터, 상세 이미지)의 저장소 안 경로 앞에 붙여 완전한 URL을 만드는 주소. 예: `http://localhost:3001/show-images` */
+export function readShowImageBaseUrl(
   source: NodeJS.ProcessEnv = process.env,
 ): string {
-  return getOrThrow({ source, name: 'POSTER_BASE_URL' });
+  return getOrThrow({ source, name: 'SHOW_IMAGE_BASE_URL' });
 }
 
 function getOrThrow({

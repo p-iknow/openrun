@@ -20,9 +20,12 @@ import { renderPoster } from './seed-poster.js';
 const FAKER_SEED = 20261109;
 const SHOW_COUNT = 20;
 
-// 포스터는 스토어의 정적 파일 폴더에 쓰고, 스토어가 /posters/<포스터 경로>로 내보낸다(POSTER_BASE_URL).
+// 공연 이미지(포스터, 상세 이미지)는 스토어의 정적 파일 폴더에 쓰고, 스토어가 /show-images/<저장소 안 경로>로 내보낸다(SHOW_IMAGE_BASE_URL).
 // 이 폴더는 git에 올리지 않고 시드를 돌릴 때마다 비우고 다시 만든다. 1.7에서 MinIO 업로드로 바꾼다.
-const POSTER_DIR = new URL('../../../store/public/posters/', import.meta.url);
+const SHOW_IMAGE_DIR = new URL(
+  '../../../store/public/show-images/',
+  import.meta.url,
+);
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MINUTE_MS = 60 * 1000;
@@ -403,15 +406,15 @@ const posters = await Promise.all(
     });
     const hash = createHash('sha256').update(png).digest('hex').slice(0, 8);
     return {
-      path: `show-${String(index + 1).padStart(2, '0')}-${hash}.png`,
+      path: `posters/show-${String(index + 1).padStart(2, '0')}-${hash}.png`,
       png,
     };
   }),
 );
-await rm(POSTER_DIR, { recursive: true, force: true });
-await mkdir(POSTER_DIR, { recursive: true });
+await rm(SHOW_IMAGE_DIR, { recursive: true, force: true });
+await mkdir(new URL('posters/', SHOW_IMAGE_DIR), { recursive: true });
 await Promise.all(
-  posters.map(({ path, png }) => writeFile(new URL(path, POSTER_DIR), png)),
+  posters.map(({ path, png }) => writeFile(new URL(path, SHOW_IMAGE_DIR), png)),
 );
 
 const db = drizzle(readDatabaseUrl());

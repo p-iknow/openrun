@@ -23,7 +23,7 @@ import {
   buildPerformanceSalesStatus,
   buildSeatCounts,
 } from './performance-sales-status.js';
-import { POSTER_BASE_URL, buildPosterUrl } from './poster-url.js';
+import { SHOW_IMAGE_BASE_URL, buildShowImageUrl } from './show-image-url.js';
 import { createShowNotFoundException } from './show-not-found.js';
 import { showSalesStatusSubquery } from './show-sales-status.js';
 
@@ -32,7 +32,7 @@ export class ShowsService {
   constructor(
     @Inject(DATABASE) private readonly db: Database,
     private readonly clock: Clock,
-    @Inject(POSTER_BASE_URL) private readonly posterBaseUrl: string,
+    @Inject(SHOW_IMAGE_BASE_URL) private readonly showImageBaseUrl: string,
   ) {}
 
   async findPage({
@@ -98,7 +98,10 @@ export class ShowsService {
         ...show,
         period: { start: toIso(start), end: toIso(end) },
         salesOpenAt: salesOpenAt?.toISOString() ?? null,
-        posterUrl: buildPosterUrl({ baseUrl: this.posterBaseUrl, posterPath }),
+        posterUrl: buildShowImageUrl({
+          baseUrl: this.showImageBaseUrl,
+          path: posterPath,
+        }),
       })),
       page,
       size,
@@ -172,7 +175,10 @@ export class ShowsService {
       show;
     return {
       ...rest,
-      posterUrl: buildPosterUrl({ baseUrl: this.posterBaseUrl, posterPath }),
+      posterUrl: buildShowImageUrl({
+        baseUrl: this.showImageBaseUrl,
+        path: posterPath,
+      }),
       venue: { id: venueId, name: venueName },
       period: { start: toIso(start), end: toIso(end) },
       salesOpenAt: salesOpenAt?.toISOString() ?? null,

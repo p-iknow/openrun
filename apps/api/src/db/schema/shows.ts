@@ -35,7 +35,7 @@ export const shows = pgTable(
     minAge: integer('min_age').notNull(),
     runningMinutes: integer('running_minutes').notNull(),
     description: text().notNull(),
-    // 포스터 파일의 저장소 안 경로다. 완전한 URL은 API가 POSTER_BASE_URL과 합쳐 만든다.
+    // 포스터 파일의 공연 이미지 저장소 안 경로다(예: posters/show-01.png). 완전한 URL은 API가 SHOW_IMAGE_BASE_URL과 합쳐 만든다.
     posterPath: text('poster_path').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
