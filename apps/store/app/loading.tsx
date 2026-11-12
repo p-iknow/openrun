@@ -17,8 +17,14 @@ export default function Loading() {
           </div>
         ))}
       </div>
-      {/* 좁은 화면은 필터 버튼 자리다. 선택 개수를 알아야 폭이 정해지므로 "필터" 버튼 폭으로 둔다. */}
-      <Skeleton className="mb-xl h-[52px] w-[80px] rounded-button sm:hidden" />
+      {/* 좁은 화면은 필터 줄(높이 40px 칩과 버튼) 자리다. 칩 이름은 주소를 알아야 정해지므로 "장르", "판매 상태", "필터", "정렬" 폭으로 둔다. */}
+      <div className="mb-lg flex gap-sm sm:hidden">
+        <Skeleton className="h-[40px] w-[72px] rounded-full" />
+        <Skeleton className="h-[40px] w-[96px] rounded-full" />
+        <span className="flex-1" />
+        <Skeleton className="h-[40px] w-[72px] rounded-full" />
+        <Skeleton className="h-[40px] w-[72px] rounded-full" />
+      </div>
       {/* "공연 N개" 줄과 같은 높이를 차지한다. */}
       <p className="mb-md text-body-sm">
         <Skeleton className="h-lh w-[64px]" />
