@@ -9,6 +9,7 @@ import { PerformanceCalendar } from '../../../src/shows/performance-calendar';
 import { selectShowDetail } from '../../../src/shows/select-show-detail';
 import {
   PerformancePanel,
+  PerformanceSheet,
   ShowDetailLayout,
   ShowInfo,
 } from '../../../src/shows/show-detail';
@@ -48,19 +49,26 @@ export default async function ShowDetailPage({
 }: PageProps<'/shows/[id]'>) {
   const show = await loadShowDetail((await params).id);
 
+  // 데스크톱 패널과 모바일 시트에 같은 내용을 넣는다. 화면 폭에 따라 둘 중 하나만 보인다.
+  const performances = show.isSalesEnded ? (
+    <p className="py-xl text-center text-text-secondary">
+      판매가 종료된 공연입니다
+    </p>
+  ) : (
+    <PerformanceCalendar days={show.performanceDays} />
+  );
+
   return (
     <ShowDetailLayout
       info={<ShowInfo show={show} />}
-      panel={
-        <PerformancePanel>
-          {show.isSalesEnded ? (
-            <p className="py-xl text-center text-text-secondary">
-              판매가 종료된 공연입니다
-            </p>
-          ) : (
-            <PerformanceCalendar days={show.performanceDays} />
-          )}
-        </PerformancePanel>
+      panel={<PerformancePanel>{performances}</PerformancePanel>}
+      bottomBar={
+        <PerformanceSheet
+          showTitle={show.title}
+          isSalesEnded={show.isSalesEnded}
+        >
+          {performances}
+        </PerformanceSheet>
       }
     />
   );

@@ -1,6 +1,7 @@
 import {
   PerformanceCalendarSkeleton,
   PerformancePanel,
+  PerformanceSheetSkeleton,
   ShowDetailLayout,
   ShowInfoSkeleton,
 } from '../../../src/shows/show-detail';
@@ -16,6 +17,7 @@ export default function Loading() {
             <PerformanceCalendarSkeleton />
           </PerformancePanel>
         }
+        bottomBar={<PerformanceSheetSkeleton />}
       />
     </div>
   );
