@@ -37,7 +37,6 @@ export default async function HomePage({ searchParams }: PageProps<'/'>) {
   return (
     <main>
       <h1 className="mb-lg text-heading font-bold">공연</h1>
-      {/* 바뀐 주소로 화면을 다시 그려도 클라이언트 컴포넌트는 새로 만들지 않아(리마운트하지 않아) 누른 칩의 포커스가 남는다. */}
       <div className="mb-xl">
         <ShowFilterChips query={query} />
       </div>
