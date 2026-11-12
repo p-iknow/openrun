@@ -40,7 +40,8 @@
         <p class="lead">
           공연 목록의 장르와 판매 상태 칩(<code>apps/store/src/shows/show-filter-chips.tsx</code>)이 왜 제어 컴포넌트이고, 왜
           <code>useOptimistic</code>과 <code>startTransition</code>을 쓰는지를 하나씩 빼 보면서 설명한다. 실험 결과는 개발 서버의 페이지
-          응답을 일부러 2초 늦춰 브라우저에서 직접 잰 값이다(Next 16.4.5, React 19.3.1).
+          응답을 일부러 2초 늦춰 브라우저에서 직접 잰 값이다(Next 16.4.5, React 19.3.1). <code>useOptimistic</code> 자체의 원리, 특징, 다른 사용 사례는
+          <a href="../react-next/11-useOptimistic이-해결하는-문제와-원리.html">react-next 11 문서</a>에 있고, 이 문서는 필터 칩에 쓴 이유와 방법에 집중한다.
         </p>
 
         <section id="overview">
@@ -122,7 +123,7 @@
           <pre><code class="language-tsx">&lt;ToggleGroup key={query.genre.join()} defaultValue={query.genre} /&gt;</code></pre>
           <p>
             React는 <code>key</code>가 바뀌면 이전 컴포넌트를 버리고 새로 만든다(리마운트). 새로 만들 때 <code>defaultValue</code>를 다시 읽으니 초기화와 뒤로 가기는
-            해결된다. 정렬 Select가 이 방법을 쓴다(<a href="../next/09-검색-폼-제출과-비제어-입력.html">next 09 문서</a>).
+            해결된다. 정렬 Select가 이 방법을 쓴다(<a href="../react-next/09-검색-폼-제출과-비제어-입력.html">react-next 09 문서</a>).
           </p>
           <p>그런데 <strong>칩을 직접 눌러도</strong> 주소가 바뀌므로 칩 줄을 새로 만든다. 키보드로 쓰는 사람에게 문제가 생긴다.</p>
           <ol class="steps green">
@@ -413,9 +414,10 @@ router.replace(getGenreChangeHref({ query, value }));</code></pre>
             <li><code>packages/store-ui/src/toggle-group.tsx</code>: 제어 모드(<code>value</code>)를 받는 ToggleGroup</li>
             <li><a href="00-공연-목록-쿼리-정리와-주소-만들기.html">store-logic 00 문서</a>: 칩이 쓰는 <code>getGenreChangeHref</code> 같은 주소 만들기 함수</li>
             <li>
-              <a href="../next/09-검색-폼-제출과-비제어-입력.html">next 09 문서</a>: 비제어 입력과 <code>key</code>로 값을 다시 채우는 방법, 정렬은 <code>replace</code>이고 검색은
+              <a href="../react-next/09-검색-폼-제출과-비제어-입력.html">react-next 09 문서</a>: 비제어 입력과 <code>key</code>로 값을 다시 채우는 방법, 정렬은 <code>replace</code>이고 검색은
               <code>push</code>인 이유
             </li>
+            <li><a href="../react-next/11-useOptimistic이-해결하는-문제와-원리.html">react-next 11 문서</a>: <code>useOptimistic</code>의 원리, 특징, 다른 사용 사례</li>
             <li><a href="https://react.dev/reference/react/useOptimistic">React 문서: useOptimistic</a></li>
             <li><a href="https://react.dev/reference/react/startTransition">React 문서: startTransition</a></li>
           </ul>

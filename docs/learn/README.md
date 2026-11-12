@@ -8,7 +8,7 @@
 
 | 폴더 | 주제 |
 |---|---|
-| `next/` | Next.js, 스토어 앱 구조, API 호출 |
+| `react-next/` | React와 Next.js(훅, 렌더링, 서버 컴포넌트), 스토어 앱 구조, API 호출 |
 | `nest/` | NestJS, API 테스트 |
 | `zod/` | zod 스키마로 실행 중에 값 검사하기, 타입과 문서 만들기 |
 | `db-and-drizzle/` | DB와 SQL 개념, Drizzle 스키마와 쿼리, 마이그레이션 |

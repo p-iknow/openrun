@@ -1,0 +1,573 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>11 useOptimistic이 해결하는 문제와 원리</title>
+    <link rel="stylesheet" href="../learn.css" />
+    <script src="../vendor/highlightjs/highlight.min.js" defer></script>
+    <script src="../learn.js" defer></script>
+  </head>
+  <body>
+    <div class="layout">
+      <nav aria-label="목차">
+        <strong>1부: 문제와 문법</strong>
+        <ol>
+          <li><a href="#overview">한눈에 보기</a></li>
+          <li><a href="#problem">서버를 기다리는 동안의 공백</a></li>
+          <li><a href="#alternatives">다른 방법으로 메우면</a></li>
+          <li><a href="#syntax">두 가지 쓰는 법</a></li>
+        </ol>
+        <strong>2부: 원리와 특징</strong>
+        <ol>
+          <li><a href="#model">덮개 모델</a></li>
+          <li><a href="#lifetime">덮개는 언제 걷히나</a></li>
+          <li><a href="#traits">특징 일곱 가지</a></li>
+        </ol>
+        <strong>3부: 사용 사례</strong>
+        <ol>
+          <li><a href="#like">좋아요 버튼</a></li>
+          <li><a href="#chat">채팅 메시지 보내기</a></li>
+          <li><a href="#delete">목록에서 지우기</a></li>
+          <li><a href="#switch">설정 스위치와 서버 함수</a></li>
+          <li><a href="#chips">주소를 바꾸는 필터 칩</a></li>
+          <li><a href="#when-not">쓰지 않는 편이 나은 때</a></li>
+        </ol>
+        <strong>마무리</strong>
+        <ol>
+          <li><a href="#pitfalls">헷갈리기 쉬운 점</a></li>
+          <li><a href="#check">확인 문제</a></li>
+          <li><a href="#more">더 읽기</a></li>
+        </ol>
+      </nav>
+
+      <main>
+        <h1>11 useOptimistic이 해결하는 문제와 원리</h1>
+        <p class="lead">
+          React 19의 <code>useOptimistic</code>이 어떤 문제를 풀고, 어떤 규칙으로 임시 값을 보여 주고 거두는지 정리한다. 2부의 기록은 스토어 앱의 개발 서버에 실험용
+          페이지를 잠깐 만들어 React 19.3.1로 직접 잰 값이다. 이 저장소에서 쓰는 곳은 필터 칩이고, 그 사례는
+          <a href="../store-logic/01-필터-칩-제어-컴포넌트와-useOptimistic.html">store-logic 01 문서</a>에 따로 있다.
+        </p>
+
+        <section id="overview">
+          <h2>한눈에 보기</h2>
+          <div class="callout">
+            <p>
+              <code>useOptimistic</code>은 <strong>진짜 값 위에 잠깐 덮는 임시 값</strong>이다. 서버의 답을 기다리는 동안 "아마 이렇게 될 것"이라는 값을 먼저 보여 주고,
+              작업(transition)이 끝나면 덮개를 걷어 진짜 값을 보여 준다. 성공하면 진짜 값이 이미 같아져 있어 화면이 그대로이고, 실패하면 저절로 원래 값으로 돌아간다.
+            </p>
+          </div>
+          <pre><code class="language-tsx">const [shown, setOptimistic] = useOptimistic(realValue);
+//     ↑ 화면에 보여 줄 값        ↑ 진짜 값(props, 서버에서 온 값, useState 값 등)
+
+startTransition(async () =&gt; {
+  setOptimistic(guess);      // 덮개를 씌운다: 바로 화면에 보인다
+  await saveToServer(guess); // 기다리는 동안 덮개가 유지된다
+  // 함수가 끝나면 덮개를 걷는다. 그때 보이는 것은 realValue
+});</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>질문</th>
+                  <th>답</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td>무엇을 푸나</td><td>서버를 기다리는 동안 화면이 반응하지 않는 공백</td></tr>
+                <tr><td>임시 값은 언제 보이나</td><td><code>setOptimistic</code>을 부른 즉시</td></tr>
+                <tr><td>언제 사라지나</td><td>그 값을 넣은 transition(action)이 끝날 때. 시간이 정해진 것이 아니다</td></tr>
+                <tr><td>사라진 뒤 무엇이 보이나</td><td>그 순간의 진짜 값(인자)</td></tr>
+                <tr><td>실패하면</td><td>되돌리는 코드 없이 진짜 값으로 돌아간다</td></tr>
+                <tr><td>어디서 불러야 하나</td><td><code>startTransition</code> 안이나 <code>&lt;form action&gt;</code> 같은 action 안</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="problem">
+          <h2>서버를 기다리는 동안의 공백</h2>
+          <p>
+            좋아요 버튼을 생각해 보자. 누르면 서버에 저장하고, 서버가 답하면 새 좋아요 수를 보여 준다. 화면에 보이는 값이 서버에서 온 값이라면, 누른 뒤 답이 올 때까지
+            화면은 그대로다.
+          </p>
+          <pre><code>  0ms  ♡ 12   누름 → 서버로 요청
+500ms  ♡ 12   아직 답 없음      ← 눌렀는지 알 수 없다
+900ms  ♥ 13   답이 와서 바뀜</code></pre>
+          <p>이 공백에서 문제가 세 가지 생긴다.</p>
+          <ol class="steps blue">
+            <li><strong>반응이 없다</strong> 사용자는 눌린 줄 모르고 한 번 더 누른다. 그러면 좋아요가 취소된다.</li>
+            <li>
+              <strong>다음 조작이 옛 값에서 계산된다</strong> 할 일 두 개를 빠르게 추가하면, 두 번째를 추가할 때 화면의 목록에는 첫 번째가 아직 없다. 화면에 보이는 값을 바탕으로
+              다음 값을 만드는 코드라면 첫 번째가 빠진다.
+            </li>
+            <li><strong>느린 앱처럼 느껴진다</strong> 결과가 거의 확실한 작업(좋아요, 체크, 메시지 전송)까지 매번 기다리게 하면 앱 전체가 굼떠 보인다.</li>
+          </ol>
+          <p>
+            <code>useOptimistic</code>은 이 공백에 "결과를 짐작한 값"을 보여 준다. 좋아요는 거의 항상 성공하므로 ♥ 13을 먼저 보여 줘도 틀릴 일이 드물다. 이렇게 성공을 먼저
+            가정하는 방식을 <strong>낙관적 업데이트(optimistic update)</strong>라고 한다.
+          </p>
+        </section>
+
+        <section id="alternatives">
+          <h2>다른 방법으로 메우면</h2>
+          <h3>로딩 표시만 한다</h3>
+          <p>
+            <code>useTransition</code>의 <code>isPending</code>으로 버튼에 스피너를 띄우면 "누른 것"은 알 수 있다. 하지만 결과는 여전히 기다려야 한다. 결과가 거의 확실한
+            작업에서는 스피너도 기다림이다. 결제처럼 결과를 짐작하면 안 되는 작업에는 이쪽이 맞다(<a href="#when-not">쓰지 않는 편이 나은 때</a>).
+          </p>
+          <h3>useState로 화면용 복사본을 둔다</h3>
+          <pre><code class="language-tsx">const [liked, setLiked] = useState(post.liked); // 처음 한 번만 복사한다
+
+async function onClick() {
+  const previous = liked;
+  setLiked(!liked);                 // 먼저 바꾸고
+  try {
+    await likePost(post.id);
+  } catch {
+    setLiked(previous);             // 실패하면 직접 되돌린다
+  }
+}
+
+useEffect(() =&gt; setLiked(post.liked), [post.liked]); // 서버 값이 바뀌면 직접 맞춘다</code></pre>
+          <p>동작은 하지만 직접 챙길 것이 많다.</p>
+          <ul>
+            <li><strong>되돌리기</strong>: 실패할 때마다 이전 값을 기억해 두고 되돌리는 코드를 써야 한다.</li>
+            <li>
+              <strong>맞추기</strong>: 진짜 값(<code>post.liked</code>)이 다른 이유로 바뀌면 <code>useEffect</code>로 복사본을 맞춰야 한다. 바뀐 값이 한 번 늦게 그려지고, 값이 두
+              곳에 있어 어긋날 틈이 생긴다.
+            </li>
+            <li><strong>순서</strong>: 요청 두 개가 겹쳐 늦게 보낸 것이 먼저 돌아오면 무엇을 기준으로 되돌릴지 정해야 한다.</li>
+          </ul>
+          <p><code>useOptimistic</code>은 이 세 가지를 React에 맡긴다. 복사본을 두지 않고, 진짜 값 위에 덮개만 씌우기 때문이다.</p>
+        </section>
+
+        <section id="syntax">
+          <h2>두 가지 쓰는 법</h2>
+          <h3>값을 바로 넣기</h3>
+          <pre><code class="language-tsx">const [liked, setOptimisticLiked] = useOptimistic(post.liked);
+
+setOptimisticLiked(true); // 임시 값으로 true를 보여 준다</code></pre>
+          <p>임시 값이 무엇인지 그 자리에서 알 때 쓴다. 좋아요, 스위치, 필터 칩처럼 "새 값 하나"로 끝나는 경우다.</p>
+          <h3>계산 함수 주기</h3>
+          <pre><code class="language-tsx">const [shownMessages, addOptimisticMessage] = useOptimistic(
+  messages,                                         // 진짜 값
+  (current, newText: string) =&gt; [                   // (지금 값, 넘긴 것) =&gt; 보여 줄 값
+    ...current,
+    { text: newText, sending: true },
+  ],
+);
+
+addOptimisticMessage('안녕'); // current 뒤에 '안녕(보내는 중)'을 붙인 목록을 보여 준다</code></pre>
+          <p>
+            "지금 값에 무엇을 더하거나 빼는" 경우에 쓴다. 두 번째 인자는 <code>useReducer</code>의 reducer와 모양이 같다. 이 함수는 한 번만 실행되고 끝나는 것이 아니라,
+            진짜 값이 바뀌면 <strong>새 진짜 값 위에서 다시 실행된다</strong>(<a href="#traits">특징</a> 5번). 그래서 목록처럼 여러 곳에서 바뀌는 값에 안전하다.
+          </p>
+        </section>
+
+        <section id="model">
+          <h2>덮개 모델</h2>
+          <p><code>useOptimistic</code>이 렌더링마다 하는 일을 의사 코드로 쓰면 이렇다.</p>
+          <pre><code class="language-ts">function useOptimistic(realValue, update = (current, next) =&gt; next) {
+  // 아직 끝나지 않은 transition에서 넣은 임시 값들
+  const pending = 진행_중인_임시_값_목록();
+
+  // 진짜 값에서 시작해 임시 값을 차례로 덮는다
+  let shown = realValue;
+  for (const p of pending) shown = update(shown, p);
+
+  return [shown, 임시_값을_넣는_함수];
+}</code></pre>
+          <ul>
+            <li>
+              <strong>저장하지 않는다</strong>: <code>shown</code>은 매번 <code>realValue</code>에서 새로 계산한다. <code>useState(초기값)</code>은 처음 한 번만 읽지만,
+              <code>useOptimistic(realValue)</code>는 렌더링마다 읽는다. 임시 값이 없으면 <code>const shown = realValue</code>와 같다.
+            </li>
+            <li><strong>덮개는 쌓인다</strong>: 임시 값이 여러 개면 들어온 순서대로 덮는다.</li>
+            <li><strong>걷히면 진짜 값</strong>: transition이 끝난 임시 값은 목록에서 빠진다. 다 빠지면 <code>realValue</code>만 남는다.</li>
+          </ul>
+          <ul class="tree" style="--tree-col: 14rem">
+            <li>
+              <div class="tree-row"><span class="tree-node">화면에 보이는 값</span><span class="tree-note">= 진짜 값 + 덮개들</span></div>
+              <ul>
+                <li>
+                  <div class="tree-row"><span class="tree-node">덮개 2</span><span class="tree-note">두 번째 transition이 끝나면 걷힌다</span></div>
+                </li>
+                <li>
+                  <div class="tree-row"><span class="tree-node">덮개 1</span><span class="tree-note">첫 번째 transition이 끝나면 걷힌다</span></div>
+                </li>
+                <li>
+                  <div class="tree-row"><span class="tree-node">진짜 값</span><span class="tree-note">props나 상태. 서버 답이 오면 부모가 바꾼다</span></div>
+                </li>
+              </ul>
+            </li>
+          </ul>
+        </section>
+
+        <section id="lifetime">
+          <h2>덮개는 언제 걷히나</h2>
+          <div class="callout">
+            <p>
+              덮개는 <strong>그것을 넣은 transition이 끝날 때</strong> 걷힌다. <code>startTransition</code>에 비동기 함수를 넘기면 그 함수가 끝날 때(<code>await</code>가 모두 풀릴
+              때)가 끝이다. <code>&lt;form action={fn}&gt;</code>은 React가 <code>fn</code>을 transition으로 실행하므로 <code>fn</code>이 끝날 때가 끝이다.
+            </p>
+          </div>
+          <p>그래서 "진짜 값을 바꾸는 일"은 덮개가 걷히기 전에, 같은 transition 안에서 끝내야 한다. 실험 기록이다.</p>
+          <pre><code class="language-tsx">startTransition(async () =&gt; {
+  setShown(1);
+  await sleep(1000);
+  startTransition(() =&gt; setBase(1)); // 진짜 값도 1로 바꾼다
+});</code></pre>
+          <pre><code>   2ms  진짜 0  보이는 값 1   ← 덮개
+1003ms  진짜 1  보이는 값 1   ← 덮개가 걷히는 순간 진짜 값도 1이라 화면 변화 없음</code></pre>
+          <p>진짜 값을 바꾸지 않고 끝내면 덮개만 걷혀 원래 값으로 돌아간다.</p>
+          <pre><code class="language-tsx">startTransition(async () =&gt; {
+  setShown(5);
+  await sleep(1000);       // 진짜 값은 그대로
+});</code></pre>
+          <pre><code>   1ms  진짜 1  보이는 값 5
+1002ms  진짜 1  보이는 값 1   ← 원래 값으로 돌아간다</code></pre>
+          <p>
+            <code>await</code> 뒤에서 상태를 바꿀 때 다시 <code>startTransition</code>으로 감싼 것은 React 문서가 권하는 방법이다. <code>await</code> 뒤의 상태 변경은
+            transition으로 표시되지 않는 한계가 있기 때문이다.
+          </p>
+        </section>
+
+        <section id="traits">
+          <h2>특징 일곱 가지</h2>
+
+          <h3>1. 즉시 그려진다</h3>
+          <p>
+            transition 안의 다른 갱신은 급하지 않은 일로 미뤄지지만, 임시 값은 바로 그리는 차선에 들어간다. 위 실험에서 모두 0~2ms 만에 화면에 나왔다. 그래서 transition 안에서
+            불러도 "느린 갱신"이 되지 않는다.
+          </p>
+
+          <h3>2. transition 밖에서 부르면 오류가 찍힌다</h3>
+          <pre><code>An optimistic state update occurred outside a transition or action. To fix, move the update to an action, or wrap with startTransition.</code></pre>
+          <p>덮개를 언제 걷을지 정할 transition이 없기 때문이다. 이 오류가 나도 화면은 그려질 수 있지만, 언제 걷힐지는 React 내부 사정에 맡기게 된다.</p>
+
+          <h3>3. 실패하면 저절로 돌아간다</h3>
+          <pre><code class="language-tsx">startTransition(async () =&gt; {
+  setShown(99);
+  await sleep(1000);
+  try { throw new Error('저장 실패'); } catch { /* 알림만 띄운다 */ }
+});</code></pre>
+          <pre><code>   1ms  진짜 1  보이는 값 99
+1002ms  진짜 1  보이는 값 1    ← 되돌리는 코드 없이 돌아간다</code></pre>
+          <p>
+            오류를 잡지 않고 던져도 덮개는 걷힌다. 실험에서는 500ms 뒤 원래 값으로 돌아갔고, 오류는 처리되지 않은 전역 오류(<code>Uncaught Error</code>)로 콘솔에 찍혔다. 사용자에게
+            알리려면 직접 잡아서 알림을 띄우는 편이 낫다.
+          </p>
+
+          <h3>4. 값을 바로 넣는 형태는 진행 중에 진짜 값이 바뀌어도 임시 값을 유지한다</h3>
+          <pre><code class="language-tsx">startTransition(async () =&gt; { setShown(100); await sleep(1500); });
+setTimeout(() =&gt; setBase(7), 500); // 진행 중에 진짜 값이 다른 이유로 바뀐다</code></pre>
+          <pre><code>   0ms  진짜 0  보이는 값 100
+ 502ms  진짜 7  보이는 값 100   ← 덮개가 그대로 덮고 있다
+1503ms  진짜 7  보이는 값 7     ← 걷히면 새 진짜 값</code></pre>
+
+          <h3>5. 계산 함수 형태는 새 진짜 값 위에서 다시 계산한다</h3>
+          <pre><code class="language-tsx">const [shown, add] = useOptimistic(list, (current, m) =&gt; [...current, m + '(임시)']);
+
+startTransition(async () =&gt; { add('x'); await sleep(1500); });
+setTimeout(() =&gt; setList(['a', 'z']), 500); // 진행 중에 다른 항목이 들어온다</code></pre>
+          <pre><code>   0ms  진짜 [a]     보이는 값 [a, x(임시)]
+ 501ms  진짜 [a, z]  보이는 값 [a, z, x(임시)]   ← 새 진짜 값 위에 다시 붙였다
+1503ms  진짜 [a, z]  보이는 값 [a, z]</code></pre>
+          <p>
+            채팅방에 다른 사람의 메시지가 들어와도 내가 보내는 중인 메시지가 사라지지 않고 맨 뒤에 붙어 있는 것이 이 덕분이다. 목록을 다룰 때는 이 형태를 쓰는 편이 안전하다.
+          </p>
+
+          <h3>6. 겹친 작업은 모두 끝난 뒤 한꺼번에 반영된다</h3>
+          <p>메시지 b를 보내고(1초 걸림), 0.2초 뒤에 c를 보냈다(1.5초 걸림).</p>
+          <pre><code>   1ms  진짜 [a]        보이는 값 [a, b(보내는 중)]
+ 202ms  진짜 [a]        보이는 값 [a, b(보내는 중), c(보내는 중)]
+1704ms  진짜 [a, b, c]  보이는 값 [a, b, c]</code></pre>
+          <p>
+            b는 1초에 끝났지만 진짜 값에 b가 들어간 화면은 c가 끝난 1.7초에 함께 나왔다. 진행 중인 action이 있을 때 시작한 action은 React가 하나로 묶어(entangle) 모두 끝나야
+            결과를 커밋하기 때문이다. 그동안에도 덮개가 b와 c를 보여 주므로 사용자에게는 문제가 없다. 다만 "b가 끝나자마자 무언가 보인다"를 기대하면 안 된다.
+          </p>
+
+          <h3>7. 렌더링마다 진짜 값을 새로 읽는다</h3>
+          <p>
+            덮개가 없을 때 <code>useOptimistic(value)</code>는 <code>value</code> 그대로다. 그래서 진짜 값이 다른 이유로 바뀌어도(다른 탭에서 수정, 주소 변경, 새로고침된 데이터)
+            맞추는 코드 없이 화면이 따라간다. <code>useState</code>로 복사본을 둘 때 필요하던 <code>useEffect</code>가 없어도 되는 이유다.
+          </p>
+        </section>
+
+        <section id="like">
+          <h2>좋아요 버튼</h2>
+          <p>결과가 거의 확실하고, 틀려도 되돌리면 그만인 가장 흔한 사례다. 상태 두 개(눌렀는지, 몇 개인지)를 객체 하나로 덮는다.</p>
+          <pre><code class="language-tsx">'use client';
+
+function LikeButton({ post }: { post: { id: string; liked: boolean; likeCount: number } }) {
+  const router = useRouter();
+  const [shown, setOptimistic] = useOptimistic({ liked: post.liked, count: post.likeCount });
+
+  return (
+    &lt;button
+      aria-pressed={shown.liked}
+      onClick={() =&gt; {
+        const next = !shown.liked;
+        startTransition(async () =&gt; {
+          setOptimistic({ liked: next, count: shown.count + (next ? 1 : -1) });
+          await setLike(post.id, next); // 서버에 저장
+          router.refresh();             // 서버가 새 post를 내려 주게 한다(진짜 값 바꾸기)
+        });
+      }}
+    &gt;
+      {shown.liked ? '♥' : '♡'} {shown.count}
+    &lt;/button&gt;
+  );
+}</code></pre>
+          <ul>
+            <li>다음 값을 <code>post.liked</code>가 아니라 <code>shown.liked</code>에서 계산한다. 빠르게 두 번 눌러도 화면에 보이는 값을 기준으로 뒤집힌다.</li>
+            <li><code>router.refresh()</code>도 transition 안에서 불렀으므로, 새 <code>post</code>가 그려질 때까지 덮개가 유지된다.</li>
+          </ul>
+        </section>
+
+        <section id="chat">
+          <h2>채팅 메시지 보내기</h2>
+          <p>보내는 중인 메시지를 흐리게 보여 주는 사례다. React 공식 문서의 예와 같은 모양이다. 목록에 더하므로 계산 함수 형태를 쓰고, <code>&lt;form action&gt;</code>으로 보낸다.</p>
+          <pre><code class="language-tsx">'use client';
+
+type Message = { id: string; text: string; sending?: boolean };
+
+function Chat({ messages, send }: { messages: Message[]; send: (text: string) =&gt; Promise&lt;void&gt; }) {
+  const [shown, addOptimistic] = useOptimistic(messages, (current, text: string) =&gt; [
+    ...current,
+    { id: `temp-${current.length}`, text, sending: true },
+  ]);
+
+  return (
+    &lt;&gt;
+      &lt;ul&gt;
+        {shown.map((m) =&gt; (
+          &lt;li key={m.id} className={m.sending ? 'opacity-50' : ''}&gt;
+            {m.text} {m.sending &amp;&amp; '(보내는 중)'}
+          &lt;/li&gt;
+        ))}
+      &lt;/ul&gt;
+      &lt;form
+        action={async (formData) =&gt; {
+          const text = String(formData.get('text'));
+          addOptimistic(text); // form action은 이미 transition이라 startTransition이 필요 없다
+          await send(text);    // 부모가 messages를 바꾼다
+        }}
+      &gt;
+        &lt;input name="text" /&gt;
+        &lt;button&gt;보내기&lt;/button&gt;
+      &lt;/form&gt;
+    &lt;/&gt;
+  );
+}</code></pre>
+          <ul>
+            <li>
+              <strong>임시 id</strong>: 진짜 id는 서버가 만든다. 임시 항목에는 임시 id를 주고, 덮개가 걷히면 진짜 항목(진짜 id)으로 바뀐다. 서버가 만드는 값은 짐작하지 않고
+              자리만 채운다.
+            </li>
+            <li><strong>상태 표시</strong>: <code>sending</code> 같은 표시를 넣어 "아직 확정이 아니다"를 보여 줄 수 있다.</li>
+            <li><strong>다른 사람의 메시지</strong>: 보내는 중에 <code>messages</code>가 바뀌어도 새 목록 위에 다시 붙는다(특징 5).</li>
+          </ul>
+        </section>
+
+        <section id="delete">
+          <h2>목록에서 지우기</h2>
+          <p>지우는 것도 덮개로 표현한다. 지울 id를 넘기면 목록에서 뺀 값을 보여 준다.</p>
+          <pre><code class="language-tsx">const [shownTodos, removeOptimistic] = useOptimistic(todos, (current, id: string) =&gt;
+  current.filter((todo) =&gt; todo.id !== id),
+);
+
+function onDelete(id: string) {
+  startTransition(async () =&gt; {
+    removeOptimistic(id);
+    const ok = await deleteTodo(id);
+    if (!ok) toast('지우지 못했습니다'); // 덮개가 걷히면 항목이 다시 나타난다
+    else startTransition(() =&gt; setTodos((prev) =&gt; prev.filter((t) =&gt; t.id !== id)));
+  });
+}</code></pre>
+          <p>실패하면 항목이 다시 나타난다. 사라졌던 것이 돌아오면 사용자가 놀라므로 알림을 함께 띄운다.</p>
+        </section>
+
+        <section id="switch">
+          <h2>설정 스위치와 서버 함수</h2>
+          <p>
+            Next의 서버 함수(Server Function, <code>'use server'</code>)와 함께 쓰는 사례다. 서버 함수가 데이터를 바꾸고 <code>revalidatePath</code>로 페이지를 다시 그리게 하면, 새
+            props가 진짜 값이 된다.
+          </p>
+          <pre><code class="language-tsx">// actions.ts
+'use server';
+export async function setNotification(on: boolean) {
+  await db.update(settings).set({ notification: on });
+  revalidatePath('/settings'); // 서버가 새 settings로 페이지를 다시 그린다
+}
+
+// notification-switch.tsx
+'use client';
+export function NotificationSwitch({ on }: { on: boolean }) {
+  const [shownOn, setOptimisticOn] = useOptimistic(on);
+  return (
+    &lt;Switch
+      checked={shownOn}
+      onCheckedChange={(next) =&gt; {
+        startTransition(async () =&gt; {
+          setOptimisticOn(next);
+          await setNotification(next); // 새 페이지까지 받아 온 뒤에 끝난다
+        });
+      }}
+    /&gt;
+  );
+}</code></pre>
+          <p>서버 함수 호출이 끝날 때 새로 그린 페이지도 함께 도착하므로, 덮개가 걷히는 순간 <code>on</code>은 이미 새 값이다.</p>
+        </section>
+
+        <section id="chips">
+          <h2>주소를 바꾸는 필터 칩</h2>
+          <p>
+            이 저장소의 사례다. 칩은 주소의 값(<code>query.genre</code>)을 그대로 보여 주는 제어 컴포넌트라서, 주소가 바뀌기 전(서버가 새 페이지를 그리기 전)에는 눌러도 켜지지
+            않는다. 덮개로 그 사이를 메운다.
+          </p>
+          <pre><code class="language-tsx">const [genre, setOptimisticGenre] = useOptimistic&lt;string[]&gt;(query.genre);
+
+startTransition(() =&gt; {
+  setOptimisticGenre(value);
+  router.replace(getGenreChangeHref({ query, value })); // 화면 이동도 transition이라 새 페이지가 그려질 때 함께 끝난다
+});</code></pre>
+          <p>
+            다른 사례와 달리 비동기 함수가 아니다. <code>router.replace</code>가 안에서 transition을 열고, 새 페이지가 서버에서 올 때까지 그 transition이 끝나지 않기 때문에 덮개가
+            유지된다. 왜 제어 컴포넌트로 뒀는지, 실험 결과는
+            <a href="../store-logic/01-필터-칩-제어-컴포넌트와-useOptimistic.html">store-logic 01 문서</a>에 있다.
+          </p>
+        </section>
+
+        <section id="when-not">
+          <h2>쓰지 않는 편이 나은 때</h2>
+          <p>낙관적 업데이트는 "거의 성공한다"는 가정 위에 있다. 가정이 깨지기 쉽거나, 깨졌을 때 되돌리는 것이 혼란스러우면 쓰지 않는다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>상황</th>
+                  <th>이유</th>
+                  <th>대신</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>좌석 선점, 결제, 예매 확정</td>
+                  <td>다른 사람과 경쟁해 실패가 흔하다. "예매됨"을 보였다가 되돌리면 사용자가 믿고 떠날 수 있다</td>
+                  <td><code>isPending</code>으로 처리 중을 보이고 서버의 답을 기다린다</td>
+                </tr>
+                <tr>
+                  <td>서버가 값을 정한다(가격 계산, 재고 수량)</td>
+                  <td>짐작한 값이 틀리기 쉽다</td>
+                  <td>자리만 비워 두고 답을 기다린다</td>
+                </tr>
+                <tr>
+                  <td>되돌릴 수 없는 일(메일 발송, 삭제 후 복구 불가)</td>
+                  <td>보여 준 결과를 되돌려도 실제로 일어난 일은 안 돌아온다</td>
+                  <td>확인을 받고, 처리 중을 보인다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="pitfalls">
+          <h2>헷갈리기 쉬운 점</h2>
+          <ul>
+            <li>
+              <strong>임시 값은 상태가 아니다.</strong> <code>setOptimistic</code>으로 넣은 값은 저장되지 않는다. transition이 끝나면 사라지므로, 남기고 싶은 결과는 반드시 진짜 값(상태,
+              props, 서버 데이터)에 넣어야 한다.
+            </li>
+            <li>
+              <strong>"일정 시간"이 아니라 "작업이 끝날 때까지"다.</strong> 서버가 0.1초 만에 답하면 0.1초, 5초 걸리면 5초 동안 보인다.
+            </li>
+            <li>
+              <strong>진짜 값을 바꾸는 일까지 transition 안에 넣어야 한다.</strong> 진짜 값을 다시 받아 오는 일(<code>router.refresh</code>, 상태 갱신)이 transition이
+              끝난 뒤에 일어나면, 덮개가 먼저 걷혀 원래 값이 잠깐 보인다. 비동기 함수를 <code>startTransition</code>에 넘겨, 저장과 새로 받기를 모두 그 안에서
+              <code>await</code>한다.
+            </li>
+            <li>
+              <strong>다음 값은 보이는 값에서 계산한다.</strong> 좋아요 토글처럼 이전 값으로 다음 값을 만들 때 진짜 값(<code>post.liked</code>)을 쓰면, 연속으로 눌렀을 때 옛 값을
+              기준으로 계산한다.
+            </li>
+            <li>
+              <strong>useTransition의 isPending과 함께 쓸 수 있다.</strong> 덮개로 결과를 먼저 보이고, <code>isPending</code>으로 "저장 중" 같은 작은 표시를 더할 수 있다.
+            </li>
+          </ul>
+        </section>
+
+        <section id="check">
+          <h2>확인 문제</h2>
+          <div class="quiz">
+            <p class="quiz-q">1. 좋아요를 누르면 ♥ 13이 잠깐 보였다가 ♡ 12로 돌아가고, 조금 뒤 ♥ 13이 된다. 무엇이 문제인가?</p>
+            <p class="quiz-context"><a href="#lifetime">덮개는 언제 걷히나</a> 절. 코드는 아래와 같다.</p>
+            <pre><code class="language-tsx">async function onClick() {
+  startTransition(() =&gt; {
+    setOptimistic({ liked: true, count: 13 });
+  });
+  await setLike(post.id, true);
+  router.refresh();
+}</code></pre>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  transition에 든 것이 <code>setOptimistic</code> 한 줄뿐이라, transition이 곧바로 끝나 덮개가 걷힌다. 그 순간 진짜 값 <code>post</code>는 아직 옛 값(♡ 12)이다.
+                  서버 저장과 <code>router.refresh()</code>는 transition이 끝난 뒤에 일어나므로, 새 페이지가 와서야 ♥ 13이 된다. 저장과 새로 받기를 비동기 transition 안으로
+                  옮긴다: <code>startTransition(async () =&gt; { setOptimistic(...); await setLike(...); router.refresh(); })</code>.
+                </p>
+              </div>
+            </details>
+          </div>
+          <div class="quiz">
+            <p class="quiz-q">2. 채팅에서 내 메시지를 보내는 중에 다른 사람의 메시지가 도착했다. 아래 두 코드 중 다른 사람의 메시지가 바로 보이지 않는 쪽은?</p>
+            <p class="quiz-context"><a href="#traits">특징</a> 4번과 5번.</p>
+            <pre><code class="language-tsx">// (가)
+const [shown, setShown] = useOptimistic(messages);
+setShown([...messages, mine]);
+
+// (나)
+const [shown, add] = useOptimistic(messages, (current, m) =&gt; [...current, m]);
+add(mine);</code></pre>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  (가)다. 내 메시지는 보이지만 다른 사람의 메시지는 덮개가 걷힐 때까지 보이지 않는다. 넣은 순간의 <code>messages</code>로 만든 배열을 그대로 덮어 두기 때문에, 진행 중에
+                  <code>messages</code>가 바뀌어도 덮개가 옛 목록을 보여 준다. (나)는 새 <code>messages</code> 위에서 함수를 다시 실행하므로 다른 사람의 메시지와 내 메시지가 모두
+                  보인다. 목록에는 (나)를 쓴다.
+                </p>
+              </div>
+            </details>
+          </div>
+          <div class="quiz">
+            <p class="quiz-q">3. 공연 좌석 선택 화면에서 "선점하기"를 누르면 바로 "선점 완료"를 보여 주자는 제안이 나왔다. 어떻게 답하겠는가?</p>
+            <p class="quiz-context"><a href="#when-not">쓰지 않는 편이 나은 때</a> 절.</p>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  쓰지 않는 편이 낫다. 인기 공연의 좌석은 여러 사람이 동시에 노리므로 실패가 흔하다. "선점 완료"를 보였다가 되돌리면 사용자는 이미 잡았다고 믿고 결제로 넘어가거나
+                  화면을 떠날 수 있다. 버튼을 처리 중 상태(<code>isPending</code>)로 바꾸고 서버의 답을 기다린 뒤 결과를 보인다.
+                </p>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section id="more">
+          <h2>더 읽기</h2>
+          <ul>
+            <li><a href="../store-logic/01-필터-칩-제어-컴포넌트와-useOptimistic.html">store-logic 01 문서</a>: 이 저장소의 필터 칩에서 쓰는 방법과 실험</li>
+            <li><a href="09-검색-폼-제출과-비제어-입력.html">react-next 09 문서</a>: 비제어 입력과 <code>key</code></li>
+            <li><a href="https://react.dev/reference/react/useOptimistic">React 문서: useOptimistic</a></li>
+            <li><a href="https://react.dev/reference/react/startTransition">React 문서: startTransition</a></li>
+            <li><a href="https://react.dev/reference/react/useTransition">React 문서: useTransition</a>(<code>await</code> 뒤의 상태 변경)</li>
+          </ul>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

@@ -4,8 +4,8 @@
 // 새 문서를 만들면 그 폴더의 documents에 한 줄 추가한다. 태그 이름은 README.md의 태그 목록을 따른다.
 const learnFolders = [
   {
-    folder: 'next',
-    title: 'Next.js',
+    folder: 'react-next',
+    title: 'React와 Next.js',
     documents: [
       { file: '00-nextjs-렌더링-시점과-캐시.html', title: '00 Next.js 렌더링 시점과 캐시', tags: ['nextjs'] },
       { file: '01-openapi-fetch로-API-호출과-오류-처리.html', title: '01 openapi-fetch 호출과 오류 처리', tags: ['openapi', 'nextjs'] },
@@ -18,6 +18,7 @@ const learnFolders = [
       { file: '08-useSearchParams와-Suspense-경계.html', title: '08 useSearchParams와 Suspense 경계', tags: ['nextjs'] },
       { file: '09-검색-폼-제출과-비제어-입력.html', title: '09 검색 폼: 제출, 비제어 입력과 key', tags: ['nextjs'] },
       { file: '10-숨은-입력-칸으로-쿼리-보존하기.html', title: '10 숨은 입력 칸으로 쿼리 보존하기', tags: ['nextjs'] },
+      { file: '11-useOptimistic이-해결하는-문제와-원리.html', title: '11 useOptimistic이 해결하는 문제와 원리', tags: ['react'] },
     ],
   },
   {
