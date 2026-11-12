@@ -1,16 +1,13 @@
-import type { components } from '@openrun/api-client';
-import { transformErrorResponse } from '../api-error';
 import { formatKst } from '../format-kst';
-import type { ShowDetailResult } from './fetch-show-detail';
+import type { ShowDetail } from './fetch-show-detail';
 import {
+  GENRE_LABELS,
   getSalesOpenAtLabel,
   getShowPeriodLabel,
+  PERFORMANCE_SALES_STATUS_BADGES,
   type SalesStatusBadgeData,
   SHOW_SALES_STATUS_BADGES,
-} from './select-show-cards';
-import { GENRE_LABELS } from './show-filter-items';
-
-type PerformanceSalesStatus = components['schemas']['PerformanceSalesStatus'];
+} from './show-display';
 
 export interface PerformanceItemData {
   id: number;
@@ -23,8 +20,10 @@ export interface PerformanceItemData {
 }
 
 export interface PerformanceDayData {
-  /** 한국 날짜와 요일. 예: `2026.03.01 (일)` */
+  /** 달력에서 날짜를 가리키는 값(한국 날짜). 예: `2026-03-01` */
   date: string;
+  /** 한국 날짜와 요일. 예: `2026.03.01 (일)` */
+  label: string;
   performances: PerformanceItemData[];
 }
 
@@ -45,46 +44,22 @@ export interface ShowDetailData {
   salesOpenAt: string | null;
   /** 공연 판매 상태가 판매 종료인지. 회차 목록 대신 종료 안내를 보여 줄 때 쓴다. */
   isSalesEnded: boolean;
-  /** 시작 전 회차를 한국 날짜별로 묶었다. API가 시작 일시 순으로 주므로 순서를 그대로 둔다. */
+  /** 시작 전 회차를 한국 날짜별로 묶었다. API가 시작 일시 순으로 주므로 날짜와 회차 모두 이른 순이다. */
   performanceDays: PerformanceDayData[];
 }
 
-// Record로 적어 API에 판매 상태가 추가되면 여기서 타입 오류가 난다.
-// 상세에는 시작 전 회차만 와서 판매 종료는 오지 않지만, 타입에 있는 값이라 함께 둔다.
-const PERFORMANCE_SALES_STATUS_BADGES = {
-  on_sale: { label: '판매 중', tone: 'primary' },
-  upcoming: { label: '판매 예정', tone: 'success' },
-  sold_out: { label: '매진', tone: 'neutral' },
-  cancelled: { label: '회차 취소', tone: 'danger' },
-  ended: { label: '판매 종료', tone: 'neutral' },
-} satisfies Record<PerformanceSalesStatus, SalesStatusBadgeData>;
-
-/**
- * 공연 상세 응답을 화면 값으로 바꾼다.
- * 없는 공연(SHOW_NOT_FOUND)이면 null을 돌려주고, 그 밖의 오류 응답은 ApiError로 던진다.
- */
-export function selectShowDetail(
-  result: ShowDetailResult,
-): ShowDetailData | null {
-  const show = result.data;
-  if (show === undefined) {
-    const apiError = transformErrorResponse({
-      error: result.error,
-      response: result.response,
-    });
-    if (apiError.code === 'SHOW_NOT_FOUND') {
-      return null;
-    }
-    throw apiError;
-  }
-
+// 공연 상세 응답을 화면 값으로 바꾼다.
+export function selectShowDetail(show: ShowDetail): ShowDetailData {
   const performanceDays: PerformanceDayData[] = [];
   for (const performance of show.performances) {
-    const { date, weekday, time } = formatKst(performance.startsAt);
-    const day = `${date} (${weekday})`;
+    const { date, dateKey, weekday, time } = formatKst(performance.startsAt);
     let group = performanceDays.at(-1);
-    if (group?.date !== day) {
-      group = { date: day, performances: [] };
+    if (group?.date !== dateKey) {
+      group = {
+        date: dateKey,
+        label: `${date} (${weekday})`,
+        performances: [],
+      };
       performanceDays.push(group);
     }
     group.performances.push({

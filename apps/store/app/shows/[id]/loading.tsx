@@ -1,5 +1,5 @@
 import {
-  PerformanceDayListSkeleton,
+  PerformanceCalendarSkeleton,
   PerformancePanel,
   ShowDetailLayout,
   ShowInfoSkeleton,
@@ -13,7 +13,7 @@ export default function Loading() {
         info={<ShowInfoSkeleton />}
         panel={
           <PerformancePanel>
-            <PerformanceDayListSkeleton />
+            <PerformanceCalendarSkeleton />
           </PerformancePanel>
         }
       />

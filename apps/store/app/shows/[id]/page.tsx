@@ -2,43 +2,51 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { connection } from 'next/server';
 import { cache } from 'react';
+import { ApiError } from '../../../src/api-error';
 import { createServerApiClient } from '../../../src/api-client';
 import { fetchShowDetail } from '../../../src/shows/fetch-show-detail';
+import { PerformanceCalendar } from '../../../src/shows/performance-calendar';
 import { selectShowDetail } from '../../../src/shows/select-show-detail';
 import {
-  PerformanceDayList,
   PerformancePanel,
   ShowDetailLayout,
   ShowInfo,
 } from '../../../src/shows/show-detail';
 
 // generateMetadata와 페이지가 같은 요청 안에서 API를 한 번만 부르도록 React cache로 묶는다.
-const getShowDetail = cache(async (id: string) => {
+// 없는 공연이면 notFound()로 404 화면을 보여 준다.
+const loadShowDetail = cache(async (id: string) => {
   // 이 페이지는 요청마다 렌더링한다. 판매 상태와 남은 좌석은 실시간이어야 한다.
   await connection();
-  // 숫자가 아닌 id는 NaN이 되어 API가 없는 공연(404)으로 응답한다. 어떤 id가 있는 공연인지는 API가 정한다.
-  return selectShowDetail(
-    await fetchShowDetail({ client: createServerApiClient(), id: Number(id) }),
-  );
+  // API 경로에는 숫자로 바꾼 id가 들어간다. '01', '1e0'처럼 다른 글자가 같은 숫자로 바뀌는 주소는
+  // 원래 글자 그대로는 없는 공연이므로 API에 묻지 않는다. 숫자가 아닌 글자(NaN)도 여기서 걸린다.
+  const showId = Number(id);
+  if (String(showId) !== id) {
+    notFound();
+  }
+  try {
+    return selectShowDetail(
+      await fetchShowDetail({ client: createServerApiClient(), id: showId }),
+    );
+  } catch (error) {
+    if (error instanceof ApiError && error.code === 'SHOW_NOT_FOUND') {
+      notFound();
+    }
+    throw error;
+  }
 });
 
 export async function generateMetadata({
   params,
 }: PageProps<'/shows/[id]'>): Promise<Metadata> {
-  const show = await getShowDetail((await params).id);
-  if (show === null) {
-    notFound();
-  }
+  const show = await loadShowDetail((await params).id);
   return { title: show.title };
 }
 
 export default async function ShowDetailPage({
   params,
 }: PageProps<'/shows/[id]'>) {
-  const show = await getShowDetail((await params).id);
-  if (show === null) {
-    notFound();
-  }
+  const show = await loadShowDetail((await params).id);
 
   return (
     <ShowDetailLayout
@@ -50,7 +58,7 @@ export default async function ShowDetailPage({
               판매가 종료된 공연입니다
             </p>
           ) : (
-            <PerformanceDayList days={show.performanceDays} />
+            <PerformanceCalendar days={show.performanceDays} />
           )}
         </PerformancePanel>
       }

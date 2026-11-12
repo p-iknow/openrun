@@ -5,16 +5,9 @@ import {
   SHOW_LIST_SALES_STATUSES,
   type ShowListSalesStatus,
 } from './show-list-query';
+import { GENRE_LABELS } from './show-display';
 
-// 장르와 판매 상태 칩에 보이는 이름. 필터 줄의 칩과 필터 시트의 칩이 함께 쓰고, 장르 이름은 공연 상세도 쓴다.
-
-export const GENRE_LABELS: Record<Genre, string> = {
-  musical: '뮤지컬',
-  play: '연극',
-  concert: '콘서트',
-  classical_dance: '클래식·무용',
-  kids_family: '아동·가족',
-};
+// 장르와 판매 상태 칩에 보이는 이름. 필터 줄의 칩과 필터 시트의 칩이 함께 쓴다.
 
 const STATUS_LABELS: Record<ShowListSalesStatus, string> = {
   on_sale: '판매 중',

@@ -1,7 +1,7 @@
 import { Badge, Skeleton } from '@openrun/store-ui';
 import Image from 'next/image';
 import type { ReactNode } from 'react';
-import type { PerformanceDayData, ShowDetailData } from './select-show-detail';
+import type { ShowDetailData } from './select-show-detail';
 
 // 데스크톱(lg)은 2단이다. 왼쪽이 공연 정보, 오른쪽이 스크롤을 따라오는 회차 패널이다.
 // 모바일은 한 단이라 패널이 공연 정보 아래로 간다. 화면 폭은 CSS로만 나눈다.
@@ -141,52 +141,17 @@ export function PerformancePanel({ children }: { children: ReactNode }) {
   );
 }
 
-export function PerformanceDayList({ days }: { days: PerformanceDayData[] }) {
+// 달력(제목, 요일 줄, 6주)과 고른 날의 회차 두 줄 자리다.
+export function PerformanceCalendarSkeleton() {
   return (
     <div className="flex flex-col gap-lg">
-      {days.map((day) => (
-        <section key={day.date}>
-          <h3 className="mb-sm text-body-sm font-semibold">{day.date}</h3>
-          <ul className="flex flex-col gap-sm">
-            {day.performances.map((performance) => (
-              <li
-                key={performance.id}
-                className="flex items-center gap-sm rounded-card border border-border px-md py-sm"
-              >
-                <span className="font-semibold tabular-nums">
-                  {performance.time}
-                </span>
-                <Badge tone={performance.salesStatus.tone}>
-                  {performance.salesStatus.label}
-                </Badge>
-                <span className="ml-auto flex items-center gap-sm text-body-sm">
-                  {performance.isAlmostSoldOut ? (
-                    <span className="font-semibold text-warning">
-                      매진 임박
-                    </span>
-                  ) : null}
-                  {performance.remainingSeats === null ? null : (
-                    <span className="text-text-secondary tabular-nums">
-                      {performance.remainingSeats}
-                    </span>
-                  )}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ))}
-    </div>
-  );
-}
-
-export function PerformanceDayListSkeleton() {
-  return (
-    <div className="flex flex-col gap-sm">
-      <Skeleton className="h-[20px] w-[120px] rounded-badge" />
-      {Array.from({ length: 3 }, (_, index) => (
-        <Skeleton key={index} className="h-[46px] w-full rounded-card" />
-      ))}
+      <Skeleton className="mx-auto h-[32px] w-[120px] rounded-badge" />
+      <Skeleton className="h-[240px] w-full rounded-card" />
+      <div className="flex flex-col gap-sm border-t border-border pt-lg">
+        <Skeleton className="h-[20px] w-[120px] rounded-badge" />
+        <Skeleton className="h-[46px] w-full rounded-card" />
+        <Skeleton className="h-[46px] w-full rounded-card" />
+      </div>
     </div>
   );
 }
