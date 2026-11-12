@@ -38,6 +38,7 @@ const learnFolders = [
     documents: [
       { file: '00-zod-기초.html', title: '00 zod 기초: 실행 중에도 남는 타입', tags: ['zod'] },
       { file: '01-반복-쿼리를-배열로-받기.html', title: '01 반복 쿼리를 배열로 받기: preprocess, array, enum', tags: ['zod', 'url-state', 'openapi'] },
+      { file: '02-체이닝의-실행-순서.html', title: '02 체이닝의 실행 순서: 이어 붙이기와 문지기', tags: ['zod'] },
     ],
   },
   {

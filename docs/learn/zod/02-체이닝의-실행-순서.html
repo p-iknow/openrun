@@ -1,0 +1,444 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>02 체이닝의 실행 순서: 이어 붙이기와 문지기</title>
+    <link rel="stylesheet" href="../learn.css" />
+    <script src="../vendor/highlightjs/highlight.min.js" defer></script>
+    <script src="../learn.js" defer></script>
+  </head>
+  <body>
+    <div class="layout">
+      <nav aria-label="목차">
+        <strong>1부: 왜 헷갈리나</strong>
+        <ol>
+          <li><a href="#overview">한눈에 보기</a></li>
+          <li><a href="#two-times">만들 때와 검사할 때</a></li>
+        </ol>
+        <strong>2부: 함수로 보는 원리</strong>
+        <ol>
+          <li><a href="#make">(안쪽) =&gt; (값) =&gt; 결과</a></li>
+          <li><a href="#nested">최종 함수: 함수 안에 함수</a></li>
+          <li><a href="#zod-object">zod 객체와 소스에서 확인하기</a></li>
+        </ol>
+        <strong>3부: 메서드별 순서</strong>
+        <ol>
+          <li><a href="#append">이어 붙이기: 쓴 순서대로</a></li>
+          <li><a href="#gate">문지기: 어디에 쓰든 먼저</a></li>
+          <li><a href="#catch">catch: 안쪽을 먼저 해 보고</a></li>
+          <li><a href="#function-form">함수로 감싸기: z.preprocess</a></li>
+        </ol>
+        <strong>마무리</strong>
+        <ol>
+          <li><a href="#reading">읽는 요령</a></li>
+          <li><a href="#pitfalls">헷갈리기 쉬운 점</a></li>
+          <li><a href="#check">스스로 확인하기</a></li>
+          <li><a href="#more">더 읽을거리</a></li>
+        </ol>
+      </nav>
+
+      <main>
+        <h1>02 체이닝의 실행 순서: 이어 붙이기와 문지기</h1>
+        <p class="lead">
+          zod 체이닝은 왼쪽부터 차례로 실행될 것처럼 읽히지만, <code>.default()</code>, <code>.optional()</code> 같은 몇 메서드는 맨 뒤에 써도 가장 먼저 값을 본다. 스키마를
+          만들 때와 값을 검사할 때의 순서가 왜 다른지 화살표 함수로 풀고, 메서드마다 어느 쪽인지 정리한다. 예제의 결과는 모두 저장소의 zod 4.6.7로 실행해 확인했다.
+          체이닝이 새 스키마를 돌려준다는 기본은 <a href="00-zod-기초.html#chain">zod 00 문서</a>에 있다.
+        </p>
+
+        <section id="overview">
+          <h2>한눈에 보기</h2>
+          <div class="callout">
+            <p>
+              메서드는 두 종류가 섞여 있다. <strong>이어 붙이기</strong>는 앞 단계 결과를 받아 다음 일을 하므로 쓴 순서대로 실행된다. <strong>문지기</strong>는 앞의 스키마
+              전체를 감싸고 안쪽을 부르기 전에 값을 먼저 확인하므로, 어디에 쓰든 가장 먼저 실행된다.
+            </p>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>종류</th>
+                  <th>메서드</th>
+                  <th>실행 순서</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td><span class="badge green">이어 붙이기</span></td><td><code>.transform</code>, <code>.refine</code>, <code>.pipe</code>, <code>.min</code>/<code>.max</code>/<code>.int</code> 같은 검사</td><td>쓴 순서대로</td></tr>
+                <tr><td><span class="badge blue">문지기</span></td><td><code>.default</code>, <code>.optional</code>, <code>.nullable</code></td><td>어디에 쓰든 가장 먼저 값을 본다</td></tr>
+                <tr><td>감싸지만 나중</td><td><code>.catch</code></td><td>안쪽을 먼저 해 보고, 실패하면 대신 값을 돌려준다</td></tr>
+                <tr><td>함수로 감싸기</td><td><code>z.preprocess(fn, schema)</code></td><td><code>fn</code>이 <code>schema</code>보다 먼저</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <pre><code class="language-ts">z.coerce.number().int().min(1).default(1)
+// 쓴 순서:   coerce → int → min → default
+// 실행 순서: default → coerce → int → min   (값이 undefined면 default에서 끝)</code></pre>
+        </section>
+
+        <section id="two-times">
+          <h2>만들 때와 검사할 때</h2>
+          <p>
+            체이닝 코드는 두 번 다른 일을 한다. 서버가 켜질 때 한 번 <strong>스키마를 만들고</strong>, 요청이 올 때마다 <strong>값을 검사한다</strong>. 두 시점의
+            순서가 반대라서 헷갈린다. 함수에 로그를 넣어 두 시점을 나눠 보면 이렇다.
+          </p>
+          <pre><code class="language-ts">const wrapInArray = (v: unknown) =&gt; { console.log('[검사] wrapInArray 실행:', v); return [v].flat(); };
+
+console.log('① 스키마 만들기 시작');
+const arr = z.array(z.enum(['musical', 'play']));
+const pre = z.preprocess(wrapInArray, arr);   // wrapInArray는 아직 실행 안 됨
+const schema = pre.default([]);
+
+console.log('② 검사');
+schema.safeParse(undefined);
+schema.safeParse('musical');</code></pre>
+          <pre><code>① 스키마 만들기 시작
+② 검사
+[검사] wrapInArray 실행: musical</code></pre>
+          <ul>
+            <li>
+              <strong>만들 때</strong>는 자바스크립트 규칙대로 인자부터 실행된다. <code>z.array(...)</code>가 먼저 만들어지고, 그것을 받아 <code>z.preprocess(...)</code>,
+              그것을 받아 <code>.default([])</code>가 만들어진다. 이때 <code>wrapInArray</code>는 괄호 없이 <strong>함수 자체</strong>로 넘겨져 맡겨 둘 뿐, 실행되지 않는다.
+            </li>
+            <li>
+              <strong>검사할 때</strong>는 손에 쥔 <code>schema</code>, 즉 <strong>마지막에 만든 것</strong>부터 실행된다. <code>undefined</code>는 <code>default</code>에서
+              끝나 <code>wrapInArray</code>가 한 번도 불리지 않았고, <code>'musical'</code>일 때만 불렸다.
+            </li>
+          </ul>
+        </section>
+
+        <section id="make">
+          <h2>(안쪽) =&gt; (값) =&gt; 결과</h2>
+          <p>스키마를 만드는 메서드와 함수는 모두 화살표가 두 번인 함수로 흉내 낼 수 있다.</p>
+          <pre><code class="language-js">const makeDefault = (inner, defaultValue) =&gt; (value) =&gt;
+  value === undefined ? defaultValue : inner(value);
+
+const makePreprocess = (fn, inner) =&gt; (value) =&gt;
+  inner(fn(value));
+
+const makeArray = (element) =&gt; (value) =&gt;
+  Array.isArray(value) ? value.map(element) : fail('배열이 아니다');
+
+const makeEnum = (allowed) =&gt; (value) =&gt;
+  allowed.includes(value) ? value : fail('목록에 없다');</code></pre>
+          <ul>
+            <li><strong>바깥 화살표</strong> <code>(inner, ...) =&gt;</code>: 만들 때 실행된다. 안쪽 담당자를 받아 안쪽 화살표 함수를 <strong>돌려주기만</strong> 한다.</li>
+            <li><strong>안쪽 화살표</strong> <code>(value) =&gt;</code>: 검사할 때 실행된다. 값을 보고, 필요할 때만 <code>inner(value)</code>를 부른다.</li>
+          </ul>
+          <pre><code class="language-js">// z.preprocess(wrapInArray, z.array(z.enum(GENRES))).default([]) 와 같다
+const schema = makeDefault(makePreprocess(wrapInArray, makeArray(makeEnum(GENRES))), []);
+
+schema(undefined); // []: makeDefault의 안쪽 화살표가 inner를 부르지 않고 끝낸다</code></pre>
+          <p>각 함수에 로그를 넣어 실행하면 zod와 같은 순서가 찍힌다.</p>
+          <pre><code>schema(undefined)
+    default 검사: undefined
+    결과: []
+schema("musical")
+    default 검사: "musical"
+    wrapInArray: "musical" → ["musical"]
+    array 검사: ["musical"]
+    enum 검사: "musical"
+    결과: ["musical"]</code></pre>
+        </section>
+
+        <section id="nested">
+          <h2>최종 함수: 함수 안에 함수</h2>
+          <p>
+            <code>make...</code>가 실행될 때마다 앞에서 만든 함수가 새 함수의 <code>inner(...)</code> 자리에 들어간다. 그래서 <code>schema</code>에 최종적으로 든 함수는
+            양파처럼 겹친 모양이다. 중간 변수 없이 그대로 쓰면 이렇다.
+          </p>
+          <pre><code class="language-js">const schema = (value) =&gt; {
+  if (value === undefined) return [];        // default
+
+  return ((value) =&gt; {                       // preprocess
+    return ((value) =&gt; {                     // array
+      if (!Array.isArray(value)) fail('배열이 아니다');
+      return value.map((item) =&gt; {           // enum
+        if (!GENRES.includes(item)) fail('목록에 없다');
+        return item;
+      });
+    })([value].flat());                      // ← wrapInArray 결과를 array 함수에 넘긴다
+  })(value);                                 // ← 값을 preprocess 함수에 넘긴다
+};</code></pre>
+          <ul class="tree" style="--tree-col: 12rem">
+            <li>
+              <div class="tree-row">
+                <span class="tree-node">default 함수</span>
+                <span class="tree-note">가장 마지막에 만들었고, 가장 바깥이다. 값을 가장 먼저 받는다</span>
+              </div>
+              <ul>
+                <li>
+                  <div class="tree-row">
+                    <span class="tree-node">preprocess 함수</span>
+                    <span class="tree-note">default가 부를 때만 실행된다</span>
+                  </div>
+                  <ul>
+                    <li>
+                      <div class="tree-row">
+                        <span class="tree-node">array 함수</span>
+                        <span class="tree-note">preprocess가 부를 때만</span>
+                      </div>
+                      <ul>
+                        <li>
+                          <div class="tree-row">
+                            <span class="tree-node">enum 함수</span>
+                            <span class="tree-note">가장 먼저 만들었고, 가장 안쪽이다</span>
+                          </div>
+                        </li>
+                      </ul>
+                    </li>
+                  </ul>
+                </li>
+              </ul>
+            </li>
+          </ul>
+          <p>
+            <code>schema(undefined)</code>는 첫 줄 <code>return []</code>에서 끝나므로 안쪽 함수들은 불리지 않는다. <strong>만든 순서는 안쪽부터, 실행 순서는 바깥부터</strong>다.
+            러시아 인형을 만들 때는 작은 인형부터 만들어야 큰 인형에 넣을 수 있고, 열 때는 큰 인형부터 여는 것과 같다.
+          </p>
+          <h3>문지기를 안쪽에 두면</h3>
+          <p>
+            <code>z.preprocess(wrapInArray, z.array(...).default([]))</code>처럼 <code>default</code>를 배열에 붙이면, <code>default</code>가 <code>preprocess</code>보다
+            먼저 만들어져 최종 함수의 안쪽으로 들어간다.
+          </p>
+          <pre><code class="language-js">const schemaC = (value) =&gt; {
+  return ((value) =&gt; {                       // default (이제 안쪽)
+    if (value === undefined) return [];
+    return ((value) =&gt; {                     // array
+      if (!Array.isArray(value)) fail('배열이 아니다');
+      return value.map((item) =&gt; {           // enum
+        if (!GENRES.includes(item)) fail('목록에 없다');
+        return item;
+      });
+    })(value);
+  })([value].flat());                        // ← preprocess: 먼저 감싸서 넘긴다
+};
+
+schemaC(undefined); // 실패: [undefined]는 undefined가 아니라 default를 지나치고, enum이 undefined를 거절한다</code></pre>
+        </section>
+
+        <section id="zod-object">
+          <h2>zod 객체와 소스에서 확인하기</h2>
+          <p>
+            위 모델이 실제 zod와 같은지 확인한다. 메서드를 붙이면 앞의 스키마를 품은 <strong>새 객체</strong>가 생긴다(<a href="00-zod-기초.html#chain">zod 00 문서</a>).
+          </p>
+          <pre><code class="language-ts">const a = z.array(z.enum(['x']));
+const b = a.default([]);
+
+a === b;                     // false: 새 객체다
+b._zod.def.innerType === a;  // true: 새 객체 안에 a가 들어 있다</code></pre>
+          <p>
+            <code>z.preprocess(wrapInArray, z.array(z.enum(GENRES))).default([])</code>를 만들고 <code>_zod.def</code>를 따라가면 객체가 이렇게 겹쳐 있다.
+            <code>z.preprocess</code>는 따로 있는 종류가 아니라 <code>pipe</code> 하나다.
+          </p>
+          <pre><code>default { innerType, defaultValue: [] }
+└ pipe { in, out }
+  ├ in:  transform { transform: wrapInArray }
+  └ out: array { element }
+         └ enum { entries: GENRES }</code></pre>
+          <p>검사할 때 각 객체가 안쪽을 부를지 정하는 코드다. <code>v4/core/schemas.js</code>를 줄여 옮겼다.</p>
+          <pre><code class="language-js">// $ZodDefault
+inst._zod.parse = (payload, ctx) =&gt; {
+  if (payload.value === undefined) {
+    payload.value = def.defaultValue; // 기본값을 넣고
+    return payload;                   // 바로 돌아간다. 안쪽(innerType)을 부르지 않는다
+  }
+  return def.innerType._zod.run(payload, ctx); // 값이 있을 때만 안쪽을 부른다
+};
+
+// $ZodPipe
+inst._zod.parse = (payload, ctx) =&gt; {
+  const left = def.in._zod.run(payload, ctx);  // 먼저 왼쪽
+  return handlePipeResult(left, def.out, ctx); // 그 결과로 오른쪽. 실패했으면 멈춘다
+};</code></pre>
+          <p><code>makeDefault</code>, <code>makePreprocess</code>와 하는 일이 같다.</p>
+        </section>
+
+        <section id="append">
+          <h2>이어 붙이기: 쓴 순서대로</h2>
+          <p>
+            <code>.transform</code>, <code>.refine</code>, <code>.pipe</code>는 앞 단계를 왼쪽에 두고 자기를 오른쪽에 두는 <code>pipe</code>를 만든다. <code>pipe</code>는
+            왼쪽부터 실행하므로 쓴 순서와 실행 순서가 같다. <code>.min</code>, <code>.int</code> 같은 검사도 앞 스키마에 검사를 하나씩 더하는 것이라 쓴 순서대로 실행된다.
+          </p>
+          <pre><code class="language-ts">z.string()
+  .transform((v) =&gt; v + '!')  // 1번째
+  .refine((v) =&gt; true)        // 2번째
+  .transform((v) =&gt; v);       // 3번째
+// 실행: transform1 → refine → transform2</code></pre>
+        </section>
+
+        <section id="gate">
+          <h2>문지기: 어디에 쓰든 먼저</h2>
+          <p>
+            <code>.default</code>, <code>.optional</code>, <code>.nullable</code>은 앞의 스키마 전체를 <code>innerType</code>으로 감싸고, 안쪽을 부르기 전에 값이 비었는지
+            확인한다. 비었으면 안쪽을 부르지 않는다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>메서드</th>
+                  <th>먼저 확인하는 것</th>
+                  <th>맞으면</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td><code>.default(v)</code></td><td><code>undefined</code>인가</td><td><code>v</code>를 돌려주고 끝</td></tr>
+                <tr><td><code>.optional()</code></td><td><code>undefined</code>인가</td><td><code>undefined</code>를 돌려주고 끝</td></tr>
+                <tr><td><code>.nullable()</code></td><td><code>null</code>인가</td><td><code>null</code>을 돌려주고 끝</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <pre><code class="language-ts">const trimmed = z.string().transform((v) =&gt; v.trim());
+
+trimmed.optional().parse(undefined);  // undefined (transform 안 불림)
+trimmed.nullable().parse(null);       // null      (transform 안 불림)
+trimmed.default('기본').parse(undefined); // '기본'  (transform 안 불림)</code></pre>
+          <p>
+            <a href="00-zod-기초.html#default">zod 00 문서</a>의 <code>z.coerce.number().int().min(1).default(1)</code>이 쿼리를 생략한 요청에 <code>1</code>을 주는 것도
+            이 덕분이다. <code>default</code>가 없으면 <code>undefined</code>가 <code>coerce</code>로 가서 <code>NaN</code>이 되고 실패한다.
+          </p>
+          <div class="callout warn">
+            <p>
+              <strong>문지기는 자기가 감싼 것만 지킨다.</strong> 이어 붙이기 메서드를 문지기 <strong>뒤에</strong> 쓰면, 그 단계는 문지기 바깥(<code>pipe</code>의 오른쪽)에
+              놓여 문지기가 돌려준 값을 그대로 받는다. <a href="#check">스스로 확인하기</a> 1번이 이 경우다.
+            </p>
+          </div>
+          <details>
+            <summary>prefault: 기본값도 검사를 거치게 하려면</summary>
+            <p>
+              <code>.default(v)</code>는 기본값을 검사하지 않고 그대로 돌려준다. 기본값을 넣은 뒤 안쪽 검사까지 거치게 하려면 <code>.prefault(v)</code>를 쓴다. 예를 들어
+              <code>z.string().min(3).prefault('ab').safeParse(undefined)</code>는 <code>'ab'</code>가 <code>min(3)</code>에 걸려 실패한다.
+            </p>
+          </details>
+        </section>
+
+        <section id="catch">
+          <h2>catch: 안쪽을 먼저 해 보고</h2>
+          <p>
+            <code>.catch(v)</code>도 앞의 스키마를 감싸지만, 문지기와 반대로 안쪽을 <strong>먼저 실행</strong>한다. 실패했을 때만 <code>v</code>를 돌려준다.
+          </p>
+          <pre><code class="language-ts">z.string().min(3).catch('기본').parse('ab');  // '기본' (min(3)을 해 보고 실패해서)
+z.string().min(3).catch('기본').parse('abc'); // 'abc'</code></pre>
+        </section>
+
+        <section id="function-form">
+          <h2>함수로 감싸기: z.preprocess</h2>
+          <p>
+            <code>z.preprocess(fn, schema)</code>는 메서드가 아니라 스키마를 <strong>인자로</strong> 받는 함수다. 인자가 안쪽이 되므로 <code>fn</code>이
+            <code>schema</code>보다 먼저 실행된다. 한 줄에 함수로 감싸기와 메서드로 감싸기가 섞이면 순서를 읽기 어려워진다.
+          </p>
+          <pre><code class="language-ts">z.preprocess(wrapInArray, z.array(z.enum(GENRES)))  // 함수: 안쪽 스키마를 인자로 감싼다
+  .default([])                                       // 메서드: 그 결과를 또 감싼다
+// 실행: default → wrapInArray → array → enum</code></pre>
+          <p>
+            <code>.default</code>에도 함수형 <code>z._default(안쪽, 기본값)</code>이 있다(<code>default</code>가 예약어라 밑줄이 붙었다). 바깥을 먼저 쓰므로 읽는 순서와 실행
+            순서가 맞지만, 문서와 예제에서 거의 쓰지 않아 이 저장소는 메서드를 쓴다.
+          </p>
+          <pre><code class="language-ts">z._default(z.preprocess(wrapInArray, z.array(z.enum(GENRES))), []);
+// 구조는 위와 같다: default(pipe(transform, array))</code></pre>
+        </section>
+
+        <section id="reading">
+          <h2>읽는 요령</h2>
+          <ol class="steps blue">
+            <li><strong>문지기부터 찾는다.</strong> <code>.default</code>, <code>.optional</code>, <code>.nullable</code>이 있으면 "값이 비었으면 여기서 끝"을 맨 앞에 둔다.</li>
+            <li><strong><code>z.preprocess(fn, ...)</code>의 <code>fn</code>을 그다음에 둔다.</strong> 인자로 받은 스키마보다 먼저 실행된다.</li>
+            <li><strong>나머지는 쓴 순서대로 읽는다.</strong> 타입 검사, <code>.min</code>/<code>.int</code>, <code>.transform</code>, <code>.refine</code>.</li>
+            <li><strong>문지기 뒤에 이어 붙인 것이 있는지 본다.</strong> 있으면 그 단계는 문지기가 돌려준 빈 값도 받는다.</li>
+          </ol>
+          <p>
+            이 저장소의 <code>GET /shows</code> 쿼리 스키마를 이 요령으로 읽은 결과는 <a href="01-반복-쿼리를-배열로-받기.html#default">zod 01 문서</a>에 있다.
+          </p>
+        </section>
+
+        <section id="pitfalls">
+          <h2>헷갈리기 쉬운 점</h2>
+          <div class="callout warn">
+            <p>
+              <strong>"인자부터 실행"은 만들 때의 이야기다.</strong> 만들 때 실행되는 것은 스키마를 조립하는 코드뿐이다. 넘긴 함수(<code>wrapInArray</code>,
+              <code>transform</code>의 콜백)는 검사할 때 실행된다.
+            </p>
+          </div>
+          <div class="callout warn">
+            <p>
+              <strong>transform 안의 예외는 <code>safeParse</code>도 잡지 않는다.</strong> 콜백이 던진 오류는 검사 실패(<code>success: false</code>)가 아니라 그대로
+              던져진다. 문지기 뒤의 <code>transform</code>이 빈 값을 받아 <code>.length</code>를 읽으면 요청 처리 전체가 예외로 끝난다.
+            </p>
+          </div>
+        </section>
+
+        <section id="check">
+          <h2>스스로 확인하기</h2>
+
+          <div class="quiz">
+            <p class="quiz-q">1. 두 스키마에 <code>undefined</code>를 넣으면 각각 어떻게 되는가?</p>
+            <p class="quiz-context"><a href="#gate">문지기</a> 절의 경고, <a href="#append">이어 붙이기</a> 절을 묻는다.</p>
+            <pre><code class="language-ts">const a = z.string().transform((s) =&gt; s.length).optional();
+const b = z.string().optional().transform((s) =&gt; s.length);</code></pre>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <ul>
+                  <li><code>a</code>: <code>undefined</code>. <code>optional</code>이 가장 바깥이라 <code>transform</code>을 부르지 않고 끝낸다.</li>
+                  <li>
+                    <code>b</code>: 예외가 던져진다(<code>Cannot read properties of undefined (reading 'length')</code>). 구조가
+                    <code>pipe(optional(string), transform)</code>이라 <code>optional</code>은 <code>pipe</code>의 왼쪽에 갇혀 있다. <code>optional</code>이 돌려준
+                    <code>undefined</code>를 오른쪽 <code>transform</code>이 받는다. <code>safeParse</code>로 불러도 실패 결과가 아니라 예외다.
+                  </li>
+                </ul>
+              </div>
+            </details>
+          </div>
+
+          <div class="quiz">
+            <p class="quiz-q">2. 아래 스키마를 검사할 때의 실행 순서를 적어라. 값이 <code>undefined</code>일 때와 <code>'7'</code>일 때 각각 어디까지 실행되는가?</p>
+            <p class="quiz-context"><a href="#reading">읽는 요령</a>을 묻는다.</p>
+            <pre><code class="language-ts">z.coerce.number().int().min(1).default(1)</code></pre>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  실행 순서는 <code>default → coerce → number → int → min</code>이다. <code>undefined</code>는 <code>default</code>에서 <code>1</code>을 돌려주고 끝난다.
+                  <code>'7'</code>은 <code>default</code>를 지나 <code>coerce</code>가 <code>7</code>로 바꾸고, <code>number</code>, <code>int</code>, <code>min</code>을 모두
+                  통과해 <code>7</code>이 된다.
+                </p>
+              </div>
+            </details>
+          </div>
+
+          <div class="quiz">
+            <p class="quiz-q">3. <code>makeDefault</code>를 아래처럼 고치면 <code>schema(undefined)</code>의 결과와 실행 순서는 어떻게 바뀌는가?</p>
+            <p class="quiz-context"><a href="#make">(안쪽) =&gt; (값) =&gt; 결과</a> 절을 묻는다. <code>schema</code>는 그 절과 같이 만든다.</p>
+            <pre><code class="language-diff">-const makeDefault = (inner, defaultValue) =&gt; (value) =&gt;
+-  value === undefined ? defaultValue : inner(value);
++const makeDefault = (inner, defaultValue) =&gt; (value) =&gt;
++  inner(value === undefined ? defaultValue : value);</code></pre>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  기본값 <code>[]</code>가 안쪽으로 넘어가 <code>wrapInArray([])</code> → <code>[]</code> → <code>array</code> 통과 → 항목이 없어 <code>enum</code>은 불리지
+                  않고 <code>[]</code>가 나온다. 결과는 같지만 안쪽 검사를 모두 거친다. 이것이 <a href="#gate"><code>.prefault</code></a>의 동작이다.
+                </p>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section id="more">
+          <h2>더 읽을거리</h2>
+          <ol>
+            <li><a href="https://zod.dev/api#defaults">Zod: Defaults (default, prefault)</a></li>
+            <li><a href="https://zod.dev/api#optionals">Zod: Optionals</a></li>
+            <li><a href="https://zod.dev/api#pipes">Zod: Pipes</a></li>
+            <li><a href="https://zod.dev/api#preprocess">Zod: Preprocess</a></li>
+            <li><a href="https://zod.dev/api#catch">Zod: Catch</a></li>
+            <li><a href="00-zod-기초.html">zod 00 문서: zod 기초</a></li>
+            <li><a href="01-반복-쿼리를-배열로-받기.html">zod 01 문서: 반복 쿼리를 배열로 받기</a></li>
+          </ol>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

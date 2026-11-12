@@ -186,6 +186,10 @@ const positive = base.min(1);
 base.safeParse(-5).success;     // true  (base는 그대로다)
 positive.safeParse(-5).success; // false</code></pre>
           <p>그래서 공통 규칙을 변수로 두고 필드마다 이어 붙여 써도 서로 영향을 주지 않는다.</p>
+          <p>
+            이어 붙인 메서드가 늘 쓴 순서대로 실행되지는 않는다. <code>.default()</code>, <code>.optional()</code>은 맨 뒤에 써도 가장 먼저 값을 본다. 메서드별 실행 순서는
+            <a href="02-체이닝의-실행-순서.html">zod 02 문서</a>에 있다.
+          </p>
         </section>
 
         <section id="number">
@@ -313,7 +317,7 @@ page.parse(null);      // 실패: too_small (null도 "없음"이 아니다. Numb
               <strong>위치는 맨 뒤여도 판단은 가장 먼저</strong> 한다. <code>.default(1)</code>은 앞의 스키마 전체를 감싸는 껍질이라,
               값이 <code>undefined</code>면 안쪽(<code>coerce</code>, <code>int</code>, <code>min</code>)을 부르지 않고 바로
               <code>1</code>을 돌려준다. <code>Number(undefined)</code>는 <code>NaN</code>이니, 이 순서가 아니었다면 쿼리를 생략한
-              요청이 실패했을 것이다.
+              요청이 실패했을 것이다. 왜 그렇게 되는지는 <a href="02-체이닝의-실행-순서.html#gate">zod 02 문서</a>에 있다.
             </li>
           </ul>
           <p>값이 없어도 되지만 기본값을 넣고 싶지 않으면 <code>.optional()</code>을 쓴다.</p>
