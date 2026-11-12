@@ -25,13 +25,7 @@ export function ShowDetailLayout({
       <aside className="hidden lg:sticky lg:top-xl lg:block">{panel}</aside>
       {/* 홈 표시줄이 있는 휴대폰에서 버튼이 가리지 않도록 아래 안전 영역만큼 띄운다. 버튼은 줄 폭을 채운다.
           여백을 시트 아래 버튼 줄(Drawer.Footer)과 같게 두어, 시트가 열려도 "예매하기" 버튼이 같은 자리에 있다. */}
-      <div className="fixed inset-x-0 bottom-0 grid px-lg pt-md pb-[calc(var(--spacing-lg)+env(safe-area-inset-bottom,0px))] lg:hidden">
-        {/* 버튼 뒤로 지나가는 본문을 흐리게 한다. 경계선 대신 위쪽으로 갈수록 흐림이 옅어지게(mask) 해 본문과 자연스럽게 이어진다.
-            흐림 층은 버튼 줄보다 위로 조금 더 올라가고, 버튼 뒤(-z-10)에 깔린다. */}
-        <div
-          aria-hidden="true"
-          className="absolute inset-x-0 -top-xl bottom-0 -z-10 bg-surface/30 mask-t-from-50% backdrop-blur-md"
-        />
+      <div className="fixed inset-x-0 bottom-0 grid border-t border-border bg-surface px-lg pt-md pb-[calc(var(--spacing-lg)+env(safe-area-inset-bottom,0px))] lg:hidden">
         {bottomBar}
       </div>
     </main>
