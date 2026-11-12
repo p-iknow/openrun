@@ -1,6 +1,6 @@
 'use client';
 
-import { Drawer, ToggleGroup } from '@openrun/store-ui';
+import { Button, Drawer, ToggleGroup } from '@openrun/store-ui';
 import { useRouter } from 'next/navigation';
 import { startTransition, useOptimistic, useState } from 'react';
 import { GENRE_ITEMS, STATUS_ITEMS } from './show-filter-items';
@@ -15,6 +15,7 @@ import {
 // 칩 줄처럼 누를 때마다 주소를 바꾸면 시트에 가린 목록이 칩마다 다시 그려지므로, 시트에서 고른 값은 주소와 따로 둔 임시 쿼리(draft)에만 둔다.
 // 임시 쿼리는 칩 줄과 같은 함수로 고쳐, 모르는 값을 버리고 선택지 순서로 맞추는 규칙을 함께 쓴다.
 // 적용하지 않고 닫으면 임시 쿼리를 버린다. 다음에 열 때 주소의 값으로 다시 채운다.
+// "초기화"는 시트 안의 장르와 판매 상태 선택만 지우고 시트를 닫지 않는다. 주소는 적용할 때 바뀐다. NOL 티켓 모바일 필터 시트의 초기화도 이렇게 동작한다.
 // 적용은 칩 줄과 같이 router.replace로 방문 기록을 쌓지 않는다.
 // 버튼의 필터 개수는 서버가 새 목록을 그릴 때까지 기다리지 않도록 useOptimistic으로 적용한 쿼리를 먼저 보인다.
 export function ShowFilterSheet({ query }: { query: ShowListQuery }) {
@@ -57,6 +58,14 @@ export function ShowFilterSheet({ query }: { query: ShowListQuery }) {
           </div>
         </Drawer.Body>
         <Drawer.Footer>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setDraft({ ...draft, genre: [], status: [] });
+            }}
+          >
+            초기화
+          </Button>
           <Drawer.Close
             variant="primary"
             onClick={() => {
