@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>01 필터 시트: 임시 쿼리, 제어 컴포넌트, useOptimistic</title>
+    <link rel="stylesheet" href="../learn.css" />
+    <script src="../vendor/highlightjs/highlight.min.js" defer></script>
+    <script src="../learn.js" defer></script>
+  </head>
+  <body>
+    <div class="layout">
+      <nav aria-label="목차">
+        <strong>1부: 시트 안에서 고르기</strong>
+        <ol>
+          <li><a href="#overview">한눈에 보기</a></li>
+          <li><a href="#setup">필터 줄과 시트가 하는 일</a></li>
+          <li><a href="#draft">고른 값은 임시 쿼리에 둔다</a></li>
+          <li><a href="#uncontrolled">방법 A: 칩이 스스로 기억한다</a></li>
+          <li><a href="#key">A를 key로 고치면: 포커스가 사라진다</a></li>
+          <li><a href="#controlled">방법 B: 임시 쿼리를 그대로 보여 준다</a></li>
+          <li><a href="#reopen">닫으면 버리고, 열 때마다 새로 시작한다</a></li>
+        </ol>
+        <strong>2부: 적용한 뒤 useOptimistic</strong>
+        <ol>
+          <li><a href="#optimistic">응답 전까지 적용한 값을 먼저 보여 준다</a></li>
+          <li><a href="#lifetime">임시 값은 언제 사라지나</a></li>
+          <li><a href="#why-together">같은 startTransition에 넣는 이유</a></li>
+          <li><a href="#free">덤으로 얻는 것</a></li>
+        </ol>
+        <strong>마무리</strong>
+        <ol>
+          <li><a href="#pitfalls">헷갈리기 쉬운 점</a></li>
+          <li><a href="#check">확인 문제</a></li>
+          <li><a href="#more">더 읽기</a></li>
+        </ol>
+      </nav>
+
+      <main>
+        <h1>01 필터 시트: 임시 쿼리, 제어 컴포넌트, useOptimistic</h1>
+        <p class="lead">
+          공연 목록의 필터 줄(<code>apps/store/src/shows/show-filter-bar.tsx</code>)과 필터 시트(<code>apps/store/src/shows/show-filter-sheet.tsx</code>)가 왜 고른 값을 주소와 따로 둔 임시 쿼리에 두는지, 왜 시트의 칩이
+          제어 컴포넌트인지, 적용한 뒤에 왜 <code>useOptimistic</code>과 <code>startTransition</code>을 쓰는지 하나씩 빼 보면서 설명한다. <code>useOptimistic</code> 자체의
+          원리, 특징, 다른 사용 사례는 <a href="../react-next/11-useOptimistic이-해결하는-문제와-원리.html">react-next 11 문서</a>에 있고, 이 문서는 필터 시트에 쓴 이유와 방법에
+          집중한다.
+        </p>
+
+        <section id="overview">
+          <h2>한눈에 보기</h2>
+          <div class="callout">
+            <p>
+              시트에서 고른 값은 <strong>임시 쿼리(<code>draft</code>)</strong>에만 두고, "적용"을 누를 때 한 번에 주소에 넣는다. 시트의 칩은
+              <strong><code>draft</code>를 그대로 보여 주는 제어 컴포넌트</strong>다. 그래서 "초기화"처럼 바깥에서 값을 바꿔도 칩이 따라가고, 키보드
+              포커스도 잃지 않는다. 적용한 뒤 서버가 새 목록을 그릴 때까지는 칩 이름과 필터 점에 <code>useOptimistic</code>으로 적용한 값을 먼저 보인다.
+            </p>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>값</th>
+                  <th>어디에 두나</th>
+                  <th>누가 보나</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td><code>query</code></td><td>주소(서버가 정리해 props로 내려 준다)</td><td>목록. 필터 줄에서는 <code>shownQuery</code>의 바탕</td></tr>
+                <tr><td><code>shownQuery</code></td><td>필터 줄의 <code>useOptimistic(query)</code></td><td>필터 줄의 칩 이름과 필터 점, 시트를 열 때의 처음 값</td></tr>
+                <tr><td><code>draft</code></td><td>필터 시트의 <code>useState</code></td><td>시트 안의 칩. 적용하면 시트가 필터 줄에 돌려준다</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <pre><code class="language-tsx">// 필터 줄(ShowFilterBar)
+const [shownQuery, setShownQuery] = useOptimistic(query);
+
+// 필터 시트(ShowFilterSheet)
+const [draft, setDraft] = useState(initialQuery);</code></pre>
+          <pre><code class="language-tsx">&lt;ToggleGroup
+  label="장르"
+  items={GENRE_ITEMS}
+  value={draft.genre}
+  onValueChange={(value) =&gt; {
+    setDraft(getGenreChangeQuery({ query: draft, value }));
+  }}
+/&gt;</code></pre>
+          <pre><code class="language-tsx">// 필터 줄: 시트가 "적용"으로 돌려준 쿼리를 주소에 넣는다
+if (next === null) return;
+startTransition(() =&gt; {
+  setShownQuery(next);
+  router.replace(getFilterApplyHref(next));
+});</code></pre>
+        </section>
+
+        <section id="setup">
+          <h2>필터 줄과 시트가 하는 일</h2>
+          <p>
+            목록 화면(<code>apps/store/app/page.tsx</code>)은 화면 폭과 관계없이 필터 줄 하나(<code>ShowFilterBar</code>)를 둔다. NOL 티켓 모바일 검색 결과처럼 왼쪽에
+            <code>[장르 ▾][판매 상태 ▾]</code> 칩을 두고(넘치면 가로 스크롤), 오른쪽에 <code>[필터]</code>와 <code>[정렬]</code> 버튼을 고정한다. 칩과 필터 버튼은 같은 필터
+            시트를 열고, 칩으로 열면 그 칩의 부분으로 스크롤한다. 좁은 화면에서는 아래에서 올라오는 시트(store-ui <code>Drawer</code>)로, 넓은 화면(<code>sm</code>, 640px
+            이상)에서는 가운데 뜨는 창(store-ui <code>Dialog</code>)으로 연다(<code>picker-sheet.tsx</code>). 어느 쪽으로 열지는 여는 순간 <code>isWideScreen()</code>(<code>matchMedia</code>)으로
+            정하므로, 그릴 때 화면 폭을 읽지 않는다. 정렬은 따로 정렬 시트(<code>show-sort-sheet.tsx</code>)를 연다.
+          </p>
+          <p>
+            시트는 overlay-kit의 <code>overlay.openAsync</code>로 연다. 이 함수는 시트를 그리고 Promise를 돌려준다. 시트가
+            <code>controller.close(값)</code>을 부르면 Promise가 그 값으로 끝난다. 필터 시트는 "적용"이면 고친 쿼리를, 그 밖의 방법으로 닫으면 <code>null</code>을 돌려준다. 필터 줄은 그 결과를 받아 주소를 바꾼다. 그래서 열림 상태와
+            고르는 중인 값은 시트가 갖고, 필터 줄은 여는 일과 결과를 적용하는 일만 한다.
+          </p>
+          <p>
+            필터 값은 주소(<code>/?genre=musical&amp;genre=play</code>)에 남는다. 그래서 새로고침이나 공유를 해도, 상세에서 돌아와도 필터가 그대로다. 주소를 읽고 만드는
+            함수는 <a href="00-공연-목록-쿼리-정리와-주소-만들기.html">store-logic 00 문서</a>에 있다.
+          </p>
+          <ol class="steps blue">
+            <li><strong>칩이나 필터 버튼을 누른다</strong> <code>openFilterSheet</code>가 새 필터 시트를 연다. 시트의 <code>draft</code>는 지금 보이는 쿼리(<code>shownQuery</code>)로 시작한다.</li>
+            <li><strong>시트에서 고른다</strong> 칩을 누를 때마다 <code>draft</code>만 바뀐다. 주소와 목록은 그대로다.</li>
+            <li><strong>적용을 누른다</strong> 시트가 <code>controller.close(draft)</code>로 닫히고, 필터 줄이 받은 쿼리로 <code>router.replace</code>한다. 방문 기록을 쌓지 않으려고 <code>push</code> 대신 <code>replace</code>를 쓴다.</li>
+            <li><strong>서버가 다시 그린다</strong> 서버의 <code>page.tsx</code>가 새 주소로 API를 불러 목록을 만든다. 여기서 시간이 걸린다.</li>
+            <li><strong>새 query가 내려온다</strong> <code>ShowFilterBar</code>가 새 <code>query</code>를 props로 받는다.</li>
+          </ol>
+          <p>
+            필터 줄의 칩 이름은 고른 값이다. 고른 장르가 없으면 "장르", 있으면 <code>getGenreChipLabel</code>이 "뮤지컬,연극"처럼 쉼표로 잇는다. 필터가 하나라도 걸려 있으면
+            필터 버튼에 점을 단다.
+          </p>
+        </section>
+
+        <section id="draft">
+          <h2>고른 값은 임시 쿼리에 둔다</h2>
+          <p>
+            칩을 누를 때마다 주소를 바꿀 수도 있다. 그러면 시트에 가린 목록이 칩마다 서버에서 다시 그려진다. 사용자는 시트에 가려 목록을 보지 못하는데, 요청만 칩 수만큼
+            간다. 그래서 시트 안에서는 <code>draft</code>만 바꾸고, "적용"으로 한 번에 주소에 넣는다. NOL 티켓 모바일 필터 시트도 이렇게 동작한다.
+          </p>
+          <p>
+            <code>draft</code>는 장르와 판매 상태를 나누지 않고 쿼리 전체(<code>ShowListQuery</code>) 하나로 둔다. 다음 값은 <code>getGenreChangeQuery</code>,
+            <code>getStatusChangeQuery</code>(<code>show-list-query.ts</code>)가 <code>draft</code>에서 만든다. 이 함수들은 주소의 genre, status를 정리할 때와 같은 규칙으로
+            모르는 값을 버리고 선택지 순서로 맞춘다. 주소가 아니라 쿼리를 돌려주므로 <code>draft</code>에 그대로 넣고, 적용하면 필터 줄이 <code>getFilterApplyHref</code>로 주소를 만든다.
+          </p>
+          <p>
+            <code>draft</code>는 브라우저 안의 상태라 칩을 누르면 바로 켜진다. 서버를 기다리지 않으니 시트 안에서는 <code>useOptimistic</code>이 필요 없다.
+          </p>
+          <p>남은 질문은 이것이다. <strong>시트의 칩이 "지금 무엇이 켜져 있는지"를 어디에 기억할까?</strong></p>
+        </section>
+
+        <section id="uncontrolled">
+          <h2>방법 A: 칩이 스스로 기억한다</h2>
+          <pre><code class="language-tsx">&lt;ToggleGroup
+  defaultValue={draft.genre}
+  onValueChange={(value) =&gt; setDraft(getGenreChangeQuery({ query: draft, value }))}
+/&gt;</code></pre>
+          <p>
+            <code>defaultValue</code>를 주면 칩(ToggleGroup)은 처음 그릴 때 그 값을 <strong>자기 안에 복사</strong>해 둔다. 그다음부터는 누를 때마다 자기가 들고 있는
+            값을 바꾼다. 이런 컴포넌트를 <strong>비제어 컴포넌트</strong>라고 한다. <code>onValueChange</code>로 <code>draft</code>에도 적어 두면 적용할 값은 맞는다.
+          </p>
+          <p>문제는 <strong>칩을 누르지 않고 <code>draft</code>가 바뀔 때</strong>다. <code>defaultValue</code>는 처음 한 번만 읽기 때문이다.</p>
+          <ol class="steps green">
+            <li><strong>시트에서 "뮤지컬"을 누른다</strong> 칩의 기억: <code>[뮤지컬]</code>, <code>draft.genre</code>: <code>['musical']</code></li>
+            <li><strong>"초기화"를 누른다</strong> <code>draft.genre</code>: <code>[]</code></li>
+            <li><strong>칩은 그대로다</strong> 칩은 <code>draft</code>가 바뀐 것을 모르니 <code>[뮤지컬]</code>이 켜진 채로 남는다.</li>
+          </ol>
+          <p>화면의 칩과 적용될 값이 서로 다른 말을 한다. 이대로 적용하면 켜진 칩과 달리 장르 필터가 없는 목록이 나온다.</p>
+          <p>
+            시트를 여는 것만 보면 비제어로도 된다. 시트는 열 때마다 새로 그려지므로 <code>defaultValue</code>도 열 때마다 처음 값을 다시 읽는다. 문제는 시트가 열려 있는 동안
+            바깥에서 값을 바꾸는 "초기화"다.
+          </p>
+        </section>
+
+        <section id="key">
+          <h2>A를 key로 고치면: 포커스가 사라진다</h2>
+          <p>비제어 컴포넌트가 바깥 값을 따라가게 하는 흔한 방법은 값이 바뀔 때 컴포넌트를 <strong>새로 만드는</strong> 것이다.</p>
+          <pre><code class="language-tsx">&lt;ToggleGroup key={draft.genre.join()} defaultValue={draft.genre} /&gt;</code></pre>
+          <p>
+            React는 <code>key</code>가 바뀌면 이전 컴포넌트를 버리고 새로 만든다(리마운트). 새로 만들 때 <code>defaultValue</code>를 다시 읽으니 초기화는 해결된다. 검색 폼이
+            주소의 검색어를 <code>key</code>로 두는 것도 이 방법이다(<a href="../react-next/09-검색-폼-제출과-비제어-입력.html#key">react-next 09 문서</a>).
+          </p>
+          <p>그런데 <strong>칩을 직접 눌러도</strong> <code>draft.genre</code>가 바뀌므로 칩 묶음을 새로 만든다. 키보드로 쓰는 사람에게 문제가 생긴다.</p>
+          <ol class="steps green">
+            <li><strong>Tab으로 "연극"까지 가서 Space로 누른다</strong> 포커스가 "연극" 버튼에 있다.</li>
+            <li><strong><code>draft.genre</code>가 바뀌어 key가 바뀐다</strong> React가 칩 묶음을 버리고 새 버튼들을 만든다.</li>
+            <li><strong>포커스를 잃는다</strong> 포커스를 갖고 있던 버튼이 문서에서 사라졌다.</li>
+            <li><strong>처음부터 다시</strong> "콘서트"도 고르려면 다시 Tab으로 찾아가야 한다.</li>
+          </ol>
+          <p>
+            검색 폼은 제출해야 검색어가 바뀌므로 입력하는 도중에 새로 만들 일이 없다. 칩은 여러 개를 이어서 고르는 경우가 많아 누를 때마다 새로 만들면 그냥 둘 수 없다.
+          </p>
+        </section>
+
+        <section id="controlled">
+          <h2>방법 B: 임시 쿼리를 그대로 보여 준다</h2>
+          <pre><code class="language-tsx">&lt;ToggleGroup value={draft.genre} onValueChange={...} /&gt;</code></pre>
+          <p>
+            <code>value</code>를 주면 칩은 아무것도 기억하지 않고 받은 값을 그대로 보여 준다. 이런 컴포넌트를 <strong>제어 컴포넌트</strong>라고 한다. 칩의 값을 정하는
+            것은 칩이 아니라 부모가 넘긴 <code>draft.genre</code>다. 값이 있는 곳이 하나뿐이라 화면과 적용될 값이 어긋날 틈이 없다.
+          </p>
+          <ul>
+            <li><strong>초기화</strong>: <code>setDraft({ ...draft, genre: [], status: [] })</code>로 <code>draft</code>를 비우면 칩도 꺼진다. 해결.</li>
+            <li><strong>포커스</strong>: 칩 묶음을 새로 만들지 않고 <code>aria-pressed</code> 같은 속성만 바꾼다. 누른 버튼이 그대로 있으니 포커스도 남는다. 해결.</li>
+          </ul>
+          <p>
+            store-ui ToggleGroup의 <code>value</code> 설명(<code>packages/store-ui/src/toggle-group.tsx</code>)도 이 경우를 든다. 시트의 임시 값처럼 바깥에서 값을 바꿔야 할 때
+            제어로 쓰고, 칩을 새로 만들지 않아 누른 칩의 포커스가 남는다.
+          </p>
+        </section>
+
+        <section id="reopen">
+          <h2>닫으면 버리고, 열 때마다 새로 시작한다</h2>
+          <pre><code class="language-tsx">async function openFilterSheet(section: FilterSection) {
+  const wide = isWideScreen();
+  const next = await overlay.openAsync&lt;ShowListQuery | null&gt;(
+    ({ isOpen, close, unmount }) =&gt; (
+      &lt;ShowFilterSheet
+        controller={{ wide, isOpen, close, unmount }}
+        initialQuery={shownQuery}
+        section={section}
+      /&gt;
+    ),
+  );
+  if (next === null) return;
+  applyQuery({ next, href: getFilterApplyHref(next) });
+}
+
+// 창이 돌려준 결과를 먼저 보이고 주소를 바꾼다. 같은 transition이라 새 목록이 올 때까지 보인 값이 남는다.
+function applyQuery({ next, href }: { next: ShowListQuery; href: string }) {
+  startTransition(() =&gt; {
+    setShownQuery(next);
+    router.replace(href);
+  });
+}</code></pre>
+          <p>
+            시트는 열 때마다 새로 그려지고, 닫히는 움직임이 끝나면(<code>onCloseComplete</code>에 넘긴 <code>unmount</code>) 트리에서 빠진다. 그래서 <code>draft</code>는 열 때 받은
+            <code>initialQuery</code>로 늘 새로 시작한다. 적용하지 않고 닫으면(바깥 누르기, Esc 등) 시트가 <code>controller.close(null)</code>을 부르고, 고르던 <code>draft</code>는 시트와 함께
+            사라진다. 다시 열 때 채울 코드가 따로 없다.
+          </p>
+          <p>
+            <code>initialQuery</code>에는 <code>query</code>가 아니라 <code>shownQuery</code>를 넘긴다. 적용한 직후 서버가 답하기 전에 다시 열어도, 아직 옛 값인 <code>query</code>가 아니라
+            방금 적용한 값으로 시트가 열린다.
+          </p>
+          <p>
+            "초기화"는 시트 안의 장르와 판매 상태 선택만 지우고 시트를 닫지 않는다. 검색어와 정렬은 시트에서 고르는 값이 아니므로 그대로 둔다. 주소는 적용할 때 바뀐다.
+          </p>
+        </section>
+
+        <section id="optimistic">
+          <h2>응답 전까지 적용한 값을 먼저 보여 준다</h2>
+          <p>
+            적용을 누르면 시트는 바로 닫히지만, 새 <code>query</code>는 서버가 새 목록을 그린 뒤에야 내려온다. 필터 줄이 <code>query</code>를 그대로 보여 주면 그동안 칩 이름은
+            옛 값("장르")이고 필터 점도 없다. 방금 고른 것이 반영되지 않은 것처럼 보인다.
+          </p>
+          <p>
+            <code>useOptimistic</code>은 "진짜 값이 올 때까지 잠깐 보여 줄 값"을 두는 훅이다. 진짜 값을 인자로 받고, 보여 줄 값과 임시 값을 넣는 함수를 돌려준다.
+          </p>
+          <pre><code class="language-ts">const [shownQuery, setShownQuery] = useOptimistic(query);
+// shownQuery: 평소에는 query 그대로. 임시 값을 넣으면 화면 이동이 끝날 때까지 그 값</code></pre>
+          <p>필터 줄은 <code>query</code> 대신 <code>shownQuery</code>로 칩 이름, 칩의 고른 모양, 필터 점을 정한다.</p>
+          <pre><code class="language-tsx">const hasFilter = shownQuery.genre.length &gt; 0 || shownQuery.status.length &gt; 0;</code></pre>
+          <pre><code class="language-tsx">&lt;FilterBarButton
+  selected={shownQuery.genre.length &gt; 0}
+  onClick={() =&gt; {
+    void openFilterSheet('genre');
+  }}
+&gt;
+  &lt;span className="max-w-[160px] truncate"&gt;
+    {getGenreChipLabel(shownQuery.genre)}
+  &lt;/span&gt;
+  &lt;ChevronDownIcon /&gt;
+&lt;/FilterBarButton&gt;</code></pre>
+          <ul>
+            <li><strong>바로 바뀐다</strong>: 적용을 누르자마자 칩 이름이 "뮤지컬,연극"이 되고 필터 점이 붙는다.</li>
+            <li><strong>진짜 값이 오면 바꿔 끼운다</strong>: 새 <code>query</code>가 내려올 때 화면 이동이 끝나고 임시 값이 걷힌다. 그때 <code>query</code>는 임시 값과 같은 조건이라 화면은 그대로다.</li>
+          </ul>
+          <p>
+            임시 값에는 시트가 돌려준 쿼리(<code>next</code>, 시트의 <code>draft</code>)를 그대로 넣는다. 그 page는 3처럼 남아 있을 수 있지만, 필터 줄은 장르와 판매 상태만 보므로 상관없다. 주소는
+            <code>getFilterApplyHref</code>가 page를 빼서 만든다.
+          </p>
+        </section>
+
+        <section id="lifetime">
+          <h2>임시 값은 언제 사라지나</h2>
+          <p>임시 값이 너무 빨리 사라지면 칩 이름이 옛 값으로 돌아갔다가 다시 바뀌고, 너무 오래 남으면 주소와 어긋난다. React가 정한 규칙은 이렇다.</p>
+          <div class="callout">
+            <p>
+              <code>setOptimistic</code>을 부르면 임시 값은 <strong>바로</strong> 화면에 그려진다. 그리고 그 순간의 <strong>transition 차선</strong>에 "여기가 끝나면 임시 값을
+              버린다"는 표시를 남긴다. 그 차선의 화면이 다 그려지면(커밋되면) 임시 값을 버리고 인자로 받은 진짜 값을 보여 준다.
+            </p>
+          </div>
+          <p>
+            <strong>transition</strong>은 "급하지 않은 화면 갱신"을 뜻한다. <code>startTransition(() =&gt; { ... })</code> 안에서 일어난 갱신이 transition이 되고, React는 이런
+            갱신을 <strong>차선(lane)</strong>이라는 번호표로 묶어 함께 처리한다. 같은 차선의 갱신은 함께 그려지고 함께 끝난다.
+          </p>
+          <p>여기서 중요한 사실이 둘 있다.</p>
+          <ol class="steps blue">
+            <li>
+              <strong>router.replace는 스스로 startTransition을 연다</strong> Next의 화면 이동은 안에서 <code>startTransition</code>으로 라우터 상태를 바꾼다. 새 페이지가
+              서버에서 올 때까지 이 차선의 그리기는 기다린다(끝나지 않는다).
+            </li>
+            <li>
+              <strong>이어서 실행되는 transition은 같은 차선을 쓴다</strong> React는 지금 처리하는 차례에서 처음 고른 transition 차선을 기억해 두고, 그 차례에 연 transition에
+              몇 번이든 같은 번호를 준다. 필터 줄은 시트가 돌려준 결과를 받은 뒤 한 <code>startTransition</code> 안에서 두 줄을 이어서 부르므로,
+              <code>setShownQuery</code>가 남긴 표시와 <code>router.replace</code>의 화면 이동이 <strong>같은 차선</strong>에 묶인다.
+            </li>
+          </ol>
+          <p>
+            두 사실을 합치면, 임시 값을 버리는 시점이 "새 페이지가 서버에서 와서 그려지는 시점"과 정확히 같아진다. 그 사이에 옛 값이 끼어들 틈이 없다.
+          </p>
+          <details class="fold">
+            <summary>선택 읽기: React와 Next 소스에서 확인하기</summary>
+            <div class="fold-body">
+              <p><code>react-dom-client.development.js</code>(19.3.1)를 줄여 옮겼다. 임시 값은 즉시 그리는 차선(2)에 넣고, 되돌릴 차선은 지금 이벤트의 transition 차선으로 정한다.</p>
+              <pre><code class="language-js">function dispatchOptimisticSetState(fiber, throwIfDuringRender, queue, action) {
+  null === ReactSharedInternals.T &amp;&amp; 0 === currentEntangledLane &amp;&amp;
+    console.error('An optimistic state update occurred outside a transition or action. ...');
+  action = {
+    lane: 2,                              // 바로 그린다
+    revertLane: requestTransitionLane(),  // 이 차선이 끝나면 되돌린다
+    action, ...
+  };
+  ...
+}
+
+function requestTransitionLane() {
+  if (0 === currentEventTransitionLane) {
+    // 이 이벤트에서 처음 요청하면 새 차선을 하나 고른다
+    currentEventTransitionLane = ...;
+  }
+  return currentEventTransitionLane;    // 같은 이벤트 안에서는 늘 같은 차선
+}</code></pre>
+              <p><code>next/dist/client/components/sequential-router-queue.js</code>(16.4.5)의 화면 이동도 <code>startTransition</code> 안에서 라우터 상태를 바꾼다.</p>
+              <pre><code class="language-js">function replace(href, options) {
+  navigate(href, 'replace', ...);
+}
+function navigate(...) {
+  ...
+  startTransition(() =&gt; { /* 라우터 상태를 바꾼다 */ });
+}</code></pre>
+            </div>
+          </details>
+        </section>
+
+        <section id="why-together">
+          <h2>같은 startTransition에 넣는 이유</h2>
+          <p><code>setShownQuery</code>와 <code>router.replace</code>를 같은 <code>startTransition</code> 안에서 부르는 이유는 이렇다.</p>
+          <ul>
+            <li>
+              <strong><code>setOptimistic</code>은 transition 안에서 부르라고 정해져 있다.</strong> 밖에서 부르면 React가 콘솔에
+              <code>An optimistic state update occurred outside a transition or action.</code> 오류를 찍는다.
+            </li>
+            <li>
+              <strong>"화면 이동이 끝날 때까지"라는 관계가 코드에 드러난다.</strong> 같은 <code>startTransition</code> 안에 두면 "이 임시 값은 이 화면 이동과 한 묶음"이라는 뜻을
+              코드만 보고 알 수 있다. 임시 값은 <a href="#lifetime">자기를 넣은 transition</a>이 끝날 때 걷히므로, 화면 이동을 같은 transition에 넣어야 새 목록이 올 때까지 남는다.
+            </li>
+            <li><strong>React 문서의 예도 이 모양이다.</strong> 임시 값을 넣는 일과 실제 작업을 같은 transition(action) 안에 둔다.</li>
+          </ul>
+        </section>
+
+        <section id="free">
+          <h2>덤으로 얻는 것</h2>
+          <p>
+            <code>useState</code>로 화면용 복사본을 두면 "언제 복사본을 버리고 주소 값으로 돌아갈지"를 직접 짜야 한다. 결과가 없을 때의 "조건 초기화" 링크나 뒤로 가기로 주소가
+            바뀔 때 복사본을 맞추는 <code>useEffect</code>가 필요하다. <code>useOptimistic</code>은 transition이 끝나면 언제나 진짜 값으로 돌아가므로 이런 코드가 없다.
+          </p>
+          <ul>
+            <li><strong>조건 초기화 링크, 뒤로 가기</strong>: 임시 값을 넣은 적이 없으니 처음부터 주소 값(<code>query</code>)이 보인다.</li>
+            <li><strong>적용</strong>: 화면 이동이 끝날 때까지만 적용한 값이 보이고, 그 뒤로는 다시 주소 값이 보인다.</li>
+          </ul>
+          <p>
+            <code>draft</code>는 반대로 <code>useState</code>가 맞다. 시트가 열려 있는 동안 사용자가 고친 값을 오래 들고 있어야 하고, 주소가 따라오지 않기 때문이다. 시트가 열릴 때마다 새로 그려지므로 언제 처음 값으로
+            돌아갈지 따로 정할 필요도 없다.
+          </p>
+        </section>
+
+        <section id="pitfalls">
+          <h2>헷갈리기 쉬운 점</h2>
+          <ul>
+            <li>
+              <strong><code>draft</code>와 <code>shownQuery</code>는 하는 일이 다르다.</strong> <code>draft</code>는 아직 적용하지 않은 선택이고 시트 안의 칩만 본다.
+              <code>shownQuery</code>는 적용한 선택이고 필터 줄만 본다. 시트에서 칩을 눌러도 필터 줄의 칩 이름은 바뀌지 않는다.
+            </li>
+            <li>
+              <strong>임시 값은 상태가 아니다.</strong> <code>useOptimistic</code>은 값을 저장해 두지 않는다. 진짜 값 위에 잠깐 덮어 보여 주는 것이고, 덮개는 transition이
+              끝나면 걷힌다.
+            </li>
+            <li>
+              <strong><code>key</code>는 값을 다시 채우는 도구이지 동기화 도구가 아니다.</strong> 값이 바뀔 때마다 컴포넌트를 새로 만드는 것이라 포커스, 열림 상태, 입력 중인
+              글자 같은 것이 모두 사라진다.
+            </li>
+            <li>
+              <strong><code>router.replace</code>를 쓴 이유와 <code>useOptimistic</code>을 쓴 이유는 다르다.</strong> <code>replace</code>는 필터를 여러 번 바꿔도 뒤로 가기
+              한 번에 목록에 오기 전 화면으로 가려고, <code>useOptimistic</code>은 응답 전 공백을 메우려고 쓴다. <code>push</code>를 써도 2부의 내용은 그대로다.
+            </li>
+          </ul>
+        </section>
+
+        <section id="check">
+          <h2>확인 문제</h2>
+          <div class="quiz">
+            <p class="quiz-q">1. 시트의 칩을 이렇게 바꾸면 "뮤지컬"을 고른 뒤 "초기화"를 눌렀을 때 칩은 어떻게 되는가?</p>
+            <p class="quiz-context"><a href="#uncontrolled">방법 A</a> 절.</p>
+            <pre><code class="language-diff"> &lt;ToggleGroup
+   label="장르"
+   items={GENRE_ITEMS}
+-  value={draft.genre}
++  defaultValue={draft.genre}
+   onValueChange={(value) =&gt; {
+     setDraft(getGenreChangeQuery({ query: draft, value }));
+   }}
+ /&gt;</code></pre>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  <code>draft.genre</code>는 비지만 "뮤지컬" 칩은 켜진 채로 남는다. <code>defaultValue</code>는 처음 그릴 때만 읽고, 그 뒤로는 칩이 자기 안의 값을 보여 준다.
+                  초기화는 칩을 누르지 않고 <code>draft</code>만 바꾸므로 칩이 알 방법이 없다. 이대로 적용하면 켜진 칩과 달리 장르 필터가 없는 목록이 나온다.
+                </p>
+              </div>
+            </details>
+          </div>
+          <div class="quiz">
+            <p class="quiz-q">2. 시트의 처음 값을 아래처럼 <code>query</code>로 넘기면, 적용한 직후 서버가 답하기 전에 시트를 다시 열 때 무엇이 보이는가?</p>
+            <p class="quiz-context"><a href="#reopen">닫으면 버리고, 열 때마다 새로 시작한다</a> 절. 장르가 없는 상태에서 "연극"을 골라 적용하고, 서버 응답은 2초 걸린다.</p>
+            <pre><code class="language-diff"> &lt;ShowFilterSheet
+   controller={{ wide, isOpen, close, unmount }}
+-  initialQuery={shownQuery}
++  initialQuery={query}
+   section={section}</code></pre>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  필터 줄의 칩 이름은 이미 "연극"인데, 다시 연 시트에는 아무 장르도 켜져 있지 않다. <code>query</code>는 서버가 새 페이지를 그린 뒤에야 바뀌므로 아직 적용 전의 값이다.
+                  이 상태로 다른 칩을 골라 적용하면 "연극"이 빠진 주소로 간다. <code>shownQuery</code>를 넘기면 방금 적용한 "연극"이 켜진 채로 열린다.
+                </p>
+              </div>
+            </details>
+          </div>
+          <div class="quiz">
+            <p class="quiz-q">3. 필터 줄의 칩 이름을 아래처럼 <code>query</code>로 정하면, 적용을 누른 뒤 무엇이 보이는가?</p>
+            <p class="quiz-context"><a href="#optimistic">응답 전까지 적용한 값을 먼저 보여 준다</a> 절. 장르가 없는 상태에서 "뮤지컬"을 골라 적용하고, 서버 응답은 2초 걸린다.</p>
+            <pre><code class="language-diff"> &lt;span className="max-w-[160px] truncate"&gt;
+-  {getGenreChipLabel(shownQuery.genre)}
++  {getGenreChipLabel(query.genre)}
+ &lt;/span&gt;</code></pre>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  시트가 닫힌 뒤 2초 동안 칩 이름이 "장르"로 남고, 새 목록이 올 때 "뮤지컬"로 바뀐다. <code>query</code>는 서버가 새 페이지를 그린 뒤에야 내려오기 때문이다.
+                  <code>shownQuery</code>를 쓰면 적용을 누르자마자 "뮤지컬"이 보인다.
+                </p>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section id="more">
+          <h2>더 읽기</h2>
+          <ul>
+            <li><code>apps/store/src/shows/show-filter-bar.tsx</code>: 이 문서의 필터 줄. 시트를 열고 결과를 적용한다</li>
+            <li><code>apps/store/src/shows/show-filter-sheet.tsx</code>: 이 문서의 필터 시트. <code>draft</code>를 갖는다</li>
+            <li><code>apps/store/src/shows/picker-sheet.tsx</code>: 화면 폭에 따라 Drawer나 Dialog로 여는 창</li>
+            <li><code>apps/store/src/shows/show-filter-items.ts</code>: 칩에 보이는 이름과 <code>getGenreChipLabel</code>, <code>getStatusChipLabel</code></li>
+            <li><code>apps/store/src/shows/show-sort-sheet.tsx</code>: 누르면 바로 적용하는 정렬 시트</li>
+            <li><code>packages/store-ui/src/toggle-group.tsx</code>: 제어 모드(<code>value</code>)를 받는 ToggleGroup</li>
+            <li>
+              <a href="00-공연-목록-쿼리-정리와-주소-만들기.html#filter-apply">store-logic 00 문서</a>: 적용할 때 주소를 만드는 <code>getFilterApplyHref</code>와 그 바탕인
+              <code>getShowListHref</code>
+            </li>
+            <li>
+              <a href="../react-next/09-검색-폼-제출과-비제어-입력.html">react-next 09 문서</a>: 비제어 입력과 <code>key</code>로 값을 다시 채우는 방법, 필터와 정렬은
+              <code>replace</code>이고 검색은 <code>push</code>인 이유
+            </li>
+            <li><a href="../react-next/11-useOptimistic이-해결하는-문제와-원리.html">react-next 11 문서</a>: <code>useOptimistic</code>의 원리, 특징, 다른 사용 사례</li>
+            <li><a href="https://react.dev/reference/react/useOptimistic">React 문서: useOptimistic</a></li>
+            <li><a href="https://react.dev/reference/react/startTransition">React 문서: startTransition</a></li>
+          </ul>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

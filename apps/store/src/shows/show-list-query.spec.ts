@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   getConditionResetHref,
+  getFilterApplyHref,
   getGenreChangeQuery,
   getSearchSubmitHref,
   getStatusChangeQuery,
@@ -250,15 +251,9 @@ describe('getSortChangeHref', () => {
     expect(
       getSortChangeHref({
         query: { ...DEFAULT_QUERY, page: 3, q: '정원' },
-        value: 'newest',
+        sort: 'newest',
       }),
-    ).toBe('/?q=%EC%A0%95%EC%9B%90&sort=newest');
-  });
-
-  it('모르는 정렬값이면 주소를 만들지 않는다', () => {
-    expect(
-      getSortChangeHref({ query: DEFAULT_QUERY, value: 'popular' }),
-    ).toBeNull();
+    ).toBe(encodeURI('/?q=정원&sort=newest'));
   });
 });
 
@@ -311,6 +306,24 @@ describe('getStatusChangeQuery', () => {
         value: ['upcoming', 'ended'],
       }),
     ).toEqual({ ...DEFAULT_QUERY, genre: ['play'], status: ['upcoming'] });
+  });
+});
+
+describe('getFilterApplyHref', () => {
+  it('임시 쿼리의 조건은 두고 page를 빼서 1페이지로 간다', () => {
+    expect(
+      getFilterApplyHref({
+        page: 3,
+        q: '정원',
+        genre: ['musical', 'concert'],
+        status: ['on_sale'],
+        sort: 'newest',
+      }),
+    ).toBe(
+      encodeURI(
+        '/?q=정원&genre=musical&genre=concert&status=on_sale&sort=newest',
+      ),
+    );
   });
 });
 
@@ -394,7 +407,7 @@ describe('getLastPageRedirectHref', () => {
         query: { ...DEFAULT_QUERY, page: 9, q: '정원', sort: 'newest' },
         totalPages: 3,
       }),
-    ).toBe('/?q=%EC%A0%95%EC%9B%90&sort=newest&page=3');
+    ).toBe(encodeURI('/?q=정원&sort=newest&page=3'));
   });
 
   it('공연이 없으면 1페이지만 두고, 그보다 뒤면 1페이지로 리다이렉트한다', () => {

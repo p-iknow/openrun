@@ -1,5 +1,6 @@
 import localFont from 'next/font/local';
 import Link from 'next/link';
+import { OverlayProvider } from 'overlay-kit';
 import { type ReactNode, Suspense } from 'react';
 import { HeaderSearch } from '../src/shows/header-search';
 import { ShowListSearchForm } from '../src/shows/show-list-search-form';
@@ -43,7 +44,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             </div>
           </div>
         </header>
-        <div className="mx-auto max-w-content px-lg py-xl">{children}</div>
+        {/* 필터와 정렬 창처럼 overlay-kit으로 여는 창이 이 안에 그려진다. 창을 연 화면의 상태와 따로 열고 닫는다. */}
+        <OverlayProvider>
+          <div className="mx-auto max-w-content px-lg py-xl">{children}</div>
+        </OverlayProvider>
       </body>
     </html>
   );

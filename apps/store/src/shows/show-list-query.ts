@@ -110,22 +110,15 @@ export function getShowListHref(query: ShowListQuery): string {
   return toHref(getShowListSearchParams(query));
 }
 
-/**
- * 정렬 Select에서 고른 값으로 옮겨 갈 주소를 만든다. 검색어는 두고 page는 빼서 1페이지로 돌아간다.
- * 고른 값이 정렬 선택지가 아니면 `null`이다.
- */
+/** 정렬 시트에서 고른 정렬로 옮겨 갈 주소를 만든다. 다른 조건은 두고 page는 빼서 1페이지로 돌아간다. */
 export function getSortChangeHref({
   query,
-  value,
+  sort,
 }: {
   query: ShowListQuery;
-  /** Select가 넘긴 값 */
-  value: string;
-}): string | null {
-  const sort = findShowSort(value);
-  return sort === undefined
-    ? null
-    : getShowListHref({ ...query, sort, page: DEFAULT_PAGE });
+  sort: ShowSort;
+}): string {
+  return getShowListHref({ ...query, sort, page: DEFAULT_PAGE });
 }
 
 /**
@@ -164,6 +157,14 @@ export function getStatusChangeQuery({
     status: parseChoices({ value, choices: SHOW_LIST_SALES_STATUSES }),
     page: DEFAULT_PAGE,
   };
+}
+
+/**
+ * 필터 시트에서 "적용"을 눌렀을 때 옮겨 갈 주소를 만든다. 시트에서 고친 임시 쿼리를 받는다.
+ * 임시 쿼리는 `getGenreChangeQuery`, `getStatusChangeQuery`로 고치지만, 칩을 바꾸지 않고 적용하면 주소의 page가 남아 있으므로 여기서 뺀다.
+ */
+export function getFilterApplyHref(draft: ShowListQuery): string {
+  return getShowListHref({ ...draft, page: DEFAULT_PAGE });
 }
 
 /**

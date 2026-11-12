@@ -30,7 +30,7 @@
           <li><a href="#chat">채팅 메시지 보내기</a></li>
           <li><a href="#delete">목록에서 지우기</a></li>
           <li><a href="#switch">설정 스위치와 서버 함수</a></li>
-          <li><a href="#chips">주소를 바꾸는 필터 칩</a></li>
+          <li><a href="#chips">주소를 바꾸는 필터 시트</a></li>
           <li><a href="#when-not">쓰지 않는 편이 나은 때</a></li>
         </ol>
         <strong>마무리</strong>
@@ -45,8 +45,8 @@
         <h1>11 useOptimistic이 해결하는 문제와 원리</h1>
         <p class="lead">
           React 19의 <code>useOptimistic</code>이 어떤 문제를 풀고, 어떤 규칙으로 임시 값을 보여 주고 거두는지 정리한다. 2부의 기록은 스토어 앱의 개발 서버에 실험용
-          페이지를 잠깐 만들어 React 19.3.1로 직접 잰 값이다. 이 저장소에서 쓰는 곳은 필터 칩이고, 그 사례는
-          <a href="../store-logic/01-필터-칩-제어-컴포넌트와-useOptimistic.html">store-logic 01 문서</a>에 따로 있다.
+          페이지를 잠깐 만들어 React 19.3.1로 직접 잰 값이다. 이 저장소에서 쓰는 곳은 필터 시트를 적용한 뒤의 필터 줄이고, 그 사례는
+          <a href="../store-logic/01-필터-시트-임시-쿼리와-useOptimistic.html">store-logic 01 문서</a>에 따로 있다.
         </p>
 
         <section id="overview">
@@ -148,7 +148,7 @@ useEffect(() =&gt; setLiked(post.liked), [post.liked]); // 서버 값이 바뀌�
           <pre><code class="language-tsx">const [liked, setOptimisticLiked] = useOptimistic(post.liked);
 
 setOptimisticLiked(true); // 임시 값으로 true를 보여 준다</code></pre>
-          <p>임시 값이 무엇인지 그 자리에서 알 때 쓴다. 좋아요, 스위치, 필터 칩처럼 "새 값 하나"로 끝나는 경우다.</p>
+          <p>임시 값이 무엇인지 그 자리에서 알 때 쓴다. 좋아요, 스위치, 필터 적용처럼 "새 값 하나"로 끝나는 경우다.</p>
           <h3>계산 함수 주기</h3>
           <pre><code class="language-tsx">const [shownMessages, addOptimisticMessage] = useOptimistic(
   messages,                                         // 진짜 값
@@ -422,27 +422,30 @@ export function NotificationSwitch({ on }: { on: boolean }) {
         </section>
 
         <section id="chips">
-          <h2>주소를 바꾸는 필터 칩</h2>
+          <h2>주소를 바꾸는 필터 시트</h2>
           <p>
-            이 저장소의 사례다. 칩은 주소의 값(<code>query.genre</code>)을 그대로 보여 주는 제어 컴포넌트라서, 주소가 바뀌기 전(서버가 새 페이지를 그리기 전)에는 눌러도 켜지지
-            않는다. 덮개로 그 사이를 메운다.
+            이 저장소의 사례다. 공연 목록의 필터 시트(<code>show-filter-sheet.tsx</code>)는 고른 값을 임시 쿼리(<code>draft</code>)에 모았다가 "적용"을 누르면 그 쿼리를 돌려주고,
+            필터 줄(<code>show-filter-bar.tsx</code>)이 그 쿼리를 주소에 넣는다. 필터 줄의 칩 이름("뮤지컬,연극")과 필터 점은 주소의 값(<code>query</code>)을 보여 주므로, 서버가 새 페이지를 그리기 전에는 적용한 값이 보이지 않는다.
+            덮개로 그 사이를 메운다.
           </p>
           <pre><code class="language-tsx">const [shownQuery, setShownQuery] = useOptimistic(query);
 
-// 장르 칩을 누르면
-const next = getGenreChangeQuery({ query: shownQuery, value }); // 화면의 쿼리에서 다음 쿼리를 만든다
+// 시트를 열고, "적용"으로 돌려준 쿼리를 받는다. 적용하지 않고 닫으면 null이다
+const next = await overlay.openAsync&lt;ShowListQuery | null&gt;(/* 필터 시트 */);
+if (next === null) return;
 startTransition(() =&gt; {
   setShownQuery(next);
-  router.replace(getShowListHref(next)); // 화면 이동도 transition이라 새 페이지가 그려질 때 함께 끝난다
+  router.replace(getFilterApplyHref(next)); // 화면 이동도 transition이라 새 페이지가 그려질 때 함께 끝난다
 });</code></pre>
           <p>
-            임시 값을 장르와 판매 상태로 나누지 않고 쿼리 전체 하나로 둔 것이 요점이다. 다음 값은 진짜 값(<code>query</code>)이 아니라 보이는 값(<code>shownQuery</code>)에서 만든다는
-            규칙(<a href="#pitfalls">헷갈리기 쉬운 점</a>)을 칩 줄 두 개에 걸쳐 지키려면, 두 칩 줄이 같은 보이는 값을 봐야 한다.
+            필터 줄은 <code>getGenreChipLabel(shownQuery.genre)</code>처럼 <code>shownQuery</code>로 칩 이름과 필터 점을 정하고, 시트를 열 때 처음 값으로도 <code>shownQuery</code>를 넘긴다.
+            그래서 적용한 직후 서버가 답하기 전에 다시 열어도 방금 고른 값이 보인다. 정렬도 같은 방식으로 <code>shownQuery.sort</code>를 먼저 바꾼다. 시트 안의 칩은 덮개가 필요 없다. 고르는
+            동안의 값(<code>draft</code>)은 브라우저 안의 <code>useState</code>라 누르면 바로 바뀌고, 다음 값도 <code>draft</code>에서 만든다.
           </p>
           <p>
-            다른 사례와 달리 비동기 함수가 아니다. <code>router.replace</code>가 안에서 transition을 열고, 새 페이지가 서버에서 올 때까지 그 transition이 끝나지 않기 때문에 덮개가
-            유지된다. 왜 제어 컴포넌트로 뒀는지, 실험 결과는
-            <a href="../store-logic/01-필터-칩-제어-컴포넌트와-useOptimistic.html">store-logic 01 문서</a>에 있다.
+            <code>startTransition</code>에 넘긴 함수는 비동기 함수가 아니다. <code>router.replace</code>가 안에서 transition을 열고, 새 페이지가 서버에서 올 때까지 그 transition이 끝나지 않기 때문에 덮개가
+            유지된다. 왜 임시 쿼리를 따로 두고 시트의 칩을 제어 컴포넌트로 뒀는지는
+            <a href="../store-logic/01-필터-시트-임시-쿼리와-useOptimistic.html">store-logic 01 문서</a>에 있다.
           </p>
         </section>
 
@@ -566,7 +569,7 @@ add(mine);</code></pre>
         <section id="more">
           <h2>더 읽기</h2>
           <ul>
-            <li><a href="../store-logic/01-필터-칩-제어-컴포넌트와-useOptimistic.html">store-logic 01 문서</a>: 이 저장소의 필터 칩에서 쓰는 방법과 실험</li>
+            <li><a href="../store-logic/01-필터-시트-임시-쿼리와-useOptimistic.html">store-logic 01 문서</a>: 이 저장소의 필터 시트에서 쓰는 방법</li>
             <li><a href="09-검색-폼-제출과-비제어-입력.html">react-next 09 문서</a>: 비제어 입력과 <code>key</code></li>
             <li><a href="https://react.dev/reference/react/useOptimistic">React 문서: useOptimistic</a></li>
             <li><a href="https://react.dev/reference/react/startTransition">React 문서: startTransition</a></li>

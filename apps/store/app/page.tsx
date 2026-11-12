@@ -6,14 +6,13 @@ import { fetchShows } from '../src/shows/fetch-shows';
 import { selectShowCards } from '../src/shows/select-show-cards';
 import { ShowCard, ShowCardList } from '../src/shows/show-card';
 import { ShowListPagination } from '../src/shows/show-list-pagination';
-import { ShowFilterChips } from '../src/shows/show-filter-chips';
+import { ShowFilterBar } from '../src/shows/show-filter-bar';
 import {
   getConditionResetHref,
   getLastPageRedirectHref,
   hasNarrowingCondition,
   normalizeShowListQuery,
 } from '../src/shows/show-list-query';
-import { ShowSortSelect } from '../src/shows/show-sort-select';
 
 export default async function HomePage({ searchParams }: PageProps<'/'>) {
   // 이 페이지는 빌드 때 미리 그리지 않고 요청마다 렌더링한다. 그래서 빌드에 API와 DB가 필요 없다.
@@ -37,15 +36,11 @@ export default async function HomePage({ searchParams }: PageProps<'/'>) {
   return (
     <main>
       <h1 className="mb-lg text-heading font-bold">공연</h1>
-      <div className="mb-xl">
-        <ShowFilterChips query={query} />
+      {/* NOL 티켓 모바일 검색 결과처럼 칩·필터·정렬 버튼을 한 줄에 둔다. 필터 줄은 화면 폭과 관계없이 같고, 고르는 창은 좁은 화면에서 바텀 시트, 넓은 화면에서 가운데 대화상자다(ShowFilterBar). */}
+      <div className="mb-lg">
+        <ShowFilterBar query={query} />
       </div>
-      {/* 예매 사이트처럼 결과 수와 정렬을 목록 바로 위 한 줄에 둔다. 제목 검색은 헤더에 있다. */}
-      <div className="mb-md flex items-center justify-between gap-md">
-        <p className="font-semibold">공연 {showPage.totalCount}개</p>
-        {/* 정렬은 비제어라, 뒤로 가기나 초기화 링크로 주소가 바뀌면 key로 새로 만들어(리마운트) 주소의 값을 다시 채운다. */}
-        <ShowSortSelect key={query.sort} query={query} />
-      </div>
+      <p className="mb-md font-semibold">공연 {showPage.totalCount}개</p>
       {cards.length === 0 ? (
         <div className="py-2xl text-center">
           {hasNarrowingCondition(query) ? (
