@@ -65,7 +65,8 @@ function TokensPage() {
     <div className="flex max-w-content flex-col gap-3xl p-xl">
       <Section title="의미 토큰 색">
         <p className="text-body-sm text-text-secondary">
-          화면 코드는 의미 토큰만 쓴다. 예: <code className={codeClass}>bg-primary</code>,{' '}
+          화면 코드는 의미 토큰만 쓴다. 예:{' '}
+          <code className={codeClass}>bg-primary</code>,{' '}
           <code className={codeClass}>text-text-secondary</code>,{' '}
           <code className={codeClass}>border-border</code>.
         </p>
@@ -85,7 +86,8 @@ function TokensPage() {
 
       <Section title="기본 팔레트">
         <p className="text-body-sm text-text-secondary">
-          TDS 라이트 팔레트. CSS 변수(<code className={codeClass}>var(--blue-500)</code>
+          TDS 라이트 팔레트. CSS 변수(
+          <code className={codeClass}>var(--blue-500)</code>
           )로만 있고 유틸리티 클래스는 만들지 않는다.
         </p>
         <div className="flex flex-col gap-lg">
@@ -96,8 +98,12 @@ function TokensPage() {
                 {colors.map((c) => (
                   <li key={c.name} className="flex flex-col gap-xs">
                     <Swatch hex={c.hex} className="h-[40px]" />
-                    <span className={codeClass}>{c.name.replace(`${family}-`, '')}</span>
-                    <span className={cn(codeClass, 'text-text-secondary')}>{c.hex}</span>
+                    <span className={codeClass}>
+                      {c.name.replace(`${family}-`, '')}
+                    </span>
+                    <span className={cn(codeClass, 'text-text-secondary')}>
+                      {c.hex}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -122,7 +128,8 @@ function TokensPage() {
 
       <Section title="간격">
         <p className="text-body-sm text-text-secondary">
-          <code className={codeClass}>p-lg</code>, <code className={codeClass}>gap-sm</code>,{' '}
+          <code className={codeClass}>p-lg</code>,{' '}
+          <code className={codeClass}>gap-sm</code>,{' '}
           <code className={codeClass}>mt-xl</code>처럼 쓴다.
         </p>
         <Table head={['토큰', '크기', '예시']}>
@@ -150,7 +157,9 @@ function TokensPage() {
                 style={{ borderRadius: r.value }}
               />
               <span className={codeClass}>rounded-{r.name}</span>
-              <span className={cn(codeClass, 'text-text-secondary')}>{r.value}</span>
+              <span className={cn(codeClass, 'text-text-secondary')}>
+                {r.value}
+              </span>
             </li>
           ))}
         </ul>
@@ -166,7 +175,8 @@ const meta = {
     layout: 'fullscreen',
     docs: {
       description: {
-        component: '`src/tokens.css`를 읽어 그린다. 토큰을 고치면 이 화면도 바뀐다.',
+        component:
+          '`src/tokens.css`를 읽어 그린다. 토큰을 고치면 이 화면도 바뀐다.',
       },
     },
   },
