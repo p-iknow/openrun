@@ -1,9 +1,9 @@
 'use client';
 
-import { Drawer } from '@openrun/store-ui';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { FilterBarButton } from './filter-bar-button';
+import { isWideScreen, PickerSheet } from './picker-sheet';
 import {
   getSortChangeHref,
   SHOW_SORTS,
@@ -21,54 +21,49 @@ const SORT_ITEMS = SHOW_SORTS.map((sort) => ({
   label: SORT_LABELS[sort],
 }));
 
-// 공연 목록의 정렬. NOL 티켓 모바일 검색 결과처럼 정렬 버튼으로 바텀 시트를 열고, 선택지를 누르면 바로 적용하고 닫는다.
+// 공연 목록의 정렬. NOL 티켓 모바일 검색 결과처럼 정렬 버튼으로 정렬 창(좁은 화면은 바텀 시트, 넓은 화면은 대화상자)을 열고, 선택지를 누르면 바로 적용하고 닫는다.
 // 정렬은 한 번에 하나만 고르므로 필터 시트와 달리 적용 버튼이 없다. 필터 적용과 같이 router.replace로 바꿔 방문 기록을 쌓지 않는다.
 export function ShowSortSheet({ query }: { query: ShowListQuery }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [wide, setWide] = useState(false);
 
   return (
     <>
       <FilterBarButton
         onClick={() => {
+          setWide(isWideScreen());
           setOpen(true);
         }}
       >
         <SortIcon />
         정렬
       </FilterBarButton>
-      <Drawer.Root open={open} onOpenChange={setOpen}>
-        <Drawer.Popup>
-          <Drawer.Header>
-            <Drawer.Title>정렬</Drawer.Title>
-          </Drawer.Header>
-          <Drawer.Body>
-            <ul className="-mx-sm flex flex-col">
-              {SORT_ITEMS.map((item) => {
-                const current = item.value === query.sort;
-                return (
-                  <li key={item.value}>
-                    <button
-                      type="button"
-                      aria-current={current || undefined}
-                      onClick={() => {
-                        setOpen(false);
-                        router.replace(
-                          getSortChangeHref({ query, sort: item.value }),
-                        );
-                      }}
-                      className="flex h-[48px] w-full items-center justify-between rounded-card px-sm text-left text-body outline-primary hover:bg-surface-muted focus-visible:outline-2 aria-current:bg-surface-muted aria-current:font-bold"
-                    >
-                      {item.label}
-                      {current && <CheckIcon />}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </Drawer.Body>
-        </Drawer.Popup>
-      </Drawer.Root>
+      <PickerSheet wide={wide} open={open} onOpenChange={setOpen} title="정렬">
+        <ul className="-mx-sm flex flex-col">
+          {SORT_ITEMS.map((item) => {
+            const current = item.value === query.sort;
+            return (
+              <li key={item.value}>
+                <button
+                  type="button"
+                  aria-current={current || undefined}
+                  onClick={() => {
+                    setOpen(false);
+                    router.replace(
+                      getSortChangeHref({ query, sort: item.value }),
+                    );
+                  }}
+                  className="flex h-[48px] w-full items-center justify-between rounded-card px-sm text-left text-body outline-primary hover:bg-surface-muted focus-visible:outline-2 aria-current:bg-surface-muted aria-current:font-bold"
+                >
+                  {item.label}
+                  {current && <CheckIcon />}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </PickerSheet>
     </>
   );
 }

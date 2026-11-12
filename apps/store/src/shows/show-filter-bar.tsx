@@ -1,6 +1,6 @@
 'use client';
 
-import { Button, Drawer, ToggleGroup } from '@openrun/store-ui';
+import { Button, ToggleGroup } from '@openrun/store-ui';
 import { useRouter } from 'next/navigation';
 import { startTransition, useCallback, useOptimistic, useState } from 'react';
 import { ChevronDownIcon, FilterBarButton } from './filter-bar-button';
@@ -16,13 +16,14 @@ import {
   getStatusChangeQuery,
   type ShowListQuery,
 } from './show-list-query';
+import { isWideScreen, PickerSheet } from './picker-sheet';
 import { ShowSortSheet } from './show-sort-sheet';
 
 /** 시트를 열 때 보여 줄 부분. 필터 버튼으로 열면 맨 위부터 보인다. */
 type FilterSection = 'top' | 'genre' | 'status';
 
 // 공연 목록의 필터 줄. NOL 티켓 모바일 검색 결과처럼 왼쪽에 장르·판매 상태 칩을 두고(넘치면 가로 스크롤), 오른쪽에 필터와 정렬 버튼을 고정한다.
-// 칩과 필터 버튼은 같은 필터 시트를 연다. 칩으로 열면 그 칩의 부분으로 스크롤한다.
+// 칩과 필터 버튼은 같은 필터 창을 연다. 좁은 화면은 바텀 시트, 넓은 화면은 대화상자다(PickerSheet). 칩으로 열면 그 칩의 부분으로 스크롤한다.
 // 칩 이름은 고른 값(예: "뮤지컬,연극")이고, 필터가 하나라도 걸려 있으면 필터 버튼에 점을 단다.
 //
 // 시트에서 고른 값은 주소와 따로 둔 임시 쿼리(draft)에만 두고 "적용"으로 한 번에 주소에 반영한다.
@@ -38,17 +39,19 @@ export function ShowFilterBar({ query }: { query: ShowListQuery }) {
   const [shownQuery, setShownQuery] = useOptimistic(query);
   const [draft, setDraft] = useState(query);
   const [open, setOpen] = useState(false);
+  const [wide, setWide] = useState(false);
   const [section, setSection] = useState<FilterSection>('top');
   const hasFilter = shownQuery.genre.length > 0 || shownQuery.status.length > 0;
 
   function openSheet(target: FilterSection) {
     setDraft(query);
     setSection(target);
+    setWide(isWideScreen());
     setOpen(true);
   }
 
-  // 시트가 열려 부분이 그려질 때 그 부분이 본문 맨 위에 오도록 본문을 스크롤한다.
-  // 시트는 닫히면 트리에서 빠지므로, 열 때마다 이 ref가 다시 불린다.
+  // 창이 열려 부분이 그려질 때 그 부분이 본문 맨 위에 오도록 본문을 스크롤한다.
+  // 창은 닫히면 트리에서 빠지므로, 열 때마다 이 ref가 다시 불린다.
   const scrollToSection = useCallback((element: HTMLElement | null) => {
     const body = element?.closest<HTMLElement>(
       '[data-filter-sheet-body]',
@@ -104,36 +107,13 @@ export function ShowFilterBar({ query }: { query: ShowListQuery }) {
         </FilterBarButton>
         <ShowSortSheet query={query} />
       </div>
-      <Drawer.Root open={open} onOpenChange={setOpen}>
-        <Drawer.Popup>
-          <Drawer.Header>
-            <Drawer.Title>필터</Drawer.Title>
-          </Drawer.Header>
-          <Drawer.Body>
-            <div data-filter-sheet-body className="flex flex-col gap-lg">
-              <div ref={section === 'genre' ? scrollToSection : undefined}>
-                <ToggleGroup
-                  label="장르"
-                  items={GENRE_ITEMS}
-                  value={draft.genre}
-                  onValueChange={(value) => {
-                    setDraft(getGenreChangeQuery({ query: draft, value }));
-                  }}
-                />
-              </div>
-              <div ref={section === 'status' ? scrollToSection : undefined}>
-                <ToggleGroup
-                  label="판매 상태"
-                  items={STATUS_ITEMS}
-                  value={draft.status}
-                  onValueChange={(value) => {
-                    setDraft(getStatusChangeQuery({ query: draft, value }));
-                  }}
-                />
-              </div>
-            </div>
-          </Drawer.Body>
-          <Drawer.Footer>
+      <PickerSheet
+        wide={wide}
+        open={open}
+        onOpenChange={setOpen}
+        title="필터"
+        footer={
+          <>
             <Button
               variant="secondary"
               onClick={() => {
@@ -142,9 +122,9 @@ export function ShowFilterBar({ query }: { query: ShowListQuery }) {
             >
               초기화
             </Button>
-            <Drawer.Close
-              variant="primary"
+            <Button
               onClick={() => {
+                setOpen(false);
                 startTransition(() => {
                   setShownQuery(draft);
                   router.replace(getFilterApplyHref(draft));
@@ -152,10 +132,33 @@ export function ShowFilterBar({ query }: { query: ShowListQuery }) {
               }}
             >
               적용
-            </Drawer.Close>
-          </Drawer.Footer>
-        </Drawer.Popup>
-      </Drawer.Root>
+            </Button>
+          </>
+        }
+      >
+        <div data-filter-sheet-body className="flex flex-col gap-lg">
+          <div ref={section === 'genre' ? scrollToSection : undefined}>
+            <ToggleGroup
+              label="장르"
+              items={GENRE_ITEMS}
+              value={draft.genre}
+              onValueChange={(value) => {
+                setDraft(getGenreChangeQuery({ query: draft, value }));
+              }}
+            />
+          </div>
+          <div ref={section === 'status' ? scrollToSection : undefined}>
+            <ToggleGroup
+              label="판매 상태"
+              items={STATUS_ITEMS}
+              value={draft.status}
+              onValueChange={(value) => {
+                setDraft(getStatusChangeQuery({ query: draft, value }));
+              }}
+            />
+          </div>
+        </div>
+      </PickerSheet>
     </>
   );
 }

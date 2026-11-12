@@ -115,8 +115,7 @@ export function Popup({ children }: PopupProps) {
       <BaseDrawer.Viewport className="fixed inset-0 flex items-end justify-center">
         <BaseDrawer.Popup
           className={cn(
-            // 넓은 화면에서는 폭을 640px까지만 넓혀 가운데 아래에서 올라온다. 좁은 화면에서는 폭 전체다.
-            'flex max-h-[85dvh] w-full max-w-[640px] flex-col rounded-t-panel bg-surface text-text shadow-floating outline-none',
+            'flex max-h-[85dvh] w-full flex-col rounded-t-panel bg-surface text-text shadow-floating outline-none',
             // 미는 동안 손가락을 따라 내려가고, 열릴 때와 닫힐 때는 화면 아래 밖에서 움직인다.
             'transform-[translateY(var(--drawer-swipe-movement-y))] transition-transform data-swiping:select-none data-starting-style:transform-[translateY(100%)] data-ending-style:transform-[translateY(100%)]',
             motion,
