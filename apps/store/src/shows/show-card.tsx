@@ -15,6 +15,7 @@ export function ShowCardList({ children }: { children: ReactNode }) {
 
 // 카드와 로딩 카드가 같은 틀을 써서, 응답이 와서 바뀌어도 자리가 흔들리지 않는다.
 // 포스터 자리는 이미지와 상관없이 3:4로 크기가 정해져, 이미지가 늦게 와도 목록이 밀리지 않는다.
+// 모바일 행에서 글이 포스터보다 길어지면 flex 행이 포스터 칸을 글 높이만큼 늘려 이미지가 잘리므로, self-start로 3:4를 지킨다.
 function ShowCardFrame({
   poster,
   children,
@@ -24,7 +25,7 @@ function ShowCardFrame({
 }) {
   return (
     <li className="relative flex gap-md sm:flex-col sm:gap-sm">
-      <div className="relative aspect-3/4 w-[96px] shrink-0 overflow-hidden rounded-card bg-surface-muted sm:w-full">
+      <div className="relative aspect-3/4 w-[96px] shrink-0 self-start overflow-hidden rounded-card bg-surface-muted sm:w-full">
         {poster}
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-xs">{children}</div>

@@ -22,23 +22,30 @@ export function ShowDetailLayout({
   );
 }
 
-// 포스터는 3:4로 크기가 정해져, 이미지가 늦게 와도 글자가 밀리지 않는다.
+// NOL 티켓 상세처럼 맨 위에 흐리게 번진 포스터를 배경으로 깔고, 그 가운데에 포스터를 둔다. 제목과 공연 정보는 그 아래에 놓는다.
+// 배경 상자와 포스터는 비율로 크기가 정해져, 이미지가 늦게 와도 글자가 밀리지 않는다.
+// 포스터 칸은 배경 상자 높이의 85%이고 3:4라, 화면 폭이 좁아도 늘어나거나 잘리지 않는다.
 function ShowInfoFrame({
+  backdrop,
   poster,
   summary,
   description,
 }: {
+  backdrop: ReactNode;
   poster: ReactNode;
   summary: ReactNode;
   description: ReactNode;
 }) {
   return (
     <article className="flex min-w-0 flex-col gap-2xl">
-      <div className="flex gap-lg sm:gap-xl">
-        <div className="relative aspect-3/4 w-[120px] shrink-0 overflow-hidden rounded-card bg-surface-muted sm:w-[240px]">
-          {poster}
+      <div className="flex flex-col gap-lg">
+        <div className="relative flex aspect-6/5 items-center justify-center overflow-hidden rounded-panel bg-surface-muted sm:aspect-2/1">
+          {backdrop}
+          <div className="relative aspect-3/4 h-[85%] overflow-hidden rounded-card bg-surface-muted shadow-floating">
+            {poster}
+          </div>
         </div>
-        <div className="flex min-w-0 flex-1 flex-col gap-md">{summary}</div>
+        <div className="flex flex-col gap-md">{summary}</div>
       </div>
       <section>
         <h2 className="mb-md text-title font-bold">공연 소개</h2>
@@ -48,11 +55,11 @@ function ShowInfoFrame({
   );
 }
 
-// 모바일은 120px, sm부터 240px이다. ShowInfoFrame의 포스터 폭과 맞춘다.
-const POSTER_SIZES = '(min-width: 640px) 240px, 120px';
+// 포스터 칸의 폭. 모바일은 배경 상자(화면 폭 - 좌우 여백, 6:5) 높이의 85%에 3:4를 곱해 화면 폭의 약 50%,
+// sm부터는 배경 상자(2:1)가 본문 폭을 따라 가장 넓을 때 약 780px이라 포스터 폭이 250px 남짓이다.
+const POSTER_SIZES = '(min-width: 640px) 250px, 55vw';
 // 데스크톱(lg)은 본문 최대 폭 1200px에서 회차 패널(360px)과 간격을 뺀 약 780px, 그보다 좁으면 화면 폭을 채운다.
 const DETAIL_IMAGE_SIZES = '(min-width: 1024px) 780px, 100vw';
-
 export function ShowInfo({ show }: { show: ShowDetailData }) {
   const facts = [
     { term: '장르', value: show.genre },
@@ -64,8 +71,21 @@ export function ShowInfo({ show }: { show: ShowDetailData }) {
 
   return (
     <ShowInfoFrame
+      // 제목이 바로 아래 글자로 있어 포스터와 배경은 장식으로 둔다.
+      // 배경도 같은 src와 sizes를 써서 브라우저가 고르는 이미지 주소가 같다. 한 번만 받아 두 곳에 쓴다.
+      backdrop={
+        <Image
+          src={show.posterUrl}
+          alt=""
+          fill
+          sizes={POSTER_SIZES}
+          // 화면에서 가장 크게 보이는 그림(LCP)이라 늦게 불러오지 않는다. 포스터가 먼저 불러온 것과 같은 주소라 다시 받지 않는다.
+          loading="eager"
+          className="scale-125 object-cover opacity-70 blur-2xl"
+        />
+      }
       poster={
-        // 제목이 바로 옆에 글자로 있어 포스터는 장식으로 둔다. 첫 화면에 보이는 큰 이미지라 먼저 불러온다.
+        // 첫 화면에 보이는 큰 이미지라 먼저 불러온다.
         <Image
           src={show.posterUrl}
           alt=""
@@ -108,9 +128,10 @@ export function ShowInfo({ show }: { show: ShowDetailData }) {
                 같은 내용을 글로 옮긴 소개 본문을 화면에는 보이지 않게 두고 이미지는 장식으로 둔다(WCAG 1.1.1). */}
             <p className="sr-only">{show.description}</p>
             {/* 이미지 사이를 띄우지 않아 여러 장이 한 장처럼 이어진다. 폭과 높이로 비율대로 자리를 먼저 잡아,
-                긴 이미지가 늦게 와도 아래 내용이 밀리지 않는다. 첫 화면 아래에 있어 기본값대로 늦게 불러온다. */}
+                긴 이미지가 늦게 와도 아래 내용이 밀리지 않는다.
+                첫 장은 첫 화면 끝에 걸려 가장 큰 그림(LCP)이 되기 쉬우므로 바로 불러오고, 나머지는 기본값대로 늦게 불러온다. */}
             <div className="flex flex-col items-center">
-              {show.detailImages.map((image) => (
+              {show.detailImages.map((image, index) => (
                 <Image
                   key={image.url}
                   src={image.url}
@@ -118,6 +139,7 @@ export function ShowInfo({ show }: { show: ShowDetailData }) {
                   width={image.width}
                   height={image.height}
                   sizes={DETAIL_IMAGE_SIZES}
+                  loading={index === 0 ? 'eager' : 'lazy'}
                   className="h-auto w-full max-w-[860px]"
                 />
               ))}
@@ -132,6 +154,7 @@ export function ShowInfo({ show }: { show: ShowDetailData }) {
 export function ShowInfoSkeleton() {
   return (
     <ShowInfoFrame
+      backdrop={null}
       poster={<Skeleton className="size-full rounded-none" />}
       summary={
         <>
