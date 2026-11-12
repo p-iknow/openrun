@@ -1,8 +1,8 @@
 import { cn } from '@openrun/store-ui';
 import type { ReactNode } from 'react';
 
-// 좁은 화면 필터 줄의 둥근 버튼. 장르·판매 상태 칩, 필터, 정렬 버튼이 같은 모양을 쓴다.
-// 고른 값이 있는 칩은 넓은 화면의 칩 줄과 같은 파란 테두리, 바탕, 굵은 글자로 보인다.
+// 필터 줄의 둥근 버튼. 장르·판매 상태 칩, 필터, 정렬 버튼이 같은 모양을 쓴다.
+// 고른 값이 있는 칩은 시트 안의 고른 칩(store-ui ToggleGroup)과 같은 파란 테두리, 바탕, 굵은 글자로 보인다.
 export function FilterBarButton({
   selected = false,
   onClick,

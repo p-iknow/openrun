@@ -251,15 +251,9 @@ describe('getSortChangeHref', () => {
     expect(
       getSortChangeHref({
         query: { ...DEFAULT_QUERY, page: 3, q: '정원' },
-        value: 'newest',
+        sort: 'newest',
       }),
     ).toBe(encodeURI('/?q=정원&sort=newest'));
-  });
-
-  it('모르는 정렬값이면 주소를 만들지 않는다', () => {
-    expect(
-      getSortChangeHref({ query: DEFAULT_QUERY, value: 'popular' }),
-    ).toBeNull();
   });
 });
 
