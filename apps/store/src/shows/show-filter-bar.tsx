@@ -1,10 +1,9 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { overlay } from 'overlay-kit';
 import { startTransition, useOptimistic } from 'react';
 import { ChevronDownIcon, FilterBarButton } from './filter-bar-button';
-import { isWideScreen } from './picker-sheet';
+import { openPickerSheet } from './picker-sheet';
 import { getGenreChipLabel, getStatusChipLabel } from './show-filter-items';
 import { type FilterSection, ShowFilterSheet } from './show-filter-sheet';
 import {
@@ -17,7 +16,7 @@ import { ShowSortSheet } from './show-sort-sheet';
 
 // 공연 목록의 필터 줄. NOL 티켓 모바일 검색 결과처럼 왼쪽에 장르·판매 상태 칩을 두고(넘치면 가로 스크롤), 오른쪽에 필터와 정렬 버튼을 고정한다.
 // 칩과 필터 버튼은 같은 필터 창(ShowFilterSheet)을, 정렬 버튼은 정렬 창(ShowSortSheet)을 연다. 칩으로 열면 그 칩의 부분으로 스크롤한다.
-// 창은 overlay-kit의 `overlay.openAsync`로 열고, 창이 돌려준 결과(적용한 쿼리, 고른 정렬, 닫기면 null)로 주소를 바꾼다.
+// 창은 `openPickerSheet`(overlay-kit)로 열고, 창이 돌려준 결과(적용한 쿼리, 고른 정렬, 닫기면 null)로 주소를 바꾼다.
 // 열림 상태와 임시 값은 창이 가지므로 이 컴포넌트는 여는 일과 결과를 적용하는 일만 한다.
 // 칩 이름은 고른 값(예: "뮤지컬,연극")이고, 필터가 하나라도 걸려 있으면 필터 버튼에 점을 단다.
 //
@@ -31,44 +30,33 @@ export function ShowFilterBar({ query }: { query: ShowListQuery }) {
   const hasFilter = shownQuery.genre.length > 0 || shownQuery.status.length > 0;
 
   async function openFilterSheet(section: FilterSection) {
-    // 창 종류는 누르는 순간 한 번만 정한다. 창이 열린 뒤 화면 폭이 바뀌어도 그대로 둔다.
-    const wide = isWideScreen();
-    const next = await overlay.openAsync<ShowListQuery | null>(
-      ({ isOpen, close, unmount }) => (
-        <ShowFilterSheet
-          wide={wide}
-          initialQuery={shownQuery}
-          section={section}
-          isOpen={isOpen}
-          close={close}
-          unmount={unmount}
-        />
-      ),
-    );
+    const next = await openPickerSheet<ShowListQuery>((controller) => (
+      <ShowFilterSheet
+        controller={controller}
+        initialQuery={shownQuery}
+        section={section}
+      />
+    ));
     if (next === null) return;
-    startTransition(() => {
-      setShownQuery(next);
-      router.replace(getFilterApplyHref(next));
-    });
+    applyQuery({ next, href: getFilterApplyHref(next) });
   }
 
   async function openSortSheet() {
-    const wide = isWideScreen();
-    const sort = await overlay.openAsync<ShowSort | null>(
-      ({ isOpen, close, unmount }) => (
-        <ShowSortSheet
-          wide={wide}
-          currentSort={shownQuery.sort}
-          isOpen={isOpen}
-          close={close}
-          unmount={unmount}
-        />
-      ),
-    );
+    const sort = await openPickerSheet<ShowSort>((controller) => (
+      <ShowSortSheet controller={controller} currentSort={shownQuery.sort} />
+    ));
     if (sort === null) return;
+    applyQuery({
+      next: { ...shownQuery, sort },
+      href: getSortChangeHref({ query: shownQuery, sort }),
+    });
+  }
+
+  // 창이 돌려준 결과를 먼저 보이고 주소를 바꾼다. 같은 transition이라 새 목록이 올 때까지 보인 값이 남는다.
+  function applyQuery({ next, href }: { next: ShowListQuery; href: string }) {
     startTransition(() => {
-      setShownQuery({ ...shownQuery, sort });
-      router.replace(getSortChangeHref({ query: shownQuery, sort }));
+      setShownQuery(next);
+      router.replace(href);
     });
   }
 

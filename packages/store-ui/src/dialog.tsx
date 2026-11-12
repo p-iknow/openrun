@@ -2,6 +2,7 @@
 
 import { Dialog as BaseDialog } from '@base-ui/react/dialog';
 import type { ReactNode } from 'react';
+import { CloseIcon } from './close-icon.js';
 import { cn } from './cn.js';
 
 // 클라이언트용 컴포넌트다. 지시어와 props 규칙은 Button과 같다.
@@ -104,17 +105,7 @@ export function Header({ children }: HeaderProps) {
         aria-label="닫기"
         className="-mr-sm flex size-[40px] shrink-0 items-center justify-center rounded-full text-text-secondary outline-primary transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2"
       >
-        <svg
-          aria-hidden="true"
-          viewBox="0 0 20 20"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          className="size-[20px]"
-        >
-          <path d="M5 5l10 10M15 5L5 15" />
-        </svg>
+        <CloseIcon />
       </BaseDialog.Close>
     </div>
   );
