@@ -24,8 +24,9 @@ export function ShowDetailLayout({
       {/* 머리글은 스크롤과 함께 올라가므로 화면 맨 위에서 본문 간격(xl)만큼 띄워 붙는다. */}
       <aside className="hidden lg:sticky lg:top-xl lg:block">{panel}</aside>
       {/* 홈 표시줄이 있는 휴대폰에서 버튼이 가리지 않도록 아래 안전 영역만큼 띄운다. 버튼은 줄 폭을 채운다.
-          여백을 시트 아래 버튼 줄(Drawer.Footer)과 같게 두어, 시트가 열려도 "예매하기" 버튼이 같은 자리에 있다. */}
-      <div className="fixed inset-x-0 bottom-0 grid border-t border-border bg-surface px-lg pt-md pb-[calc(var(--spacing-lg)+env(safe-area-inset-bottom,0px))] lg:hidden">
+          여백을 시트 아래 버튼 줄(Drawer.Footer)과 같게 두어, 시트가 열려도 "예매하기" 버튼이 같은 자리에 있다.
+          본문과의 경계는 선 대신 반투명 바탕과 흐림으로 보여, 버튼 뒤로 지나가는 본문이 비친다. */}
+      <div className="fixed inset-x-0 bottom-0 grid bg-surface/80 px-lg backdrop-blur-md pt-md pb-[calc(var(--spacing-lg)+env(safe-area-inset-bottom,0px))] lg:hidden">
         {bottomBar}
       </div>
     </main>
