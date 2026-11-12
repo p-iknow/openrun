@@ -167,26 +167,11 @@ export function getStatusChangeQuery({
 }
 
 /**
- * 좁은 화면의 필터 시트에서 "적용"을 눌렀을 때 옮겨 갈 주소를 만든다.
- * 시트에서 고른 장르와 판매 상태로 바꾸고, 검색어와 정렬은 둔다. 고른 값을 바꾸지 않고 적용해도 page는 빼서 1페이지로 간다.
+ * 좁은 화면의 필터 시트에서 "적용"을 눌렀을 때 옮겨 갈 주소를 만든다. 시트에서 고친 임시 쿼리를 받는다.
+ * 임시 쿼리는 `getGenreChangeQuery`, `getStatusChangeQuery`로 고치지만, 칩을 바꾸지 않고 적용하면 주소의 page가 남아 있으므로 여기서 뺀다.
  */
-export function getFilterApplyHref({
-  query,
-  genre,
-  status,
-}: {
-  query: ShowListQuery;
-  /** 시트의 장르 ToggleGroup에서 고른 값 전체 */
-  genre: string[];
-  /** 시트의 판매 상태 ToggleGroup에서 고른 값 전체 */
-  status: string[];
-}): string {
-  return getShowListHref({
-    ...query,
-    genre: parseChoices({ value: genre, choices: GENRES }),
-    status: parseChoices({ value: status, choices: SHOW_LIST_SALES_STATUSES }),
-    page: DEFAULT_PAGE,
-  });
+export function getFilterApplyHref(draft: ShowListQuery): string {
+  return getShowListHref({ ...draft, page: DEFAULT_PAGE });
 }
 
 /**
