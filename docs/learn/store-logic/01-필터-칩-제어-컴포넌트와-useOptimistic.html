@@ -71,18 +71,26 @@
               </tbody>
             </table>
           </div>
-          <pre><code class="language-tsx">const [genre, setOptimisticGenre] = useOptimistic&lt;string[]&gt;(query.genre);
+          <pre><code class="language-tsx">const [shownQuery, setShownQuery] = useOptimistic(query);
+
+function changeQuery(next: ShowListQuery) {
+  startTransition(() =&gt; {
+    setShownQuery(next);                 // ① 다음 쿼리를 먼저 보여 준다
+    router.replace(getShowListHref(next)); // ② 주소를 바꿔 진짜 값을 받아 온다
+  });
+}
 
 &lt;ToggleGroup
   label="장르"
   items={GENRE_ITEMS}
-  value={genre}
-  onValueChange={(value) =&gt; {
-    startTransition(() =&gt; {
-      setOptimisticGenre(value);                          // ① 고른 값을 먼저 보여 준다
-      router.replace(getGenreChangeHref({ query, value })); // ② 주소를 바꿔 진짜 값을 받아 온다
-    });
-  }}
+  value={shownQuery.genre}
+  onValueChange={(value) =&gt; changeQuery(getGenreChangeQuery({ query: shownQuery, value }))}
+/&gt;
+&lt;ToggleGroup
+  label="판매 상태"
+  items={STATUS_ITEMS}
+  value={shownQuery.status}
+  onValueChange={(value) =&gt; changeQuery(getStatusChangeQuery({ query: shownQuery, value }))}
 /&gt;</code></pre>
         </section>
 
@@ -169,9 +177,9 @@
           <p>
             <code>useOptimistic</code>은 "진짜 값이 올 때까지 잠깐 보여 줄 값"을 두는 훅이다. 진짜 값을 인자로 받고, 보여 줄 값과 임시 값을 넣는 함수를 돌려준다.
           </p>
-          <pre><code class="language-ts">const [genre, setOptimisticGenre] = useOptimistic(query.genre);
-// genre: 평소에는 query.genre 그대로. 임시 값을 넣으면 화면 이동이 끝날 때까지 그 값</code></pre>
-          <p>칩에는 <code>query.genre</code> 대신 <code>genre</code>를 넘긴다. 같은 실험을 지금 코드로 한 기록이다.</p>
+          <pre><code class="language-ts">const [shownQuery, setShownQuery] = useOptimistic(query);
+// shownQuery: 평소에는 query 그대로. 임시 값을 넣으면 화면 이동이 끝날 때까지 그 값</code></pre>
+          <p>칩에는 <code>query.genre</code> 대신 <code>shownQuery.genre</code>를 넘긴다. 같은 실험을 지금 코드로 한 기록이다.</p>
           <pre><code>    0ms  "연극" 클릭     연극=꺼짐  콘서트=꺼짐  주소=/
     5ms  화면 바뀜       연극=켜짐  콘서트=꺼짐  주소=/              ← 임시 값
   302ms  "콘서트" 클릭
@@ -187,6 +195,40 @@
           <p>
             첫 번째 <code>router.replace</code>(<code>?genre=play</code>)의 화면은 그려지지 않았다. 두 번째 이동이 앞의 이동을 대신했기 때문이다. 서버에 간 요청이 하나 더 있었을
             뿐, 화면에는 마지막 선택만 나온다.
+          </p>
+          <h3 id="one-query">임시 값은 쿼리 하나로 둔다</h3>
+          <p>
+            장르와 판매 상태의 임시 값을 따로 두고, 다음 주소는 서버가 준 <code>query</code>에서 만들면 어떻게 될까. 같은 칩 줄 안에서는 문제가 없지만, 응답 전에 <strong>다른 칩
+            줄</strong>을 누르면 먼저 누른 선택이 빠진다.
+          </p>
+          <pre><code class="language-tsx">// 따로 둔 경우
+const [genre, setOptimisticGenre] = useOptimistic(query.genre);
+const [status, setOptimisticStatus] = useOptimistic(query.status);
+
+// 장르 칩
+startTransition(() =&gt; {
+  setOptimisticGenre(value);
+  router.replace(getShowListHref(getGenreChangeQuery({ query, value })));
+  //                                                   ↑ 서버가 준 옛 query. status는 아직 []
+});</code></pre>
+          <p>"판매 중"을 누르고 0.3초 뒤 "연극"을 누른 기록이다(서버 응답 2초).</p>
+          <pre><code>따로 둔 경우
+   13ms  판매 중=켜짐                 ← 임시 값
+  315ms  판매 중=켜짐  연극=켜짐      ← 임시 값
+ 2358ms  주소=?genre=play             → 판매 중=꺼짐  연극=켜짐
+
+쿼리 하나로 둔 경우(지금 코드)
+   10ms  판매 중=켜짐
+  315ms  판매 중=켜짐  연극=켜짐
+ 2358ms  주소=?genre=play&amp;status=on_sale  → 둘 다 켜짐</code></pre>
+          <p>
+            따로 둔 경우 "연극"의 주소는 장르만 화면 값이고, 판매 상태는 옛 <code>query</code>의 빈 값이다. 그래서 <code>?genre=play</code>로 이동하고, transition이 끝나면 판매 중
+            임시 값도 걷혀 칩이 꺼진다. 지금 코드는 임시 값을 쿼리 전체(<code>shownQuery</code>) 하나로 두고, 다음 쿼리를 언제나 <code>shownQuery</code>에서 만든다. 화면에 보이는
+            값과 다음 주소를 만드는 값이 같으니 어느 칩 줄을 누르든 앞의 선택이 남는다.
+          </p>
+          <p>
+            다음 쿼리를 만드는 일은 <code>getGenreChangeQuery</code>, <code>getStatusChangeQuery</code>(<code>show-list-query.ts</code>)가 맡는다. 주소가 아니라 쿼리를 돌려주므로 같은
+            값을 임시 값에도 넣고 <code>getShowListHref</code>로 주소도 만들 수 있다.
           </p>
         </section>
 
@@ -211,7 +253,7 @@
             </li>
             <li>
               <strong>한 이벤트 안의 transition은 같은 차선을 쓴다</strong> 클릭 하나를 처리하는 동안 연 transition은 몇 개든 같은 차선 번호를 받는다. 그래서
-              <code>setOptimisticGenre</code>가 남긴 표시와 <code>router.replace</code>의 화면 이동이 <strong>같은 차선</strong>에 묶인다.
+              <code>setShownQuery</code>가 남긴 표시와 <code>router.replace</code>의 화면 이동이 <strong>같은 차선</strong>에 묶인다.
             </li>
           </ol>
           <p>
@@ -272,7 +314,7 @@ function navigate(...) {
                   <td>깜빡임 없음</td>
                 </tr>
                 <tr>
-                  <td><code>startTransition</code>은 <code>setOptimisticGenre</code>만 감싸고, <code>router.replace</code>는 바로 다음 줄</td>
+                  <td><code>startTransition</code>은 <code>setShownQuery</code>만 감싸고, <code>router.replace</code>는 바로 다음 줄</td>
                   <td>3ms 켜짐 → 2.0초 주소 바뀜(계속 켜짐)</td>
                   <td>깜빡임 없음. 같은 이벤트라 같은 차선이다</td>
                 </tr>
@@ -294,8 +336,8 @@ function navigate(...) {
             만에 끝나고, 칩은 아직 옛 값인 <code>query.genre</code>로 돌아가 꺼진다. 새 페이지가 온 2.1초에 다시 켜진다.
           </p>
           <pre><code class="language-ts">// 세 번째 줄의 코드. 콘솔에 아래 오류가 찍힌다
-setOptimisticGenre(value);
-router.replace(getGenreChangeHref({ query, value }));</code></pre>
+setShownQuery(next);
+router.replace(getShowListHref(next));</code></pre>
           <pre><code>An optimistic state update occurred outside a transition or action. To fix, move the update to an action, or wrap with startTransition.</code></pre>
         </section>
 
@@ -374,13 +416,13 @@ router.replace(getGenreChangeHref({ query, value }));</code></pre>
           <div class="quiz">
             <p class="quiz-q">2. <code>router.replace</code>를 아래처럼 <code>setTimeout</code>으로 미루면 칩은 어떻게 보이는가?</p>
             <p class="quiz-context"><a href="#lifetime">임시 값은 언제 사라지나</a>와 <a href="#experiment">실험</a> 표의 넷째 줄. 서버 응답은 2초 걸린다.</p>
-            <pre><code class="language-diff"> onValueChange={(value) =&gt; {
+            <pre><code class="language-diff"> function changeQuery(next: ShowListQuery) {
    startTransition(() =&gt; {
-     setOptimisticGenre(value);
--    router.replace(getGenreChangeHref({ query, value }));
+     setShownQuery(next);
+-    router.replace(getShowListHref(next));
    });
-+  setTimeout(() =&gt; router.replace(getGenreChangeHref({ query, value })), 0);
- }}</code></pre>
++  setTimeout(() =&gt; router.replace(getShowListHref(next)), 0);
+ }</code></pre>
             <details class="quiz-answer">
               <summary>답 보기</summary>
               <div class="fold-body">
@@ -405,6 +447,23 @@ router.replace(getGenreChangeHref({ query, value }));</code></pre>
               </div>
             </details>
           </div>
+          <div class="quiz">
+            <p class="quiz-q">4. 장르 칩의 다음 쿼리를 아래처럼 서버가 준 <code>query</code>에서 만들면, "판매 중"을 누르고 응답 전에 "연극"을 누를 때 주소는 어떻게 되는가?</p>
+            <p class="quiz-context"><a href="#one-query">임시 값은 쿼리 하나로 둔다</a> 절.</p>
+            <pre><code class="language-diff"> onValueChange={(value) =&gt; {
+-  changeQuery(getGenreChangeQuery({ query: shownQuery, value }));
++  changeQuery(getGenreChangeQuery({ query, value }));
+ }}</code></pre>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  <code>?genre=play</code>가 되어 "판매 중"이 빠진다. 서버가 준 <code>query</code>는 아직 "판매 중"을 누르기 전 값이라 <code>status</code>가 비어 있다. 장르는 고른 값으로
+                  바뀌지만 판매 상태는 빈 값으로 되돌아간 쿼리가 임시 값과 주소에 함께 들어간다. 화면에 보이는 <code>shownQuery</code>에서 만들어야 앞의 선택이 남는다.
+                </p>
+              </div>
+            </details>
+          </div>
         </section>
 
         <section id="more">
@@ -412,7 +471,7 @@ router.replace(getGenreChangeHref({ query, value }));</code></pre>
           <ul>
             <li><code>apps/store/src/shows/show-filter-chips.tsx</code>: 이 문서의 칩</li>
             <li><code>packages/store-ui/src/toggle-group.tsx</code>: 제어 모드(<code>value</code>)를 받는 ToggleGroup</li>
-            <li><a href="00-공연-목록-쿼리-정리와-주소-만들기.html">store-logic 00 문서</a>: 칩이 쓰는 <code>getGenreChangeHref</code> 같은 주소 만들기 함수</li>
+            <li><a href="00-공연-목록-쿼리-정리와-주소-만들기.html">store-logic 00 문서</a>: 칩이 주소를 만들 때 쓰는 <code>getShowListHref</code></li>
             <li>
               <a href="../react-next/09-검색-폼-제출과-비제어-입력.html">react-next 09 문서</a>: 비제어 입력과 <code>key</code>로 값을 다시 채우는 방법, 정렬은 <code>replace</code>이고 검색은
               <code>push</code>인 이유

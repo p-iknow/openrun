@@ -129,41 +129,41 @@ export function getSortChangeHref({
 }
 
 /**
- * 장르 칩을 눌렀을 때 옮겨 갈 주소를 만든다. 다른 조건은 두고 page는 빼서 1페이지로 돌아간다.
+ * 장르 칩을 눌렀을 때 옮겨 갈 쿼리를 만든다. 다른 조건은 두고 1페이지로 돌아간다. 주소는 `getShowListHref`로 만든다.
  * 모르는 장르는 주소의 genre와 같은 규칙으로 버린다.
  */
-export function getGenreChangeHref({
+export function getGenreChangeQuery({
   query,
   value,
 }: {
   query: ShowListQuery;
   /** ToggleGroup이 넘긴 고른 값 전체 */
   value: string[];
-}): string {
-  return getShowListHref({
+}): ShowListQuery {
+  return {
     ...query,
     genre: parseChoices({ value, choices: GENRES }),
     page: DEFAULT_PAGE,
-  });
+  };
 }
 
 /**
- * 판매 상태 칩을 눌렀을 때 옮겨 갈 주소를 만든다. 다른 조건은 두고 page는 빼서 1페이지로 돌아간다.
+ * 판매 상태 칩을 눌렀을 때 옮겨 갈 쿼리를 만든다. 다른 조건은 두고 1페이지로 돌아간다. 주소는 `getShowListHref`로 만든다.
  * 모르는 판매 상태는 주소의 status와 같은 규칙으로 버린다.
  */
-export function getStatusChangeHref({
+export function getStatusChangeQuery({
   query,
   value,
 }: {
   query: ShowListQuery;
   /** ToggleGroup이 넘긴 고른 값 전체 */
   value: string[];
-}): string {
-  return getShowListHref({
+}): ShowListQuery {
+  return {
     ...query,
     status: parseChoices({ value, choices: SHOW_LIST_SALES_STATUSES }),
     page: DEFAULT_PAGE,
-  });
+  };
 }
 
 /**

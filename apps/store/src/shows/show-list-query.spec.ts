@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   getConditionResetHref,
-  getGenreChangeHref,
+  getGenreChangeQuery,
   getSearchSubmitHref,
-  getStatusChangeHref,
+  getStatusChangeQuery,
   hasNarrowingCondition,
   getShowListQueryFromSearch,
   getShowListHref,
@@ -262,10 +262,10 @@ describe('getSortChangeHref', () => {
   });
 });
 
-describe('getGenreChangeHref', () => {
-  it('다른 조건은 두고 고른 장르로 바꾸며 page를 빼서 1페이지로 돌아간다', () => {
+describe('getGenreChangeQuery', () => {
+  it('다른 조건은 두고 고른 장르로 바꾸며 1페이지로 돌아간다', () => {
     expect(
-      getGenreChangeHref({
+      getGenreChangeQuery({
         query: {
           ...DEFAULT_QUERY,
           page: 3,
@@ -275,35 +275,42 @@ describe('getGenreChangeHref', () => {
         },
         value: ['concert', 'musical'],
       }),
-    ).toBe(
-      '/?q=%EC%A0%95%EC%9B%90&genre=musical&genre=concert&status=on_sale&sort=newest',
-    );
+    ).toEqual({
+      page: 1,
+      q: '정원',
+      genre: ['musical', 'concert'],
+      status: ['on_sale'],
+      sort: 'newest',
+    });
   });
 
   it('모르는 장르는 버린다', () => {
     expect(
-      getGenreChangeHref({ query: DEFAULT_QUERY, value: ['opera', 'play'] }),
-    ).toBe('/?genre=play');
+      getGenreChangeQuery({ query: DEFAULT_QUERY, value: ['opera', 'play'] })
+        .genre,
+    ).toEqual(['play']);
   });
 
-  it('장르를 모두 풀면 장르를 뺀다', () => {
+  it('장르를 모두 풀면 장르로 거르지 않는다', () => {
     expect(
-      getGenreChangeHref({
-        query: { ...DEFAULT_QUERY, genre: ['play'], page: 2 },
-        value: [],
-      }),
+      getShowListHref(
+        getGenreChangeQuery({
+          query: { ...DEFAULT_QUERY, genre: ['play'], page: 2 },
+          value: [],
+        }),
+      ),
     ).toBe('/');
   });
 });
 
-describe('getStatusChangeHref', () => {
-  it('다른 조건은 두고 고른 판매 상태로 바꾸며 page를 빼서 1페이지로 돌아간다', () => {
+describe('getStatusChangeQuery', () => {
+  it('다른 조건은 두고 고른 판매 상태로 바꾸며 1페이지로 돌아간다', () => {
     expect(
-      getStatusChangeHref({
+      getStatusChangeQuery({
         query: { ...DEFAULT_QUERY, page: 3, genre: ['play'] },
         value: ['upcoming', 'ended'],
       }),
-    ).toBe('/?genre=play&status=upcoming');
+    ).toEqual({ ...DEFAULT_QUERY, genre: ['play'], status: ['upcoming'] });
   });
 });
 
