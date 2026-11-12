@@ -253,7 +253,7 @@ describe('getSortChangeHref', () => {
         query: { ...DEFAULT_QUERY, page: 3, q: '정원' },
         value: 'newest',
       }),
-    ).toBe('/?q=%EC%A0%95%EC%9B%90&sort=newest');
+    ).toBe(encodeURI('/?q=정원&sort=newest'));
   });
 
   it('모르는 정렬값이면 주소를 만들지 않는다', () => {
@@ -339,9 +339,7 @@ describe('getFilterApplyHref', () => {
         genre: ['musical', 'concert'],
         status: [],
       }),
-    ).toBe(
-      `/?q=${encodeURIComponent('정원')}&genre=musical&genre=concert&sort=newest`,
-    );
+    ).toBe(encodeURI('/?q=정원&genre=musical&genre=concert&sort=newest'));
   });
 
   it('모르는 값과 겹친 값은 버리고 선택지 순서로 맞춘다', () => {
@@ -435,7 +433,7 @@ describe('getLastPageRedirectHref', () => {
         query: { ...DEFAULT_QUERY, page: 9, q: '정원', sort: 'newest' },
         totalPages: 3,
       }),
-    ).toBe('/?q=%EC%A0%95%EC%9B%90&sort=newest&page=3');
+    ).toBe(encodeURI('/?q=정원&sort=newest&page=3'));
   });
 
   it('공연이 없으면 1페이지만 두고, 그보다 뒤면 1페이지로 리다이렉트한다', () => {
