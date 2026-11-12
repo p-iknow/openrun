@@ -36,7 +36,7 @@ export default async function HomePage({ searchParams }: PageProps<'/'>) {
   return (
     <main>
       <h1 className="mb-lg text-heading font-bold">공연</h1>
-      {/* NOL 티켓 모바일 검색 결과처럼 칩·필터·정렬 버튼을 한 줄에 두고, 고르는 일은 바텀 시트에서 한다. 화면 폭과 관계없이 같은 배치다. */}
+      {/* NOL 티켓 모바일 검색 결과처럼 칩·필터·정렬 버튼을 한 줄에 둔다. 필터 줄은 화면 폭과 관계없이 같고, 고르는 창은 좁은 화면에서 바텀 시트, 넓은 화면에서 가운데 대화상자다(ShowFilterBar). */}
       <div className="mb-lg">
         <ShowFilterBar query={query} />
       </div>
