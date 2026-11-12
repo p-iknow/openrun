@@ -1,8 +1,10 @@
 import type { components } from '@openrun/api-client';
 import type { BadgeTone } from '@openrun/store-ui';
+import { formatKst } from '../format-kst';
 import type { ShowPage } from './fetch-shows';
 
 type ShowSalesStatus = components['schemas']['ShowSalesStatus'];
+type ShowPeriod = components['schemas']['ShowPeriodDto'];
 
 export interface SalesStatusBadgeData {
   label: string;
@@ -23,50 +25,47 @@ export interface ShowCardData {
 }
 
 // Record로 적어 API에 판매 상태가 추가되면 여기서 타입 오류가 난다.
-// 판매 종료 공연은 목록에 오지 않지만, 상세처럼 다른 화면에서 받을 수 있어 함께 둔다.
-const SALES_STATUS_BADGES = {
+// 판매 종료 공연은 목록에 오지 않지만, 상세에서 보여 주므로 함께 둔다.
+export const SHOW_SALES_STATUS_BADGES = {
   on_sale: { label: '판매 중', tone: 'primary' },
   upcoming: { label: '판매 예정', tone: 'success' },
   ended: { label: '판매 종료', tone: 'neutral' },
 } satisfies Record<ShowSalesStatus, SalesStatusBadgeData>;
 
-// 서버의 시간대와 상관없이 한국 시각으로 보여 준다.
-const kstDateTime = new Intl.DateTimeFormat('ko-KR', {
-  timeZone: 'Asia/Seoul',
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-  hourCycle: 'h23',
-});
+// 목록 카드와 공연 상세가 같은 모양으로 보여 주는 공연 기간. 하루짜리 공연은 날짜 하나만 쓴다.
+export function getShowPeriodLabel(period: ShowPeriod): string {
+  const start = formatKst(period.start).date;
+  const end = formatKst(period.end).date;
+  return start === end ? start : `${start} ~ ${end}`;
+}
 
-function formatKst(iso: string) {
-  const parts = kstDateTime.formatToParts(new Date(iso));
-  const part = (type: Intl.DateTimeFormatPartTypes) =>
-    parts.find((p) => p.type === type)?.value ?? '';
-  return {
-    date: `${part('year')}.${part('month')}.${part('day')}`,
-    time: `${part('hour')}:${part('minute')}`,
-  };
+// 목록 카드와 공연 상세가 같은 모양으로 보여 주는 판매 오픈 일시. 판매 예정이 아니면 null이다.
+export function getSalesOpenAtLabel(salesOpenAt: string | null): string | null {
+  if (salesOpenAt === null) {
+    return null;
+  }
+  const open = formatKst(salesOpenAt);
+  return `${open.date} ${open.time} 판매 오픈`;
 }
 
 export function selectShowCards(page: ShowPage): ShowCardData[] {
   return page.items.map(
-    ({ id, title, venueName, period, salesStatus, salesOpenAt, posterUrl }) => {
-      const start = formatKst(period.start).date;
-      const end = formatKst(period.end).date;
-      const open = salesOpenAt === null ? null : formatKst(salesOpenAt);
-      return {
-        id,
-        title,
-        venueName,
-        period: start === end ? start : `${start} ~ ${end}`,
-        salesStatus: SALES_STATUS_BADGES[salesStatus],
-        salesOpenAt:
-          open === null ? null : `${open.date} ${open.time} 판매 오픈`,
-        posterUrl,
-      };
-    },
+    ({
+      id,
+      title,
+      venueName,
+      period,
+      salesStatus,
+      salesOpenAt,
+      posterUrl,
+    }) => ({
+      id,
+      title,
+      venueName,
+      period: getShowPeriodLabel(period),
+      salesStatus: SHOW_SALES_STATUS_BADGES[salesStatus],
+      salesOpenAt: getSalesOpenAtLabel(salesOpenAt),
+      posterUrl,
+    }),
   );
 }

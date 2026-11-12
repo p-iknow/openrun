@@ -6,9 +6,9 @@ import {
   type ShowListSalesStatus,
 } from './show-list-query';
 
-// 장르와 판매 상태 칩에 보이는 이름. 필터 줄의 칩과 필터 시트의 칩이 함께 쓴다.
+// 장르와 판매 상태 칩에 보이는 이름. 필터 줄의 칩과 필터 시트의 칩이 함께 쓰고, 장르 이름은 공연 상세도 쓴다.
 
-const GENRE_LABELS: Record<Genre, string> = {
+export const GENRE_LABELS: Record<Genre, string> = {
   musical: '뮤지컬',
   play: '연극',
   concert: '콘서트',

@@ -1,5 +1,6 @@
 import { Badge, Skeleton } from '@openrun/store-ui';
 import Image from 'next/image';
+import Link from 'next/link';
 import type { ReactNode } from 'react';
 import type { ShowCardData } from './select-show-cards';
 
@@ -22,7 +23,7 @@ function ShowCardFrame({
   children: ReactNode;
 }) {
   return (
-    <li className="flex gap-md sm:flex-col sm:gap-sm">
+    <li className="relative flex gap-md sm:flex-col sm:gap-sm">
       <div className="relative aspect-3/4 w-[96px] shrink-0 overflow-hidden rounded-card bg-surface-muted sm:w-full">
         {poster}
       </div>
@@ -53,7 +54,14 @@ export function ShowCard({ card }: { card: ShowCardData }) {
         <Badge tone={card.salesStatus.tone}>{card.salesStatus.label}</Badge>
       </div>
       <h2 className="line-clamp-2 text-body font-semibold break-keep">
-        {card.title}
+        {/* 링크는 제목에만 걸고, 가상 요소를 카드(li) 전체에 펼쳐 카드 어디를 눌러도 상세로 간다.
+            카드 전체를 링크로 감싸면 스크린 리더가 카드의 모든 글자를 링크 이름으로 읽는다. */}
+        <Link
+          href={`/shows/${card.id}`}
+          className="after:absolute after:inset-0 after:rounded-card hover:underline focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-primary"
+        >
+          {card.title}
+        </Link>
       </h2>
       <p className="truncate text-body-sm text-text-secondary">
         {card.venueName}
