@@ -1,15 +1,7 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-import { useState } from 'react';
-import { FilterBarButton } from './filter-bar-button';
-import { isWideScreen, PickerSheet } from './picker-sheet';
-import {
-  getSortChangeHref,
-  SHOW_SORTS,
-  type ShowListQuery,
-  type ShowSort,
-} from './show-list-query';
+import { PickerSheet } from './picker-sheet';
+import { SHOW_SORTS, type ShowSort } from './show-list-query';
 
 const SORT_LABELS: Record<ShowSort, string> = {
   start_date: '공연 시작일 순',
@@ -21,67 +13,58 @@ const SORT_ITEMS = SHOW_SORTS.map((sort) => ({
   label: SORT_LABELS[sort],
 }));
 
-// 공연 목록의 정렬. NOL 티켓 모바일 검색 결과처럼 정렬 버튼으로 정렬 창(좁은 화면은 바텀 시트, 넓은 화면은 대화상자)을 열고, 선택지를 누르면 바로 적용하고 닫는다.
-// 정렬은 한 번에 하나만 고르므로 필터 시트와 달리 적용 버튼이 없다. 필터 적용과 같이 router.replace로 바꿔 방문 기록을 쌓지 않는다.
-export function ShowSortSheet({ query }: { query: ShowListQuery }) {
-  const router = useRouter();
-  const [open, setOpen] = useState(false);
-  const [wide, setWide] = useState(false);
-
+// 정렬 창의 내용. ShowFilterBar가 overlay-kit의 `overlay.openAsync`로 열고, 이 창은 고른 정렬을 `close`로 돌려준다.
+// NOL 티켓 모바일 검색 결과의 정렬 시트처럼 선택지를 누르면 바로 닫힌다. 정렬은 하나만 고르므로 필터 창과 달리 적용 버튼이 없다.
+// 고르지 않고 닫으면 `null`을 돌려준다. 주소를 바꾸는 일은 여는 쪽이 한다.
+export function ShowSortSheet({
+  wide,
+  currentSort,
+  isOpen,
+  close,
+  unmount,
+}: {
+  /** overlay-kit의 `isOpen` */
+  isOpen: boolean;
+  /** overlay-kit의 `close`. 고른 정렬, 고르지 않고 닫으면 `null`을 넘긴다. */
+  close: (result: ShowSort | null) => void;
+  /** overlay-kit의 `unmount`. 닫히는 애니메이션이 끝난 뒤 부른다. */
+  unmount: () => void;
+  /** 대화상자로 열지. 여는 버튼에서 `isWideScreen()`으로 정한다. */
+  wide: boolean;
+  /** 지금 주소의 정렬. 체크 표시를 단다. */
+  currentSort: ShowSort;
+}) {
   return (
-    <>
-      <FilterBarButton
-        onClick={() => {
-          setWide(isWideScreen());
-          setOpen(true);
-        }}
-      >
-        <SortIcon />
-        정렬
-      </FilterBarButton>
-      <PickerSheet wide={wide} open={open} onOpenChange={setOpen} title="정렬">
-        <ul className="-mx-sm flex flex-col">
-          {SORT_ITEMS.map((item) => {
-            const current = item.value === query.sort;
-            return (
-              <li key={item.value}>
-                <button
-                  type="button"
-                  aria-current={current || undefined}
-                  onClick={() => {
-                    setOpen(false);
-                    router.replace(
-                      getSortChangeHref({ query, sort: item.value }),
-                    );
-                  }}
-                  className="flex h-[48px] w-full items-center justify-between rounded-card px-sm text-left text-body outline-primary hover:bg-surface-muted focus-visible:outline-2 aria-current:bg-surface-muted aria-current:font-bold"
-                >
-                  {item.label}
-                  {current && <CheckIcon />}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      </PickerSheet>
-    </>
-  );
-}
-
-function SortIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="size-[16px] shrink-0"
+    <PickerSheet
+      wide={wide}
+      open={isOpen}
+      onOpenChange={() => {
+        close(null);
+      }}
+      onCloseComplete={unmount}
+      title="정렬"
     >
-      <path d="M5 13V3M2.5 5.5L5 3l2.5 2.5M11 3v10M8.5 10.5L11 13l2.5-2.5" />
-    </svg>
+      <ul className="-mx-sm flex flex-col">
+        {SORT_ITEMS.map((item) => {
+          const current = item.value === currentSort;
+          return (
+            <li key={item.value}>
+              <button
+                type="button"
+                aria-current={current || undefined}
+                onClick={() => {
+                  close(item.value);
+                }}
+                className="flex h-[48px] w-full items-center justify-between rounded-card px-sm text-left text-body outline-primary hover:bg-surface-muted focus-visible:outline-2 aria-current:bg-surface-muted aria-current:font-bold"
+              >
+                {item.label}
+                {current && <CheckIcon />}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </PickerSheet>
   );
 }
 

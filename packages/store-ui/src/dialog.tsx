@@ -27,20 +27,33 @@ import { cn } from './cn.js';
 const motion = 'duration-200 ease-out motion-reduce:duration-0';
 
 export interface RootProps {
-  /** 열림 상태. 여는 버튼을 쓰는 쪽에서 두므로 늘 제어한다. */
+  /** 열림 상태. 여는 버튼을 쓰는 쪽에서 두므로 늘 제어한다. overlay-kit으로 열면 `isOpen`을 넘긴다. */
   open: boolean;
   /** 열림 상태가 바뀌려 할 때 부른다(바깥 누르기, Esc, 닫기 버튼이면 `false`). 함수라서 Server Component에서는 넘길 수 없다. */
   onOpenChange: (open: boolean) => void;
+  /**
+   * 닫히는 애니메이션이 끝난 뒤 부른다. overlay-kit처럼 대화상자를 코드로 열고 닫는 도구에서
+   * 애니메이션을 끊지 않고 대화상자를 트리에서 빼낼 때 쓴다. 예: `onCloseComplete={unmount}`.
+   */
+  onCloseComplete?: () => void;
   children: ReactNode;
 }
 
 /** 부품들이 열림 상태를 나눠 갖게 한다. 요소를 그리지 않는다. */
-export function Root({ open, onOpenChange, children }: RootProps) {
+export function Root({
+  open,
+  onOpenChange,
+  onCloseComplete,
+  children,
+}: RootProps) {
   return (
     <BaseDialog.Root
       open={open}
       // Base UI가 두 번째 인자로 주는 eventDetails는 공개 API에 드러내지 않는다.
       onOpenChange={(nextOpen) => onOpenChange(nextOpen)}
+      onOpenChangeComplete={(nextOpen) => {
+        if (!nextOpen) onCloseComplete?.();
+      }}
     >
       {children}
     </BaseDialog.Root>
