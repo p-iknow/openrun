@@ -5,19 +5,26 @@ import {
   count,
   desc,
   eq,
+  gt,
   ilike,
   inArray,
   max,
   min,
   ne,
+  sql,
 } from 'drizzle-orm';
 import { Clock } from '../clock/clock.module.js';
 import { DATABASE, type Database } from '../db/database.module.js';
-import { performances, shows } from '../db/schema/shows.js';
+import { performanceSeats, performances, shows } from '../db/schema/shows.js';
 import { venues } from '../db/schema/venues.js';
 import type { ShowListQuery } from './show-list-query.js';
-import type { ShowPageDto } from './show.dto.js';
+import type { ShowDetailDto, ShowPageDto } from './show.dto.js';
+import {
+  almostSoldOutCondition,
+  performanceSalesStatus,
+} from './performance-sales-status.js';
 import { POSTER_BASE_URL, buildPosterUrl } from './poster-url.js';
+import { createShowNotFoundException } from './show-id.js';
 import { showSalesStatusSubquery } from './show-sales-status.js';
 
 @Injectable()
@@ -36,16 +43,8 @@ export class ShowsService {
     genre,
     status,
   }: ShowListQuery): Promise<ShowPageDto> {
-    // 공연 기간은 저장하지 않고 회차에서 계산한다. 회차가 없는 공연은 목록에 나오지 않는다.
-    const period = this.db
-      .select({
-        showId: performances.showId,
-        start: min(performances.startsAt).as('start'),
-        end: max(performances.startsAt).as('end'),
-      })
-      .from(performances)
-      .groupBy(performances.showId)
-      .as('period');
+    // 회차가 없는 공연은 기간 서브쿼리에 행이 없어 목록에 나오지 않는다.
+    const period = showPeriodSubquery(this.db);
     const salesStatus = showSalesStatusSubquery(this.db, {
       now: this.clock.now(),
     });
@@ -107,12 +106,106 @@ export class ShowsService {
       totalPages: Math.ceil(totalCount / size),
     };
   }
+
+  async findDetail(id: number): Promise<ShowDetailDto> {
+    const now = this.clock.now();
+    // 목록과 같은 서브쿼리로 공연 기간과 공연 판매 상태를 구해, 두 화면의 값이 어긋나지 않는다.
+    const period = showPeriodSubquery(this.db);
+    const salesStatus = showSalesStatusSubquery(this.db, { now });
+    // 남은 좌석은 회차 좌석만 세서 구한다.
+    const totalSeats = sql<number>`count(${performanceSeats.id})`.mapWith(
+      Number,
+    );
+    const remainingSeats =
+      sql<number>`count(${performanceSeats.id}) filter (where not ${performanceSeats.isSold})`.mapWith(
+        Number,
+      );
+    const performanceStatus = performanceSalesStatus({ now, remainingSeats });
+
+    const [[show], performanceRows] = await Promise.all([
+      this.db
+        .select({
+          id: shows.id,
+          title: shows.title,
+          genre: shows.genre,
+          minAge: shows.minAge,
+          runningMinutes: shows.runningMinutes,
+          description: shows.description,
+          posterPath: shows.posterPath,
+          venueId: venues.id,
+          venueName: venues.name,
+          start: period.start,
+          end: period.end,
+          salesStatus: salesStatus.salesStatus,
+          salesOpenAt: salesStatus.salesOpenAt,
+        })
+        .from(shows)
+        .innerJoin(venues, eq(venues.id, shows.venueId))
+        // 회차가 없는 공연은 목록처럼 없는 공연으로 본다.
+        .innerJoin(period, eq(period.showId, shows.id))
+        .innerJoin(salesStatus, eq(salesStatus.showId, shows.id))
+        .where(eq(shows.id, id)),
+      this.db
+        .select({
+          id: performances.id,
+          startsAt: performances.startsAt,
+          salesStatus: performanceStatus,
+          remainingSeats,
+          totalSeats,
+          isAlmostSoldOut: almostSoldOutCondition({
+            salesStatus: performanceStatus,
+            remainingSeats,
+            totalSeats,
+          }),
+        })
+        .from(performances)
+        .leftJoin(
+          performanceSeats,
+          eq(performanceSeats.performanceId, performances.id),
+        )
+        // 시작 전 회차만 담는다. 판매 종료 회차는 모두 시작된 회차이고, 시작된 뒤의 취소 회차도 더 고를 수 없어 뺀다.
+        .where(and(eq(performances.showId, id), gt(performances.startsAt, now)))
+        .groupBy(performances.id)
+        .orderBy(asc(performances.startsAt), asc(performances.id)),
+    ]);
+
+    if (!show) {
+      throw createShowNotFoundException();
+    }
+    const { venueId, venueName, start, end, salesOpenAt, posterPath, ...rest } =
+      show;
+    return {
+      ...rest,
+      posterUrl: buildPosterUrl({ baseUrl: this.posterBaseUrl, posterPath }),
+      venue: { id: venueId, name: venueName },
+      period: { start: toIso(start), end: toIso(end) },
+      salesOpenAt: salesOpenAt?.toISOString() ?? null,
+      performances: performanceRows.map(({ startsAt, ...performance }) => ({
+        ...performance,
+        startsAt: startsAt.toISOString(),
+      })),
+    };
+  }
+}
+
+// 공연마다 공연 기간(첫 회차부터 마지막 회차까지의 시작 일시)을 계산하는 서브쿼리다.
+// 공연 기간은 저장하지 않고 회차에서 계산한다. 회차가 없는 공연은 행이 없다.
+function showPeriodSubquery(db: Database) {
+  return db
+    .select({
+      showId: performances.showId,
+      start: min(performances.startsAt).as('start'),
+      end: max(performances.startsAt).as('end'),
+    })
+    .from(performances)
+    .groupBy(performances.showId)
+    .as('period');
 }
 
 // min/max는 그룹에 행이 없을 때 null을 돌려주므로 타입이 nullable이다. INNER JOIN이라 실제로는 항상 값이 있다.
 function toIso(value: Date | null): string {
   if (value === null) {
-    throw new Error('회차가 없는 공연이 목록에 들어왔습니다.');
+    throw new Error('회차가 없는 공연의 기간을 만들려고 했습니다.');
   }
   return value.toISOString();
 }
