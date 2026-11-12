@@ -371,7 +371,7 @@ const posters = await Promise.all(
     };
   }),
 );
-// 상세 이미지는 포스터와 같은 색으로 공연마다 두 장(소개, 관람 포인트)을 만든다. 경로의 해시는 포스터와 같은 이유로 넣는다.
+// 상세 이미지는 포스터와 같은 색으로 공연마다 세 장(소개, 관람 포인트, 예매·관람 안내)을 만든다. 경로의 해시는 포스터와 같은 이유로 넣는다.
 const detailImages = await Promise.all(
   seedShows.map(async ({ content }, index) => {
     const images = await renderDetailImages({

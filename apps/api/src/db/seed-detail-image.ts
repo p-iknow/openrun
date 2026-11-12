@@ -1,11 +1,12 @@
 import sharp, { type OverlayOptions } from 'sharp';
 import { getShowPalette, type Palette } from './seed-poster.js';
-import type { SeedShowContent } from './seed-shows.js';
+import { buildShowNotices, type SeedShowContent } from './seed-shows.js';
 import { textImage } from './seed-text.js';
 
 // 시드가 공연마다 만드는 가상의 상세 이미지다. 실제 예매 서비스의 상품 상세처럼 소개를 세로로 긴 이미지에 그린다.
 // 1장: 포스터와 같은 색의 머리말(장르, 제목, 한 줄 소개)과 줄거리(또는 공연 소개)
 // 2장: 관람 포인트
+// 3장: 티켓 수령 안내와 입장 및 관람 유의사항(buildShowNotices)
 // 이미지 속 글은 buildShowDescription이 같은 순서의 글로 옮겨 소개 본문에 넣는다.
 
 // NOL 티켓의 상세 이미지 폭(750~840px)과 비슷하게 둔다. 높이는 글 양에 따라 정해진다.
@@ -44,7 +45,7 @@ function stack({
   return { placements, bottom: y, tops };
 }
 
-// 제목 앞 굵은 색 막대와 제목. 두 장이 같은 모양의 제목을 쓴다.
+// 제목 앞 굵은 색 막대와 제목. 모든 장이 같은 모양의 제목을 쓴다.
 async function renderSectionHeading(text: string) {
   return textImage(text, {
     font: 'bold',
@@ -217,6 +218,75 @@ async function renderHighlightsImage({
   return { png, width: WIDTH, height };
 }
 
+// 안내는 소개와 구분되도록 옅은 회색 바탕에 그린다. 항목 앞에는 작은 점을 찍는다.
+async function renderNoticeImage({
+  content,
+  palette,
+}: {
+  content: SeedShowContent;
+  palette: Palette;
+}): Promise<DetailImage> {
+  const BULLET_LEFT = PADDING + 8;
+  const ITEM_LEFT = PADDING + 32;
+  const sections = await Promise.all(
+    buildShowNotices(content).map(async ({ heading, items }) => ({
+      heading: await renderSectionHeading(heading),
+      items: await Promise.all(
+        items.map((item) =>
+          textImage(item, {
+            font: 'medium',
+            size: 30,
+            width: WIDTH - ITEM_LEFT - PADDING,
+            color: SECONDARY_COLOR,
+            lineSpacing: 14,
+          }),
+        ),
+      ),
+    })),
+  );
+
+  const placements: OverlayOptions[] = [];
+  const shapes: string[] = [];
+  let top = 96;
+  sections.forEach(({ heading, items }, sectionIndex) => {
+    const body = stack({
+      items: [
+        {
+          image: heading,
+          gap: sectionIndex === 0 ? 0 : 88,
+          left: PADDING + 24,
+        },
+        ...items.map((image, index) => ({
+          image,
+          gap: index === 0 ? 36 : 20,
+          left: ITEM_LEFT,
+        })),
+      ],
+      top,
+    });
+    placements.push(...body.placements);
+    shapes.push(headingBarSvg({ top: body.tops[0] ?? 0, palette }));
+    // 점은 항목 첫 줄의 가운데(위에서 19px)에 맞춘다.
+    for (const itemTop of body.tops.slice(1)) {
+      shapes.push(
+        `<circle cx="${BULLET_LEFT}" cy="${itemTop + 19}" r="4" fill="${SECONDARY_COLOR}"/>`,
+      );
+    }
+    top = body.bottom;
+  });
+  const height = top + 96;
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${height}">
+  <rect width="100%" height="100%" fill="#f2f4f6"/>
+  ${shapes.join('')}
+</svg>`;
+  const png = await sharp(Buffer.from(svg))
+    .composite(placements)
+    .png()
+    .toBuffer();
+  return { png, width: WIDTH, height };
+}
+
 /** 공연 하나의 상세 이미지를 보여 줄 순서대로 돌려준다. */
 export async function renderDetailImages({
   content,
@@ -230,5 +300,6 @@ export async function renderDetailImages({
   return Promise.all([
     renderStoryImage({ content, label, palette }),
     renderHighlightsImage({ content, palette }),
+    renderNoticeImage({ content, palette }),
   ]);
 }

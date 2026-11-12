@@ -1,6 +1,7 @@
 import { Badge, Button, Drawer, Skeleton } from '@openrun/store-ui';
 import Image from 'next/image';
 import type { ReactNode } from 'react';
+import { CollapsibleDetailImages } from './collapsible-detail-images';
 import type { ShowDetailData } from './select-show-detail';
 
 // 데스크톱(lg)은 2단이다. 왼쪽이 공연 정보, 오른쪽이 스크롤을 따라오는 회차 패널이다.
@@ -139,20 +140,22 @@ export function ShowInfo({ show }: { show: ShowDetailData }) {
             {/* 이미지 사이를 띄우지 않아 여러 장이 한 장처럼 이어진다. 폭과 높이로 비율대로 자리를 먼저 잡아,
                 긴 이미지가 늦게 와도 아래 내용이 밀리지 않는다.
                 첫 장은 첫 화면 끝에 걸려 가장 큰 그림(LCP)이 되기 쉬우므로 바로 불러오고, 나머지는 기본값대로 늦게 불러온다. */}
-            <div className="flex flex-col items-center">
-              {show.detailImages.map((image, index) => (
-                <Image
-                  key={image.url}
-                  src={image.url}
-                  alt=""
-                  width={image.width}
-                  height={image.height}
-                  sizes={DETAIL_IMAGE_SIZES}
-                  loading={index === 0 ? 'eager' : 'lazy'}
-                  className="h-auto w-full max-w-[860px]"
-                />
-              ))}
-            </div>
+            <CollapsibleDetailImages>
+              <div className="flex flex-col items-center">
+                {show.detailImages.map((image, index) => (
+                  <Image
+                    key={image.url}
+                    src={image.url}
+                    alt=""
+                    width={image.width}
+                    height={image.height}
+                    sizes={DETAIL_IMAGE_SIZES}
+                    loading={index === 0 ? 'eager' : 'lazy'}
+                    className="h-auto w-full max-w-[860px]"
+                  />
+                ))}
+              </div>
+            </CollapsibleDetailImages>
           </>
         )
       }

@@ -365,12 +365,67 @@ export const SEED_SHOW_CONTENTS: SeedShowContent[] = [
  * 상세 이미지에 그린 소개를 같은 순서의 글로 옮긴다. 공연의 소개 본문(description)이 되어 화면 낭독기가 이미지 대신 읽는다.
  * 문단은 빈 줄로, 관람 포인트는 줄마다 하나씩 나눈다.
  */
+// 상세 이미지 마지막 장에 그리는 예매·관람 안내다. 실제 예매 서비스의 상품 상세처럼 티켓 수령과 입장·관람 유의사항을 적는다.
+// 공연마다 다른 값(관람 연령, 장르별 매표소·입장 시각)만 바꾸고 나머지 문구는 모든 공연이 같다.
+export interface ShowNoticeSection {
+  heading: string;
+  items: string[];
+}
+
+export function buildShowNotices(
+  content: SeedShowContent,
+): ShowNoticeSection[] {
+  // 콘서트는 관객이 많아 매표소와 입장을 더 일찍 연다.
+  const isConcert = content.genre === 'concert';
+  const boxOfficeHours = isConcert ? 2 : 1;
+  const entryMinutes = isConcert ? 60 : 30;
+  const ageNotice =
+    content.minAge === 0
+      ? '전체 관람가이며, 24개월 이상은 나이와 관계없이 티켓이 있어야 입장할 수 있습니다.'
+      : `만 ${content.minAge}세 이상 관람할 수 있습니다. 입장할 때 나이를 확인할 수 있는 증명서를 보여 달라고 할 수 있습니다.`;
+  const lateEntryNotice = isConcert
+    ? '공연이 시작된 뒤에는 운영 요원의 안내에 따라 곡 사이에 입장합니다.'
+    : '공연이 시작된 뒤에는 입장이 제한되며, 공연장이 정한 시점에 운영 요원의 안내를 받아 입장합니다.';
+
+  return [
+    {
+      heading: '티켓 수령 안내',
+      items: [
+        '티켓은 공연 당일 공연장 매표소에서 받을 수 있습니다.',
+        `매표소는 공연 시작 ${boxOfficeHours}시간 전부터 운영합니다.`,
+        '티켓을 받을 때 예매자 본인의 신분증과 예매 확인 내역을 보여 주셔야 합니다.',
+        '받은 뒤 잃어버린 티켓은 어떤 경우에도 다시 발권하지 않습니다.',
+      ],
+    },
+    {
+      heading: '입장 및 관람 유의사항',
+      items: [
+        '티켓 한 장으로 한 명만 입장할 수 있습니다.',
+        `공연장 입장은 공연 시작 ${entryMinutes}분 전부터 합니다.`,
+        lateEntryNotice,
+        ageNotice,
+        ...(content.genre === 'kids_family'
+          ? [
+              '어린이는 보호자와 함께 입장해야 하며, 보호자도 티켓이 있어야 합니다.',
+            ]
+          : []),
+        '공연 중 사진과 영상 촬영, 녹음은 할 수 없습니다.',
+        '현장 사정에 따라 매표소 운영 시간과 입장 시간이 바뀔 수 있습니다.',
+      ],
+    },
+  ];
+}
+
+// 상세 이미지 속 글을 같은 순서로 옮긴 소개 본문이다. 화면 낭독기가 이미지 대신 읽는다.
 export function buildShowDescription(content: SeedShowContent): string {
   return [
     content.tagline,
     [content.storyHeading, ...content.story].join('\n\n'),
     ['관람 포인트', ...content.highlights.map((item) => `- ${item}`)].join(
       '\n',
+    ),
+    ...buildShowNotices(content).map(({ heading, items }) =>
+      [heading, ...items.map((item) => `- ${item}`)].join('\n'),
     ),
   ].join('\n\n');
 }
