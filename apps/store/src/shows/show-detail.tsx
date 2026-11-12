@@ -50,6 +50,8 @@ function ShowInfoFrame({
 
 // 모바일은 120px, sm부터 240px이다. ShowInfoFrame의 포스터 폭과 맞춘다.
 const POSTER_SIZES = '(min-width: 640px) 240px, 120px';
+// 데스크톱(lg)은 본문 최대 폭 1200px에서 회차 패널(360px)과 간격을 뺀 약 780px, 그보다 좁으면 화면 폭을 채운다.
+const DETAIL_IMAGE_SIZES = '(min-width: 1024px) 780px, 100vw';
 
 export function ShowInfo({ show }: { show: ShowDetailData }) {
   const facts = [
@@ -97,8 +99,31 @@ export function ShowInfo({ show }: { show: ShowDetailData }) {
         </>
       }
       description={
-        // 소개 본문의 줄바꿈을 그대로 보여 준다.
-        <p className="break-keep whitespace-pre-line">{show.description}</p>
+        show.detailImages.length === 0 ? (
+          // 상세 이미지가 없으면 소개 본문을 그대로 보여 준다. 줄바꿈도 그대로 둔다.
+          <p className="break-keep whitespace-pre-line">{show.description}</p>
+        ) : (
+          <>
+            {/* NOL 티켓처럼 소개는 상세 이미지로 보여 준다. 이미지 속 글은 화면 낭독기가 읽지 못하므로,
+                같은 내용을 글로 옮긴 소개 본문을 화면에는 보이지 않게 두고 이미지는 장식으로 둔다(WCAG 1.1.1). */}
+            <p className="sr-only">{show.description}</p>
+            {/* 이미지 사이를 띄우지 않아 여러 장이 한 장처럼 이어진다. 폭과 높이로 비율대로 자리를 먼저 잡아,
+                긴 이미지가 늦게 와도 아래 내용이 밀리지 않는다. 첫 화면 아래에 있어 기본값대로 늦게 불러온다. */}
+            <div className="flex flex-col items-center">
+              {show.detailImages.map((image) => (
+                <Image
+                  key={image.url}
+                  src={image.url}
+                  alt=""
+                  width={image.width}
+                  height={image.height}
+                  sizes={DETAIL_IMAGE_SIZES}
+                  className="h-auto w-full max-w-[860px]"
+                />
+              ))}
+            </div>
+          </>
+        )
       }
     />
   );

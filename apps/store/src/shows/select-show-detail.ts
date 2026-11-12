@@ -37,8 +37,11 @@ export interface ShowDetailData {
   ageRating: string;
   /** 예: `120분` */
   runningTime: string;
+  /** 상세 이미지의 소개를 글로 옮긴 소개 본문. 상세 이미지가 있으면 화면 낭독기용 글 대체로 쓴다. */
   description: string;
   posterUrl: string;
+  /** 공연 소개를 담은 세로로 긴 이미지들. 보여 줄 순서대로다. */
+  detailImages: ShowDetail['detailImages'];
   salesStatus: SalesStatusBadgeData;
   /** 판매 예정일 때 판매 오픈 일시. 예: `2026.03.01 14:00 판매 오픈` */
   salesOpenAt: string | null;
@@ -84,6 +87,7 @@ export function selectShowDetail(show: ShowDetail): ShowDetailData {
     runningTime: `${show.runningMinutes}분`,
     description: show.description,
     posterUrl: show.posterUrl,
+    detailImages: show.detailImages,
     salesStatus: SHOW_SALES_STATUS_BADGES[show.salesStatus],
     salesOpenAt: getSalesOpenAtLabel(show.salesOpenAt),
     isSalesEnded: show.salesStatus === 'ended',
