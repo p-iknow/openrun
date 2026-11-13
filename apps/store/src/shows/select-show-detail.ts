@@ -1,3 +1,4 @@
+import * as R from 'remeda';
 import { formatKst } from '../format-kst';
 import type { ShowDetail } from './fetch-show-detail';
 import {
@@ -53,30 +54,31 @@ export interface ShowDetailData {
 
 // 공연 상세 응답을 화면 값으로 바꾼다.
 export function selectShowDetail(show: ShowDetail): ShowDetailData {
-  const performanceDays: PerformanceDayData[] = [];
-  for (const performance of show.performances) {
-    const { date, dateKey, weekday, time } = formatKst(performance.startsAt);
-    let group = performanceDays.at(-1);
-    if (group?.date !== dateKey) {
-      group = {
-        date: dateKey,
-        label: `${date} (${weekday})`,
-        performances: [],
-      };
-      performanceDays.push(group);
-    }
-    group.performances.push({
-      id: performance.id,
-      time,
-      salesStatus: PERFORMANCE_SALES_STATUS_BADGES[performance.salesStatus],
-      // NOL 티켓처럼 남은 좌석은 지금 살 수 있는 회차에만 보여 준다. 매진과 회차 취소는 판매 상태 배지로 충분하다.
-      remainingSeats:
-        performance.salesStatus === 'on_sale'
-          ? `잔여 ${performance.remainingSeats}석`
-          : null,
-      isAlmostSoldOut: performance.isAlmostSoldOut,
-    });
-  }
+  // groupBy는 처음 나온 순서대로 날짜를 둔다('2026-03-01' 같은 키는 숫자 키가 아니라 넣은 순서가 지켜진다).
+  const performanceDays: PerformanceDayData[] = R.pipe(
+    show.performances,
+    R.map((performance) => ({
+      performance,
+      kst: formatKst(performance.startsAt),
+    })),
+    R.groupBy(({ kst }) => kst.dateKey),
+    R.values(),
+    R.map((day) => ({
+      date: day[0].kst.dateKey,
+      label: `${day[0].kst.date} (${day[0].kst.weekday})`,
+      performances: day.map(({ performance, kst }) => ({
+        id: performance.id,
+        time: kst.time,
+        salesStatus: PERFORMANCE_SALES_STATUS_BADGES[performance.salesStatus],
+        // NOL 티켓처럼 남은 좌석은 지금 살 수 있는 회차에만 보여 준다. 매진과 회차 취소는 판매 상태 배지로 충분하다.
+        remainingSeats:
+          performance.salesStatus === 'on_sale'
+            ? `잔여 ${performance.remainingSeats}석`
+            : null,
+        isAlmostSoldOut: performance.isAlmostSoldOut,
+      })),
+    })),
+  );
 
   return {
     title: show.title,

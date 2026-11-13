@@ -293,6 +293,9 @@ importers:
       react-dom:
         specifier: ^19.3.1
         version: 19.3.1(react@19.3.1)
+      remeda:
+        specifier: ^2.60.0
+        version: 2.60.0
     devDependencies:
       '@tailwindcss/postcss':
         specifier: ^4.3.5
@@ -346,6 +349,9 @@ importers:
       date-fns:
         specifier: ^4.4.0
         version: 4.4.0
+      remeda:
+        specifier: ^2.60.0
+        version: 2.60.0
       tailwind-merge:
         specifier: ^3.7.0
         version: 3.7.0
@@ -4096,6 +4102,10 @@ packages:
 
   reflect-metadata@0.2.2:
     resolution: {integrity: sha512-urBwgfrvVP/eAyXx4hluJivBKzuEbSQs9rKWCrCkbSxNv8mxPcUZKeuoF3Uy4mJl3Lwprp6yy5/39VWigZ4K6Q==}
+
+  remeda@2.60.0:
+    resolution: {integrity: sha512-GdqZvbKL9ZuNeI1h+P6qH3w/Cc/H1/WasO6nuBmXG38qJEuf56aZCXBtybVUesgZCgWsroaBi+EHlps5FgLXvg==}
+    engines: {node: '>=18.0.0'}
 
   require-directory@2.1.1:
     resolution: {integrity: sha512-fGxEI7+wsG9xrvdjsrlmL22OMTTiHRwAMroiEeMgq8gzoLC/PQr7RsRDSTLUg/bZAZtF+TVIkHc6/4RIKrui+Q==}
@@ -7876,6 +7886,8 @@ snapshots:
       strip-indent: 3.0.0
 
   reflect-metadata@0.2.2: {}
+
+  remeda@2.60.0: {}
 
   require-directory@2.1.1: {}
 
