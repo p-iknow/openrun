@@ -8,7 +8,6 @@ import {
   getDay,
   parse,
 } from 'date-fns';
-import * as R from 'remeda';
 import { cn } from './cn.js';
 
 // 클라이언트용 컴포넌트다. 지시어와 props 규칙은 Button과 같다.
@@ -30,16 +29,20 @@ function parseMonth(month: string): Date {
 export function getCalendarWeeks(month: string): (string | null)[][] {
   const firstDay = parseMonth(month);
   const cells: (string | null)[] = [
-    ...R.times(getDay(firstDay), () => null),
+    ...Array.from({ length: getDay(firstDay) }, () => null),
     ...eachDayOfInterval({ start: firstDay, end: endOfMonth(firstDay) }).map(
       (day) => format(day, 'yyyy-MM-dd'),
     ),
   ];
-  // 마지막 주는 7칸이 되도록 뒤를 null로 채운다.
-  return R.chunk(cells, 7).map((week) => [
-    ...week,
-    ...R.times(7 - week.length, () => null),
-  ]);
+  const weeks: (string | null)[][] = [];
+  for (let start = 0; start < cells.length; start += 7) {
+    const week = cells.slice(start, start + 7);
+    weeks.push([
+      ...week,
+      ...Array.from({ length: 7 - week.length }, () => null),
+    ]);
+  }
+  return weeks;
 }
 
 /** 달('2026-03')에서 offset달 옮긴 달을 돌려준다. 예: `{ month: '2026-12', offset: 1 }` → `2027-01` */

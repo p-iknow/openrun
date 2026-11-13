@@ -349,9 +349,6 @@ importers:
       date-fns:
         specifier: ^4.4.0
         version: 4.4.0
-      remeda:
-        specifier: ^2.60.0
-        version: 2.60.0
       tailwind-merge:
         specifier: ^3.7.0
         version: 3.7.0
