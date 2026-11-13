@@ -1,5 +1,13 @@
 'use client';
 
+import {
+  addMonths,
+  eachDayOfInterval,
+  endOfMonth,
+  format,
+  getDay,
+  parse,
+} from 'date-fns';
 import { cn } from './cn.js';
 
 // 클라이언트용 컴포넌트다. 지시어와 props 규칙은 Button과 같다.
@@ -9,36 +17,21 @@ import { cn } from './cn.js';
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
-function parseMonth(month: string): { year: number; monthIndex: number } {
-  const [year, monthNumber] = month.split('-').map(Number);
-  return { year: year ?? 0, monthIndex: (monthNumber ?? 1) - 1 };
-}
-
-function formatDate({
-  year,
-  monthIndex,
-  day,
-}: {
-  year: number;
-  monthIndex: number;
-  day: number;
-}): string {
-  return `${String(year).padStart(4, '0')}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+// 달('2026-03')과 날짜('2026-03-01')는 실행하는 곳의 시간대 자정으로 읽어 계산한다.
+// 날짜를 다시 같은 시간대의 글자로 돌려 쓰므로, 시간대가 달라도 결과 글자는 같다.
+function parseMonth(month: string): Date {
+  return parse(month, 'yyyy-MM', new Date());
 }
 
 /**
  * 달('2026-03')을 일요일부터 시작하는 주로 나눈다. 칸마다 날짜('2026-03-01')를 두고, 그 달이 아닌 칸은 null이다.
- * 날짜 계산은 UTC로 해 실행하는 곳의 시간대와 상관없이 같은 결과가 나온다.
  */
 export function getCalendarWeeks(month: string): (string | null)[][] {
-  const { year, monthIndex } = parseMonth(month);
-  const firstWeekday = new Date(Date.UTC(year, monthIndex, 1)).getUTCDay();
-  // 다음 달 0일은 이번 달의 마지막 날이다.
-  const dayCount = new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate();
+  const firstDay = parseMonth(month);
   const cells: (string | null)[] = [
-    ...Array.from({ length: firstWeekday }, () => null),
-    ...Array.from({ length: dayCount }, (_, index) =>
-      formatDate({ year, monthIndex, day: index + 1 }),
+    ...Array.from({ length: getDay(firstDay) }, () => null),
+    ...eachDayOfInterval({ start: firstDay, end: endOfMonth(firstDay) }).map(
+      (day) => format(day, 'yyyy-MM-dd'),
     ),
   ];
   const weeks: (string | null)[][] = [];
@@ -60,13 +53,7 @@ export function getAdjacentMonth({
   month: string;
   offset: number;
 }): string {
-  const { year, monthIndex } = parseMonth(month);
-  const moved = new Date(Date.UTC(year, monthIndex + offset, 1));
-  return formatDate({
-    year: moved.getUTCFullYear(),
-    monthIndex: moved.getUTCMonth(),
-    day: 1,
-  }).slice(0, 7);
+  return format(addMonths(parseMonth(month), offset), 'yyyy-MM');
 }
 
 export interface CalendarProps {
@@ -121,7 +108,6 @@ export function Calendar({
   selectedDate,
   onSelectDate,
 }: CalendarProps) {
-  const { year, monthIndex } = parseMonth(month);
   const enabled = new Set(enabledDates);
   // 'YYYY-MM' 글자는 사전 순과 시간 순이 같아 글자로 비교한다.
   const hasPreviousMonth = minMonth === undefined || month > minMonth;
@@ -143,7 +129,7 @@ export function Calendar({
         </button>
         {/* 달을 옮기면 스크린 리더가 바뀐 달을 읽는다. */}
         <p aria-live="polite" className="font-bold tabular-nums">
-          {year}.{String(monthIndex + 1).padStart(2, '0')}
+          {format(parseMonth(month), 'yyyy.MM')}
         </p>
         <button
           type="button"

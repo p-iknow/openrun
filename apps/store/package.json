@@ -12,8 +12,10 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@date-fns/tz": "^1.5.0",
     "@openrun/api-client": "workspace:*",
     "@openrun/store-ui": "workspace:*",
+    "date-fns": "^4.4.0",
     "next": "^16.4.5",
     "overlay-kit": "^1.9.0",
     "pretendard": "^1.3.9",
