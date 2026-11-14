@@ -41,7 +41,7 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await db.execute(
-    'TRUNCATE seat_grade_assignments, seat_grades, show_detail_images, performance_seats, performances, shows, seats, sections, venues RESTART IDENTITY CASCADE',
+    'TRUNCATE seat_grade_assignments, seat_grades, show_detail_images, performance_seats, performances, shows, seats, floors, venues RESTART IDENTITY CASCADE',
   );
 
   now = new Date(DEFAULT_NOW);

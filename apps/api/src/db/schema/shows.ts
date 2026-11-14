@@ -127,7 +127,7 @@ export const seatGrades = pgTable(
 );
 
 // 공연이 자기 공연장의 좌석 하나에 등급 하나를 지정한 것이다. 한 등급이 여러 좌석에 붙고,
-// 같은 구역 안에서도 열에 따라 등급이 다를 수 있다.
+// 같은 층 안에서도 열에 따라 등급이 다를 수 있다.
 export const seatGradeAssignments = pgTable(
   'seat_grade_assignments',
   {

@@ -1,23 +1,24 @@
 import { integer, pgTable, text, unique } from 'drizzle-orm/pg-core';
 
-// 공연장, 구역, 좌석은 공연과 별개로 존재하며 시드로만 만든다(좌석 배치 편집기는 만들지 않는다).
+// 공연장, 층, 좌석은 공연과 별개로 존재하며 시드로만 만든다(좌석 배치 편집기는 만들지 않는다).
 export const venues = pgTable('venues', {
   id: integer().primaryKey().generatedAlwaysAsIdentity(),
   name: text().notNull(),
 });
 
-// 공연장의 좌석을 나눈 묶음으로, 좌석의 위치(예: A구역 C열 5번)를 나타낸다. 좌석 등급은 구역이 아니라 좌석마다 지정한다.
-export const sections = pgTable(
-  'sections',
+// 공연장의 층으로, 좌석의 위치(예: 2층 C열 5번)를 나타낸다. 좌석 등급은 층이 아니라 좌석마다 지정한다.
+export const floors = pgTable(
+  'floors',
   {
     id: integer().primaryKey().generatedAlwaysAsIdentity(),
     venueId: integer('venue_id')
       .notNull()
       .references(() => venues.id),
+    // 층 이름(예: 1층)이다.
     name: text().notNull(),
   },
-  // 같은 공연장에 같은 이름의 구역이 두 번 들어가지 않게 막는다. 이름이 겹치면 "A구역 C열 5번"이 두 자리가 된다.
-  // 이 제약이 만드는 인덱스가 venue_id로 시작하므로, 공연장 하나의 구역을 찾을 때도 쓰인다.
+  // 같은 공연장에 같은 이름의 층이 두 번 들어가지 않게 막는다. 이름이 겹치면 "2층 C열 5번"이 두 자리가 된다.
+  // 이 제약이 만드는 인덱스가 venue_id로 시작하므로, 공연장 하나의 층을 찾을 때도 쓰인다.
   (table) => [unique().on(table.venueId, table.name)],
 );
 
@@ -26,14 +27,14 @@ export const seats = pgTable(
   'seats',
   {
     id: integer().primaryKey().generatedAlwaysAsIdentity(),
-    sectionId: integer('section_id')
+    floorId: integer('floor_id')
       .notNull()
-      .references(() => sections.id),
-    // 열 이름(예: A)과 열 안의 번호(1부터)다.
+      .references(() => floors.id),
+    // 열 이름과 열 안의 번호(1부터)다. 열 이름은 공연장마다 숫자(예: 3)나 글자(예: C)를 써서 text로 둔다. 시드는 글자를 쓴다.
     row: text().notNull(),
     number: integer().notNull(),
   },
-  // 같은 구역에 같은 열·번호 좌석이 두 번 들어가지 않게 막는다.
-  // 이 제약이 만드는 인덱스가 section_id로 시작하므로, 구역 하나의 좌석을 찾을 때도 쓰인다.
-  (table) => [unique().on(table.sectionId, table.row, table.number)],
+  // 같은 층에 같은 열·번호 좌석이 두 번 들어가지 않게 막는다.
+  // 이 제약이 만드는 인덱스가 floor_id로 시작하므로, 층 하나의 좌석을 찾을 때도 쓰인다.
+  (table) => [unique().on(table.floorId, table.row, table.number)],
 );

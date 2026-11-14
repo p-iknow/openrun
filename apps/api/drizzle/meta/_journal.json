@@ -50,6 +50,13 @@
       "when": 1794622858392,
       "tag": "0006_create_seat_grades",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794660926773,
+      "tag": "0007_rename_sections_to_floors",
+      "breakpoints": true
     }
   ]
 }

@@ -542,17 +542,17 @@ this.db.select({ status: salesStatusSubquery.salesStatus }).from(shows).innerJoi
 
         <section id="insert">
           <h2>insert, values, returning</h2>
-          <p>시드는 구역 하나의 좌석을 문장 하나로 한꺼번에 넣는다(실제 코드에서 줄였다).</p>
-          <pre><code class="language-ts">const sectionSeats = await tx
+          <p>시드는 층 하나의 좌석을 문장 하나로 한꺼번에 넣는다(실제 코드에서 줄였다).</p>
+          <pre><code class="language-ts">const floorSeats = await tx
   .insert(seats)
   .values([
-    { sectionId: section.id, row: 'A', number: 1 },
-    { sectionId: section.id, row: 'A', number: 2 },
+    { floorId: floor.id, row: 'A', number: 1 },
+    { floorId: floor.id, row: 'A', number: 2 },
     // ... 열 수 × 열당 좌석 수만큼
   ])
   .returning({ id: seats.id });
 // 결과 타입: { id: number }[]</code></pre>
-          <pre><code class="language-sql">insert into "seats" ("id", "section_id", "row", "number")
+          <pre><code class="language-sql">insert into "seats" ("id", "floor_id", "row", "number")
 values (default, $1, $2, $3), (default, $4, $5, $6)  -- 값 1, 'A', 1, 1, 'A', 2는 따로 간다
 returning "id"</code></pre>
           <ul>
@@ -569,7 +569,7 @@ returning "id"</code></pre>
             <li>
               <strong><code>.returning({...})</code></strong>: 넣은 행에서 돌려받을 컬럼을 고른다. DB가 매긴 <code>id</code>처럼
               넣은 뒤에야 알 수 있는 값을 받을 때 쓴다. 시드는 좌석을 넣고 받은 <code>id</code>로 회차 좌석을 만든다. 공연장,
-              구역, 공연, 회차는 하나씩 넣고 받은 <code>id</code>로 그 아래 행을 넣는다.
+              층, 공연, 회차는 하나씩 넣고 받은 <code>id</code>로 그 아래 행을 넣는다.
               <code>returning</code>이 없으면 결과에 행이 없다.
             </li>
           </ul>
@@ -584,9 +584,9 @@ returning "id"</code></pre>
           <pre><code class="language-ts">import { sql } from 'drizzle-orm';
 
 await tx.execute(
-  sql`TRUNCATE ${performanceSeats}, ${performances}, ${shows}, ${seats}, ${sections}, ${venues} RESTART IDENTITY`,
+  sql`TRUNCATE ${performanceSeats}, ${performances}, ${shows}, ${seats}, ${floors}, ${venues} RESTART IDENTITY`,
 );
-// → TRUNCATE "performance_seats", "performances", "shows", "seats", "sections", "venues" RESTART IDENTITY</code></pre>
+// → TRUNCATE "performance_seats", "performances", "shows", "seats", "floors", "venues" RESTART IDENTITY</code></pre>
           <p>
             쿼리 빌더에 없는 SQL은 <code>sql</code> 태그드 템플릿으로 직접 쓰고 <code>execute</code>로 보낸다.
             <code>TRUNCATE</code>는 빌더 메서드가 없어서 이렇게 썼다.
@@ -620,7 +620,7 @@ await tx.execute(
             테이블 이름을 문자열로 적지 않고 객체로 넣으면, 스키마에서 이름을 바꿨을 때 이 SQL도 함께 바뀐다.
           </p>
           <p>
-            통합 테스트는 <code>db.execute('TRUNCATE performance_seats, performances, shows, seats, sections, venues RESTART IDENTITY CASCADE')</code>처럼 문자열을
+            통합 테스트는 <code>db.execute('TRUNCATE performance_seats, performances, shows, seats, floors, venues RESTART IDENTITY CASCADE')</code>처럼 문자열을
             그대로 넘긴다. 값이 섞이지 않는 고정 문장이라 문제는 없지만, 테이블 이름이 바뀌어도 타입 검사가 잡아 주지 않는다.
           </p>
           <p>
@@ -805,9 +805,9 @@ function toLiteralSql(status: ShowSalesStatus): SQL {
         <section id="transaction">
           <h2>transaction</h2>
           <pre><code class="language-ts">await db.transaction(async (tx) =&gt; {
-  await tx.execute(sql`TRUNCATE ${performanceSeats}, ${performances}, ${shows}, ${seats}, ${sections}, ${venues} RESTART IDENTITY`);
+  await tx.execute(sql`TRUNCATE ${performanceSeats}, ${performances}, ${shows}, ${seats}, ${floors}, ${venues} RESTART IDENTITY`);
   const [venue] = await tx.insert(venues).values({ name: layout.name }).returning({ id: venues.id });
-  // ... 구역, 좌석, 공연, 회차, 회차 좌석을 넣는다
+  // ... 층, 좌석, 공연, 회차, 회차 좌석을 넣는다
 });</code></pre>
           <p>
             콜백 안의 쿼리를 <a href="01-프론트엔드-개발자를-위한-DB-개념.html#transaction">트랜잭션</a> 하나로 묶는다.
