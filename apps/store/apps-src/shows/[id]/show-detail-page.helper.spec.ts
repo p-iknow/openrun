@@ -66,23 +66,19 @@ describe('selectShowDetail', () => {
     });
   });
 
-  it('좌석 등급마다 가격을 원 단위 문구로, 구역 이름을 쉼표로 이어 보여 준다', () => {
+  it('좌석 등급마다 가격을 원 단위 문구로 보여 준다', () => {
     const detail = selectShowDetail(
       showOf({
         seatGrades: [
-          {
-            name: 'VIP석',
-            price: 170_000,
-            sectionNames: ['A구역', 'B구역'],
-          },
-          { name: 'A석', price: 8_000, sectionNames: ['C구역'] },
+          { name: 'VIP석', price: 170_000 },
+          { name: 'A석', price: 8_000 },
         ],
       }),
     );
 
     expect(detail.seatGrades).toEqual([
-      { name: 'VIP석', price: '170,000원', sections: 'A구역, B구역' },
-      { name: 'A석', price: '8,000원', sections: 'C구역' },
+      { name: 'VIP석', price: '170,000원' },
+      { name: 'A석', price: '8,000원' },
     ]);
   });
 

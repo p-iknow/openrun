@@ -17,14 +17,13 @@ import { DATABASE, type Database } from '../db/database.module.js';
 import {
   performanceSeats,
   performances,
-  seatGradeAssignments,
   seatGrades,
   showDetailImages,
   shows,
 } from '../db/schema/shows.js';
-import { seats, sections, venues } from '../db/schema/venues.js';
+import { venues } from '../db/schema/venues.js';
 import type { ShowListQuery } from './show-list-query.js';
-import type { SeatGradeDto, ShowDetailDto, ShowPageDto } from './show.dto.js';
+import type { ShowDetailDto, ShowPageDto } from './show.dto.js';
 import {
   buildAlmostSoldOutCondition,
   buildPerformanceSalesStatus,
@@ -157,35 +156,12 @@ export class ShowsService {
           .from(showDetailImages)
           .where(eq(showDetailImages.showId, id))
           .orderBy(asc(showDetailImages.position)),
-        // 등급과 그 등급 좌석이 있는 구역을 한 행씩 읽는다. 한 구역에 등급이 섞여 있으면 그 구역이 등급마다 한 행씩 나온다.
-        // 좌석이 없는 등급도 빠지지 않게 LEFT JOIN으로 읽는다. 그런 등급은 구역 이름이 null인 행 하나다.
         this.db
-          .select({
-            id: seatGrades.id,
-            name: seatGrades.name,
-            price: seatGrades.price,
-            sectionName: sections.name,
-          })
+          .select({ name: seatGrades.name, price: seatGrades.price })
           .from(seatGrades)
-          .leftJoin(
-            seatGradeAssignments,
-            and(
-              // 결과는 등급 id만으로도 같다(복합 외래 키가 공연을 맞춘다). show_id 조건이 있어야 지정 테이블을
-              // 기본 키 (show_id, seat_id) 인덱스로 찾는다. 빼면 seat_grade_id 인덱스가 없어 테이블 전체를 읽는다.
-              eq(seatGradeAssignments.showId, seatGrades.showId),
-              eq(seatGradeAssignments.seatGradeId, seatGrades.id),
-            ),
-          )
-          .leftJoin(seats, eq(seats.id, seatGradeAssignments.seatId))
-          .leftJoin(sections, eq(sections.id, seats.sectionId))
           .where(eq(seatGrades.showId, id))
-          .groupBy(seatGrades.id, sections.id)
-          // 가격이 같으면 먼저 만든 등급을 앞에 둔다. 구역은 공연장에 둔 순서(id)다.
-          .orderBy(
-            desc(seatGrades.price),
-            asc(seatGrades.id),
-            asc(sections.id),
-          ),
+          // 가격이 같으면 먼저 만든 등급을 앞에 둔다.
+          .orderBy(desc(seatGrades.price), asc(seatGrades.id)),
         this.db
           .select({
             id: performances.id,
@@ -229,33 +205,13 @@ export class ShowsService {
       detailImages: detailImageRows.map(({ path }) => ({
         url: buildShowImageUrl({ baseUrl: this.showImageBaseUrl, path }),
       })),
-      seatGrades: groupSectionNamesByGrade(seatGradeRows),
+      seatGrades: seatGradeRows,
       performances: performanceRows.map(({ startsAt, ...performance }) => ({
         ...performance,
         startsAt: startsAt.toISOString(),
       })),
     };
   }
-}
-
-// 등급·구역 행을 등급 하나에 구역 이름 목록 하나로 묶는다. 행이 등급 순으로 정렬돼 있어, 처음 나온 순서를 그대로 둔다.
-function groupSectionNamesByGrade(
-  rows: {
-    id: number;
-    name: string;
-    price: number;
-    sectionName: string | null;
-  }[],
-): SeatGradeDto[] {
-  const grades = new Map<number, SeatGradeDto>();
-  for (const { id, name, price, sectionName } of rows) {
-    const grade = grades.get(id) ?? { name, price, sectionNames: [] };
-    if (sectionName !== null) {
-      grade.sectionNames.push(sectionName);
-    }
-    grades.set(id, grade);
-  }
-  return [...grades.values()];
 }
 
 // 공연마다 공연 기간(첫 회차부터 마지막 회차까지의 시작 일시)을 계산하는 서브쿼리다.

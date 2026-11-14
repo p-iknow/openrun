@@ -33,8 +33,6 @@ export interface SeatGradeData {
   name: string;
   /** 예: `170,000원` */
   price: string;
-  /** 이 등급 좌석이 있는 구역. 예: `A구역, B구역` */
-  sections: string;
 }
 
 export interface ShowDetailData {
@@ -107,7 +105,6 @@ export function selectShowDetail(show: ShowDetail): ShowDetailData {
     seatGrades: show.seatGrades.map((grade) => ({
       name: grade.name,
       price: `${PRICE_FORMAT.format(grade.price)}원`,
-      sections: grade.sectionNames.join(', '),
     })),
     salesStatus: SHOW_SALES_STATUS_BADGES[show.salesStatus],
     salesOpenAt: getSalesOpenAtLabel(show.salesOpenAt),

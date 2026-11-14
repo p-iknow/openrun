@@ -95,7 +95,7 @@ export function ShowInfo({ show }: { show: ShowDetailData }) {
                 <dd className="break-keep">{value}</dd>
               </div>
             ))}
-            {/* NOL 티켓처럼 공연 정보 목록에 등급별 가격을 둔다. 등급마다 그 등급 좌석이 있는 구역을 함께 적는다. */}
+            {/* NOL 티켓처럼 공연 정보 목록에 등급별 가격을 둔다. 어느 자리가 어느 등급인지는 좌석 배치도에서 보여 준다. */}
             {show.seatGrades.length > 0 && (
               <div className="col-span-2 grid grid-cols-subgrid">
                 <dt className="text-text-secondary">가격</dt>
@@ -108,9 +108,6 @@ export function ShowInfo({ show }: { show: ShowDetailData }) {
                       >
                         <span className="font-semibold">{grade.name}</span>
                         <span>{grade.price}</span>
-                        <span className="text-text-secondary">
-                          {grade.sections}
-                        </span>
                       </li>
                     ))}
                   </ul>

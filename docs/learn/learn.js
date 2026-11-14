@@ -60,7 +60,6 @@ const learnFolders = [
       { file: '11-행-단위-값과-그룹-단위-값.html', title: '11 행 단위 값과 그룹 단위 값, 함수 종속성', tags: ['database'] },
       { file: '12-좌석-등급-스키마와-복합-외래-키.html', title: '12 좌석 등급 스키마와 복합 외래 키', tags: ['drizzle', 'database'] },
       { file: '13-다대다-관계와-연결-테이블.html', title: '13 다대다 관계와 연결 테이블', tags: ['database'] },
-      { file: '14-좌석-등급-쿼리-읽기.html', title: '14 좌석 등급 쿼리 읽기', tags: ['drizzle', 'database'] },
     ],
   },
   {

@@ -142,13 +142,6 @@ export class SeatGradeDto {
 
   @ApiProperty({ type: 'integer', description: '가격(원)' })
   price: number;
-
-  @ApiProperty({
-    type: [String],
-    description:
-      '이 등급 좌석이 있는 구역 이름. 공연장에 구역을 둔 순서다. 한 구역에 등급이 섞여 있으면 그 구역은 각 등급에 모두 담긴다.',
-  })
-  sectionNames: string[];
 }
 
 export class ShowDetailDto {
