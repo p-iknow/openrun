@@ -1,6 +1,5 @@
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { drizzle } from 'drizzle-orm/node-postgres';
 import request from 'supertest';
 import type { App } from 'supertest/types.js';
 import {
@@ -16,167 +15,19 @@ import {
 } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import { Clock } from '../src/clock/clock.module.js';
-import { eq } from 'drizzle-orm';
-import {
-  type Genre,
-  performanceSeats,
-  performances,
-  seatGrades,
-  showDetailImages,
-  shows,
-} from '../src/db/schema/shows.js';
-import { seats, sections, venues } from '../src/db/schema/venues.js';
+import type { Genre } from '../src/db/schema/shows.js';
+import { db } from './db.js';
+import { showFactory, VENUE_SEAT_COUNT, venueFactory } from './factory.js';
 
-// 테스트의 기본 현재 시각. 회차를 시작 일시만으로 넣으면 판매 오픈 일시가 DEFAULT_SALES_OPEN_AT이라,
+// 테스트의 기본 현재 시각. 회차의 판매 오픈 일시를 주지 않으면 팩토리 기본값(2026-01-01)이라,
 // 이 시각 뒤에 시작하는 회차는 판매 중이다.
 const DEFAULT_NOW = '2026-02-01T00:00:00Z';
-const DEFAULT_SALES_OPEN_AT = '2026-01-01T01:00:00Z';
-// 공연 등록 일시를 주지 않으면 쓰는 값. DB 기본값(now())은 테스트마다 달라지므로 늘 직접 넣는다.
-const DEFAULT_CREATED_AT = '2025-12-01T00:00:00Z';
-// 공연장 하나의 좌석 수.
-const VENUE_SEAT_COUNT = 20;
 // 공연 이미지 URL은 이 값과 저장소 안 경로를 합친다. 끝의 /는 있어도 없어도 같은 URL이 나온다.
 const SHOW_IMAGE_BASE_URL = 'https://images.example.com/openrun/';
 
-interface PerformanceInput {
-  startsAt: string;
-  salesOpenAt?: string;
-  isCancelled?: boolean;
-  // 판매됨으로 둘 회차 좌석 수. 회차 좌석은 공연장의 좌석 수(VENUE_SEAT_COUNT)만큼 만든다.
-  soldSeats?: number;
-}
-
-const db = drizzle(inject('databaseUrl'));
 let app: INestApplication<App>;
 // 테스트마다 바꿀 수 있는 현재 시각. 앱의 Clock이 이 값을 돌려준다.
 let now: Date;
-
-// 공연 하나와 그 회차를 넣고 공연 id를 돌려준다. 주지 않은 컬럼은 고정값으로 채운다.
-// 회차는 시작 일시만(performanceStarts) 주거나, 판매 오픈 일시와 회차 취소까지(performances) 준다.
-async function insertShow({
-  venueId,
-  title,
-  genre = 'musical',
-  posterPath = 'posters/poster.png',
-  createdAt = DEFAULT_CREATED_AT,
-  minAge = 8,
-  runningMinutes = 150,
-  description = '소개',
-  performanceStarts = [],
-  performances: performanceInputs = [],
-  detailImages = [],
-}: {
-  venueId: number;
-  title: string;
-  genre?: Genre;
-  posterPath?: string;
-  createdAt?: string;
-  minAge?: number;
-  runningMinutes?: number;
-  description?: string;
-  performanceStarts?: string[];
-  performances?: PerformanceInput[];
-  // 상세 이미지. position은 넣은 순서와 따로 준다.
-  detailImages?: { position: number; path: string }[];
-}): Promise<number> {
-  const [show] = await db
-    .insert(shows)
-    .values({
-      venueId,
-      title,
-      genre,
-      minAge,
-      runningMinutes,
-      description,
-      posterPath,
-      createdAt: new Date(createdAt),
-    })
-    .returning({ id: shows.id });
-  if (!show) {
-    throw new Error('공연을 넣지 못했습니다.');
-  }
-  const rows: PerformanceInput[] = [
-    ...performanceStarts.map((startsAt) => ({ startsAt })),
-    ...performanceInputs,
-  ];
-  const venueSeats = await db
-    .select({ id: seats.id })
-    .from(seats)
-    .innerJoin(sections, eq(sections.id, seats.sectionId))
-    .where(eq(sections.venueId, venueId))
-    .orderBy(seats.id);
-  for (const {
-    startsAt,
-    salesOpenAt = DEFAULT_SALES_OPEN_AT,
-    isCancelled,
-    soldSeats = 0,
-  } of rows) {
-    const [performance] = await db
-      .insert(performances)
-      .values({
-        showId: show.id,
-        startsAt: new Date(startsAt),
-        salesOpenAt: new Date(salesOpenAt),
-        isCancelled,
-      })
-      .returning({ id: performances.id });
-    if (!performance) {
-      throw new Error('회차를 넣지 못했습니다.');
-    }
-    await db.insert(performanceSeats).values(
-      venueSeats.map((seat, index) => ({
-        performanceId: performance.id,
-        seatId: seat.id,
-        isSold: index < soldSeats,
-      })),
-    );
-  }
-  if (detailImages.length > 0) {
-    await db
-      .insert(showDetailImages)
-      .values(detailImages.map((image) => ({ ...image, showId: show.id })));
-  }
-  return show.id;
-}
-
-// 공연장과 구역 하나, 좌석 VENUE_SEAT_COUNT개를 넣고 공연장 id를 돌려준다.
-async function insertVenue(name: string): Promise<number> {
-  const [venue] = await db
-    .insert(venues)
-    .values({ name })
-    .returning({ id: venues.id });
-  if (!venue) {
-    throw new Error('공연장을 넣지 못했습니다.');
-  }
-  const [section] = await db
-    .insert(sections)
-    .values({ venueId: venue.id, name: 'A구역' })
-    .returning({ id: sections.id });
-  if (!section) {
-    throw new Error('구역을 넣지 못했습니다.');
-  }
-  await db.insert(seats).values(
-    Array.from({ length: VENUE_SEAT_COUNT }, (_, index) => ({
-      sectionId: section.id,
-      row: 'A',
-      number: index + 1,
-    })),
-  );
-  return venue.id;
-}
-
-// 공연에 좌석 등급을 넣는다. 좌석 지정은 상세 응답에 나오지 않아 넣지 않는다.
-async function insertSeatGrades({
-  showId,
-  grades,
-}: {
-  showId: number;
-  grades: { name: string; price: number }[];
-}): Promise<void> {
-  await db
-    .insert(seatGrades)
-    .values(grades.map((grade) => ({ ...grade, showId })));
-}
 
 beforeAll(() => {
   vi.stubEnv('DATABASE_URL', inject('databaseUrl'));
@@ -224,16 +75,15 @@ describe('GET /shows', () => {
   });
 
   it('항목에 공연장 이름, 첫 회차부터 마지막 회차까지의 공연 기간, 포스터 URL을 담는다', async () => {
-    const venueId = await insertVenue('샤롯데씨어터');
-    await insertShow({
+    const venueId = await venueFactory.build({ name: '샤롯데씨어터' });
+    await showFactory.build({
       venueId,
-      title: '달빛 정원',
       posterPath: 'posters/show-01.png',
       // 넣는 순서와 상관없이 가장 이른 회차와 가장 늦은 회차를 고른다.
-      performanceStarts: [
-        '2026-03-10T10:30:00Z',
-        '2026-03-01T05:00:00Z',
-        '2026-03-20T10:30:00Z',
+      performances: [
+        { startsAt: '2026-03-10T10:30:00Z' },
+        { startsAt: '2026-03-01T05:00:00Z' },
+        { startsAt: '2026-03-20T10:30:00Z' },
       ],
     });
 
@@ -264,30 +114,25 @@ describe('GET /shows', () => {
   });
 
   it('sort가 newest이면 등록 일시가 늦은 순으로, 같으면 나중에 등록한(id가 큰) 순으로 정렬한다', async () => {
-    const venueId = await insertVenue('예술의전당');
-    await insertShow({
-      venueId,
+    await showFactory.build({
       title: '먼저 등록',
       createdAt: '2026-01-01T00:00:00Z',
-      performanceStarts: ['2026-03-01T10:00:00Z'],
+      performances: [{ startsAt: '2026-03-01T10:00:00Z' }],
     });
-    await insertShow({
-      venueId,
+    await showFactory.build({
       title: '같은 시각 A',
       createdAt: '2026-01-05T00:00:00Z',
-      performanceStarts: ['2026-05-01T10:00:00Z'],
+      performances: [{ startsAt: '2026-05-01T10:00:00Z' }],
     });
-    await insertShow({
-      venueId,
+    await showFactory.build({
       title: '같은 시각 B',
       createdAt: '2026-01-05T00:00:00Z',
-      performanceStarts: ['2026-04-01T10:00:00Z'],
+      performances: [{ startsAt: '2026-04-01T10:00:00Z' }],
     });
-    await insertShow({
-      venueId,
+    await showFactory.build({
       title: '나중에 등록',
       createdAt: '2026-01-10T00:00:00Z',
-      performanceStarts: ['2026-06-01T10:00:00Z'],
+      performances: [{ startsAt: '2026-06-01T10:00:00Z' }],
     });
 
     const response = await request(app.getHttpServer()).get(
@@ -300,18 +145,15 @@ describe('GET /shows', () => {
   });
 
   it('sort가 start_date이면 기본 정렬과 같다', async () => {
-    const venueId = await insertVenue('예술의전당');
-    await insertShow({
-      venueId,
+    await showFactory.build({
       title: '늦게 시작',
       createdAt: '2026-01-01T00:00:00Z',
-      performanceStarts: ['2026-05-01T10:00:00Z'],
+      performances: [{ startsAt: '2026-05-01T10:00:00Z' }],
     });
-    await insertShow({
-      venueId,
+    await showFactory.build({
       title: '먼저 시작',
       createdAt: '2026-01-10T00:00:00Z',
-      performanceStarts: ['2026-03-01T10:00:00Z'],
+      performances: [{ startsAt: '2026-03-01T10:00:00Z' }],
     });
 
     const response = await request(app.getHttpServer()).get(
@@ -324,27 +166,25 @@ describe('GET /shows', () => {
   });
 
   it('첫 회차 일시가 이른 순으로, 같으면 id 순으로 정렬한다', async () => {
-    const venueId = await insertVenue('예술의전당');
-    await insertShow({
-      venueId,
+    await showFactory.build({
       title: '늦게 시작',
-      performanceStarts: ['2026-05-01T10:00:00Z'],
+      performances: [{ startsAt: '2026-05-01T10:00:00Z' }],
     });
-    await insertShow({
-      venueId,
+    await showFactory.build({
       title: '같은 시각 A',
       // 마지막 회차가 늦어도 첫 회차로 정렬한다.
-      performanceStarts: ['2026-04-01T10:00:00Z', '2026-06-01T10:00:00Z'],
+      performances: [
+        { startsAt: '2026-04-01T10:00:00Z' },
+        { startsAt: '2026-06-01T10:00:00Z' },
+      ],
     });
-    await insertShow({
-      venueId,
+    await showFactory.build({
       title: '같은 시각 B',
-      performanceStarts: ['2026-04-01T10:00:00Z'],
+      performances: [{ startsAt: '2026-04-01T10:00:00Z' }],
     });
-    await insertShow({
-      venueId,
+    await showFactory.build({
       title: '먼저 시작',
-      performanceStarts: ['2026-03-01T10:00:00Z'],
+      performances: [{ startsAt: '2026-03-01T10:00:00Z' }],
     });
 
     const response = await request(app.getHttpServer()).get('/shows');
@@ -355,13 +195,11 @@ describe('GET /shows', () => {
   });
 
   it('공연이 20개를 넘으면 첫 20개와 전체 개수, 전체 페이지 수를 돌려준다', async () => {
-    const venueId = await insertVenue('예술의전당');
     for (let day = 1; day <= 21; day += 1) {
-      await insertShow({
-        venueId,
+      await showFactory.build({
         title: `공연 ${day}`,
-        performanceStarts: [
-          `2026-03-${String(day).padStart(2, '0')}T10:00:00Z`,
+        performances: [
+          { startsAt: `2026-03-${String(day).padStart(2, '0')}T10:00:00Z` },
         ],
       });
     }
@@ -381,13 +219,11 @@ describe('GET /shows', () => {
   describe('페이지', () => {
     // 3월 1일부터 하루에 하나씩 시작하는 공연 12개. 제목은 `공연 1` ~ `공연 12`이고 정렬 순서와 같다.
     async function insertTwelveShows() {
-      const venueId = await insertVenue('예술의전당');
       for (let day = 1; day <= 12; day += 1) {
-        await insertShow({
-          venueId,
+        await showFactory.build({
           title: `공연 ${day}`,
-          performanceStarts: [
-            `2026-03-${String(day).padStart(2, '0')}T10:00:00Z`,
+          performances: [
+            { startsAt: `2026-03-${String(day).padStart(2, '0')}T10:00:00Z` },
           ],
         });
       }
@@ -464,13 +300,13 @@ describe('GET /shows', () => {
   describe('제목 검색', () => {
     // 제목마다 공연을 하나씩, 넣는 순서대로 첫 회차 일시가 이르게 넣는다.
     async function insertShowsTitled(titles: string[]) {
-      const venueId = await insertVenue('예술의전당');
       for (const [index, title] of titles.entries()) {
-        await insertShow({
-          venueId,
+        await showFactory.build({
           title,
-          performanceStarts: [
-            `2026-03-${String(index + 1).padStart(2, '0')}T10:00:00Z`,
+          performances: [
+            {
+              startsAt: `2026-03-${String(index + 1).padStart(2, '0')}T10:00:00Z`,
+            },
           ],
         });
       }
@@ -553,17 +389,17 @@ describe('GET /shows', () => {
     async function insertShows(
       inputs: { title: string; genre: Genre; status: 'on_sale' | 'upcoming' }[],
     ) {
-      const venueId = await insertVenue('예술의전당');
       for (const [index, { title, genre, status }] of inputs.entries()) {
-        await insertShow({
-          venueId,
+        await showFactory.build({
           title,
           genre,
           performances: [
             {
               startsAt: `2026-03-${String(index + 1).padStart(2, '0')}T10:00:00Z`,
-              salesOpenAt:
-                status === 'upcoming' ? '2026-02-10T05:00:00Z' : undefined,
+              // 판매 중 회차는 기본 판매 오픈 일시를 쓴다.
+              ...(status === 'upcoming' && {
+                salesOpenAt: '2026-02-10T05:00:00Z',
+              }),
             },
           ],
         });
@@ -677,8 +513,7 @@ describe('GET /shows', () => {
   });
 
   it('회차가 없는 공연은 목록과 전체 개수에서 뺀다', async () => {
-    const venueId = await insertVenue('예술의전당');
-    await insertShow({ venueId, title: '회차 없음', performanceStarts: [] });
+    await showFactory.build({ title: '회차 없음', performances: [] });
 
     const response = await request(app.getHttpServer()).get('/shows');
 
@@ -710,10 +545,7 @@ describe('GET /shows', () => {
         expected: 'on_sale',
       },
     ])('$moment: $expected', async ({ at, expected }) => {
-      const venueId = await insertVenue('예술의전당');
-      await insertShow({
-        venueId,
-        title: '달빛 정원',
+      await showFactory.build({
         performances: [{ startsAt, salesOpenAt }],
       });
       now = at;
@@ -734,10 +566,7 @@ describe('GET /shows', () => {
         expected: 'upcoming',
       },
     ])('$moment: $expected', async ({ at, expected }) => {
-      const venueId = await insertVenue('예술의전당');
-      await insertShow({
-        venueId,
-        title: '달빛 정원',
+      await showFactory.build({
         performances: [
           { startsAt, salesOpenAt },
           {
@@ -752,10 +581,7 @@ describe('GET /shows', () => {
     });
 
     it('취소된 회차는 판매 오픈 전이어도 판매 종료라, 그 회차만 있는 공연은 목록에서 빠진다', async () => {
-      const venueId = await insertVenue('예술의전당');
-      await insertShow({
-        venueId,
-        title: '달빛 정원',
+      await showFactory.build({
         performances: [{ startsAt, salesOpenAt, isCancelled: true }],
       });
       now = subtractMs({ iso: salesOpenAt, ms: 1 });
@@ -764,10 +590,7 @@ describe('GET /shows', () => {
     });
 
     it('남은 회차 좌석이 0이어도 판매 중이다', async () => {
-      const venueId = await insertVenue('예술의전당');
-      await insertShow({
-        venueId,
-        title: '달빛 정원',
+      await showFactory.build({
         performances: [{ startsAt, salesOpenAt, soldSeats: VENUE_SEAT_COUNT }],
       });
       now = new Date(salesOpenAt);
@@ -776,10 +599,7 @@ describe('GET /shows', () => {
     });
 
     it('남은 회차 좌석이 0이어도 판매 오픈 전이면 판매 예정이다', async () => {
-      const venueId = await insertVenue('예술의전당');
-      await insertShow({
-        venueId,
-        title: '달빛 정원',
+      await showFactory.build({
         performances: [{ startsAt, salesOpenAt, soldSeats: VENUE_SEAT_COUNT }],
       });
       now = subtractMs({ iso: salesOpenAt, ms: 1 });
@@ -827,8 +647,7 @@ describe('GET /shows', () => {
         expected: { salesStatus: 'on_sale', salesOpenAt: null },
       },
     ])('$name', async ({ performances: inputs, expected }) => {
-      const venueId = await insertVenue('예술의전당');
-      await insertShow({ venueId, title: '달빛 정원', performances: inputs });
+      await showFactory.build({ performances: inputs });
 
       const response = await request(app.getHttpServer()).get('/shows');
 
@@ -836,10 +655,7 @@ describe('GET /shows', () => {
     });
 
     it('끝나지 않은 회차가 모두 취소됐으면 판매 종료라 목록과 전체 개수에서 뺀다', async () => {
-      const venueId = await insertVenue('예술의전당');
-      await insertShow({
-        venueId,
-        title: '달빛 정원',
+      await showFactory.build({
         performances: [ended, cancelled],
       });
 
@@ -849,10 +665,7 @@ describe('GET /shows', () => {
     });
 
     it('판매 예정이면 판매 예정 회차 중 가장 이른 판매 오픈 일시를 담는다', async () => {
-      const venueId = await insertVenue('예술의전당');
-      await insertShow({
-        venueId,
-        title: '달빛 정원',
+      await showFactory.build({
         performances: [
           {
             startsAt: '2026-03-10T10:00:00Z',
@@ -881,16 +694,19 @@ describe('GET /shows', () => {
   });
 
   it('판매 종료 공연은 목록과 전체 개수에서 뺀다', async () => {
-    const venueId = await insertVenue('예술의전당');
-    await insertShow({
-      venueId,
+    await showFactory.build({
       title: '끝난 공연',
-      performanceStarts: ['2026-01-10T10:00:00Z', '2026-01-20T10:00:00Z'],
+      performances: [
+        { startsAt: '2026-01-10T10:00:00Z' },
+        { startsAt: '2026-01-20T10:00:00Z' },
+      ],
     });
-    await insertShow({
-      venueId,
+    await showFactory.build({
       title: '판매 중 공연',
-      performanceStarts: ['2026-01-20T10:00:00Z', '2026-03-01T10:00:00Z'],
+      performances: [
+        { startsAt: '2026-01-20T10:00:00Z' },
+        { startsAt: '2026-03-01T10:00:00Z' },
+      ],
     });
 
     const response = await request(app.getHttpServer()).get('/shows');
@@ -904,17 +720,19 @@ describe('GET /shows', () => {
 
 describe('GET /shows/:id', () => {
   it('공연 정보, 공연장, 공연 기간, 공연 판매 상태, 회차 목록을 담는다', async () => {
-    const venueId = await insertVenue('샤롯데씨어터');
-    const showId = await insertShow({
+    const venueId = await venueFactory.build({ name: '샤롯데씨어터' });
+    const showId = await showFactory.build({
       venueId,
-      title: '달빛 정원',
       genre: 'play',
       posterPath: 'posters/show-01.png',
       minAge: 13,
       runningMinutes: 120,
       description: '달빛 아래 정원에서 벌어지는 이야기',
       // 넣는 순서와 상관없이 시작 일시 순으로 담는다.
-      performanceStarts: ['2026-03-10T10:30:00Z', '2026-03-01T05:00:00Z'],
+      performances: [
+        { startsAt: '2026-03-10T10:30:00Z' },
+        { startsAt: '2026-03-01T05:00:00Z' },
+      ],
     });
 
     const response = await request(app.getHttpServer()).get(`/shows/${showId}`);
@@ -959,11 +777,7 @@ describe('GET /shows/:id', () => {
   });
 
   it('상세 이미지를 순서대로 완전한 URL로 담는다', async () => {
-    const venueId = await insertVenue('샤롯데씨어터');
-    const showId = await insertShow({
-      venueId,
-      title: '달빛 정원',
-      performanceStarts: ['2026-03-01T05:00:00Z'],
+    const showId = await showFactory.build({
       // 넣는 순서와 상관없이 position 순으로 담는다.
       detailImages: [
         { position: 2, path: 'details/show-01-2.png' },
@@ -980,16 +794,9 @@ describe('GET /shows/:id', () => {
   });
 
   it('좌석 등급을 가격이 높은 순으로, 가격이 같으면 먼저 만든 순으로 담는다', async () => {
-    const venueId = await insertVenue('샤롯데씨어터');
-    const showId = await insertShow({
-      venueId,
-      title: '달빛 정원',
-      performanceStarts: ['2026-03-01T05:00:00Z'],
-    });
-    // 넣는 순서와 상관없이 가격이 높은 순으로 담는다. 휠체어석은 S석과 가격이 같고 나중에 만들었다.
-    await insertSeatGrades({
-      showId,
-      grades: [
+    const showId = await showFactory.build({
+      // 넣는 순서와 상관없이 가격이 높은 순으로 담는다. 휠체어석은 S석과 가격이 같고 나중에 만들었다.
+      seatGrades: [
         { name: 'R석', price: 140_000 },
         { name: 'S석', price: 110_000 },
         { name: 'VIP석', price: 170_000 },
@@ -1031,10 +838,7 @@ describe('GET /shows/:id', () => {
     }
 
     it('시작한 회차는 빼고, 남은 회차마다 판매 상태와 남은 좌석을 담는다', async () => {
-      const venueId = await insertVenue('예술의전당');
-      const showId = await insertShow({
-        venueId,
-        title: '달빛 정원',
+      const showId = await showFactory.build({
         performances: [
           ended,
           // 시작한 뒤의 취소 회차도 더 고를 수 없어 뺀다.
@@ -1071,10 +875,7 @@ describe('GET /shows/:id', () => {
     });
 
     it('남은 회차 좌석이 0이어도 판매 오픈 전이면 매진이 아니라 판매 예정이다', async () => {
-      const venueId = await insertVenue('예술의전당');
-      const showId = await insertShow({
-        venueId,
-        title: '달빛 정원',
+      const showId = await showFactory.build({
         performances: [{ ...upcoming, soldSeats: VENUE_SEAT_COUNT }],
       });
 
@@ -1084,11 +885,11 @@ describe('GET /shows/:id', () => {
     });
 
     it('회차 시작 정각이면 판매 종료라 빠지고, 직전이면 담는다', async () => {
-      const venueId = await insertVenue('예술의전당');
-      const showId = await insertShow({
-        venueId,
-        title: '달빛 정원',
-        performanceStarts: ['2026-03-01T10:00:00Z', '2026-03-02T10:00:00Z'],
+      const showId = await showFactory.build({
+        performances: [
+          { startsAt: '2026-03-01T10:00:00Z' },
+          { startsAt: '2026-03-02T10:00:00Z' },
+        ],
       });
       now = new Date('2026-03-01T10:00:00Z');
 
@@ -1120,10 +921,7 @@ describe('GET /shows/:id', () => {
       },
       { name: '매진이면 아니다', soldSeats: 20, expected: false },
     ])('판매 중 회차의 매진 임박: $name', async ({ soldSeats, expected }) => {
-      const venueId = await insertVenue('예술의전당');
-      const showId = await insertShow({
-        venueId,
-        title: '달빛 정원',
+      const showId = await showFactory.build({
         performances: [{ ...onSale, soldSeats }],
       });
 
@@ -1136,10 +934,7 @@ describe('GET /shows/:id', () => {
     });
 
     it('판매 예정 회차는 남은 좌석이 10% 이하여도 매진 임박이 아니다', async () => {
-      const venueId = await insertVenue('예술의전당');
-      const showId = await insertShow({
-        venueId,
-        title: '달빛 정원',
+      const showId = await showFactory.build({
         performances: [{ ...upcoming, soldSeats: 19 }],
       });
 
@@ -1149,9 +944,7 @@ describe('GET /shows/:id', () => {
     });
 
     it('모든 회차가 끝난 공연은 판매 종료이고 회차 목록이 비어 있다', async () => {
-      const venueId = await insertVenue('예술의전당');
-      const showId = await insertShow({
-        venueId,
+      const showId = await showFactory.build({
         title: '끝난 공연',
         performances: [ended],
       });
@@ -1191,8 +984,10 @@ describe('GET /shows/:id', () => {
     });
 
     it('회차가 없는 공연은 목록처럼 없는 공연으로 본다', async () => {
-      const venueId = await insertVenue('예술의전당');
-      const showId = await insertShow({ venueId, title: '회차 없음' });
+      const showId = await showFactory.build({
+        title: '회차 없음',
+        performances: [],
+      });
 
       const response = await request(app.getHttpServer()).get(
         `/shows/${showId}`,

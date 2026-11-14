@@ -8,7 +8,6 @@
   - 여러 값을 조립하기는 `build`. 예: `buildShowImageUrl`, `buildSections`.
   - 화면에 보일 문자열 만들기는 `format`. 예: `formatKst`, `formatPosterPeriod`.
   - 개수 세기는 `count`. 예: `countSeats`.
-  - 테스트 데이터 만들기는 `create`. 예: `createShow`.
   - `seatCountOf`처럼 명사 뒤에 `Of`를 붙이는 이름은 쓰지 않는다. JS/TS에서 흔한 관례가 아니라 읽기 어색하다.
 - 매개변수가 2개 이상인 함수는 호출하는 곳에서 각 인자의 뜻이 보이게 객체로 받는다. 기본은 값을 모두 객체 하나로 받는 것이다(`f({ a, b })`). 예: `buildShowImageUrl(path, base)`가 아니라 `buildShowImageUrl({ baseUrl, path })`. 주된 값과 함께 받는 설정이 앞으로 늘어날 것 같을 때만 그 값과 `options` 객체로 나눠 받는다(`f(main, options)`). 예: 글자 이미지를 그리는 `renderTextImage(text, { font, size, opacity, letterSpacing })`는 글자 모양 설정이 더 늘어날 수 있다. 가변 인자(`cn(...inputs)`)와 라이브러리가 정한 시그니처(`map` 콜백, `it.each` 콜백 등)는 예외다.
 - 비즈니스 로직은 NestJS API에 둔다. 스토어는 API를 호출하고 결과를 표시만 한다. 응답을 화면에 맞게 가공하는 것은 허용하지만, 업무 규칙을 판단하지 않는다.
@@ -16,6 +15,7 @@
 - 스토어는 API를 호출하는 함수를 `apps-src/@shared/api/`에 API 모듈마다 모아 두고(예: `@shared/api/shows.ts`), 호출만 하게 둔다. 호출 함수는 `unwrap`으로 성공 값을 꺼내고, 오류 응답은 `unwrap`이 `transformErrorResponse`로 바꿔 던진다(이름은 RTK Query를 따랐다). 성공 값을 화면에 맞는 값으로 바꾸는 로직은 성공 데이터를 인자로 받는 순수 함수(select 함수, TanStack Query의 `select`와 같은 뜻)로 뺀다. 날짜 형식 바꾸기, 응답 값에 따라 다른 값을 고르는 분기(예: 상태 코드를 화면 문구로)가 여기에 해당한다. 바뀐 값을 보고 무엇을 그릴지만 고르는 분기(예: 목록이 비면 안내 문구)는 컴포넌트에 둔다. select 함수와 `transformErrorResponse`는 응답 예시를 넣어 테스트한다.
 - 스토어의 파일 위치와 페이지 컴포넌트 작성법은 [스토어 페이지 구조](docs/store-page-structure.md)를 따른다(결정 이유는 [ADR 0008](docs/adr/0008-store-file-structure.md)). `app/`은 라우트 연결만 하고 화면 구현은 `apps-src/`에 URL과 같은 경로로 둔다. 하위 컴포넌트는 `<이름>.sub/`, 그 컴포넌트만 쓰는 함수는 `<이름>.helper.ts`에 두고, 여러 페이지가 쓰는 코드는 가장 가까운 공통 조상의 `@shared/`(`api`, `helper`, `ui`, `feature/<도메인>`)에 둔다.
 - 타입, 선언, 라이브러리가 이미 보장하는 동작은 테스트하지 않고, 직접 만든 규칙과 분기만 테스트한다. 예: 생성된 타입대로 응답을 넘기기만 하는 함수, 요청 스키마에 선언한 검증 규칙 하나하나는 테스트하지 않는다.
+- 테스트 데이터는 [factory.ts](https://github.com/willryan/factory.ts)로 만든다. 팩토리가 모든 필드를 기본값으로 채우고, 테스트는 검증에 필요한 값만 `build()`에 넘긴다. 넘긴 객체는 기본값과 합쳐지고 배열은 통째로 바뀐다. 팩토리는 `<타입 이름>Factory`로 짓는다. 예: `showDetailFactory.build({ minAge: 0 })`. 스토어는 API 응답 타입의 팩토리를 그 타입을 정의한 모듈 옆 `<모듈>.factory.ts`에 둔다(예: `@shared/api/shows.factory.ts`). API 통합 테스트는 `test/factory.ts`에 두고, `Async.makeFactory(...).transform()`으로 `build()`가 DB에 행을 넣고 id를 돌려주게 한다.
 - 테스트 파일은 `*.spec.ts`로 짓고, JSX를 쓰면 `*.spec.tsx`로 짓는다. 검증하는 소스 파일 옆에 둔다. 예: `apps-src/shows/[id]/show-detail-page.helper.ts`의 테스트는 `apps-src/shows/[id]/show-detail-page.helper.spec.ts`. 앱 전체를 띄워 HTTP로 검증하거나 공용 준비 코드가 필요한 테스트처럼 한 소스 파일에 속하지 않는 테스트만 앱의 `test/`에 둔다. 예: `apps/api/test/shows.int.spec.ts`.
 - `insert`, `update`, `delete`는 테이블을 소유한 모듈의 서비스에서만 실행한다. 읽기 전용 JOIN은 어느 모듈에서나 허용한다. 시드 스크립트와 테스트 데이터 준비 코드는 예외다.
 - 쿼리에 끼워 넣는 Drizzle 조각을 담는 변수와 그 조각을 만드는 함수는 이름 끝에 종류를 붙여, 바로 쓰는 JS 값과 구분한다. `.as()`로 이름 붙인 서브쿼리는 `Subquery`, `where`에 넣는 `SQL<boolean>` 조건은 `Condition`, 그 밖의 `sql` 식은 `Sql`이다. 만드는 함수는 `build`로 시작하고, 상수 하나를 SQL로 바꾸는 함수는 `to`로 시작한다. 예: `const salesStatusSubquery = buildShowSalesStatusSubquery({ db, now })`, `listCondition`, `buildAlmostSoldOutCondition`, `remainingSeatsSql`, `toLiteralSql('on_sale')`. `select` 객체의 키는 응답 필드 이름을 그대로 쓴다(`remainingSeats: remainingSeatsSql`). SQL 안의 별칭(`.as('period')`)은 SQL 이름이므로 접미사를 붙이지 않는다.

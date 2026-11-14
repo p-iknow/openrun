@@ -1,48 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import type { ShowDetail } from '@shared/api/shows';
+import {
+  performanceFactory,
+  showDetailFactory,
+} from '@shared/api/shows.factory';
 import { selectShowDetail } from './show-detail-page.helper';
-
-type Performance = ShowDetail['performances'][number];
-
-function createShow(overrides: Partial<ShowDetail>): ShowDetail {
-  return {
-    id: 7,
-    title: '달빛 정원',
-    genre: 'play',
-    minAge: 13,
-    runningMinutes: 120,
-    description: '달빛 아래 정원에서 벌어지는 이야기',
-    posterUrl: 'http://localhost:3001/posters/show-07.png',
-    venue: { id: 1, name: '샤롯데씨어터' },
-    period: {
-      start: '2026-04-10T05:00:00.000Z',
-      end: '2026-04-20T05:00:00.000Z',
-    },
-    salesStatus: 'on_sale',
-    salesOpenAt: null,
-    detailImages: [],
-    seatGrades: [],
-    performances: [],
-    ...overrides,
-  };
-}
-
-function createPerformance(overrides: Partial<Performance>): Performance {
-  return {
-    id: 1,
-    startsAt: '2026-04-10T05:00:00.000Z',
-    salesStatus: 'on_sale',
-    remainingSeats: 120,
-    totalSeats: 300,
-    isAlmostSoldOut: false,
-    ...overrides,
-  };
-}
 
 describe('selectShowDetail', () => {
   it('공연 정보를 화면 문구로 바꾼다', () => {
     const detail = selectShowDetail(
-      createShow({
+      showDetailFactory.build({
+        genre: 'play',
+        minAge: 13,
+        runningMinutes: 120,
         period: {
           // UTC로는 2월 28일이지만 한국 시간으로는 3월 1일 오전이다.
           start: '2026-02-28T15:30:00.000Z',
@@ -54,12 +23,12 @@ describe('selectShowDetail', () => {
     expect(detail).toMatchObject({
       title: '달빛 정원',
       genre: '연극',
-      venueName: '샤롯데씨어터',
+      venueName: '예술의전당',
       period: '2026.03.01 ~ 2026.03.20',
       ageRating: '만 13세 이상',
       runningTime: '120분',
       description: '달빛 아래 정원에서 벌어지는 이야기',
-      posterUrl: 'http://localhost:3001/posters/show-07.png',
+      posterUrl: 'http://localhost:3001/posters/show-01.png',
       salesStatus: { label: '판매 중', tone: 'primary' },
       salesOpenAt: null,
       isSalesEnded: false,
@@ -68,7 +37,7 @@ describe('selectShowDetail', () => {
 
   it('좌석 등급마다 가격을 원 단위 문구로 보여 준다', () => {
     const detail = selectShowDetail(
-      createShow({
+      showDetailFactory.build({
         seatGrades: [
           { name: 'VIP석', price: 170_000 },
           { name: 'A석', price: 8_000 },
@@ -83,7 +52,9 @@ describe('selectShowDetail', () => {
   });
 
   it('관람 연령이 0이면 전체 관람가다', () => {
-    expect(selectShowDetail(createShow({ minAge: 0 }))).toMatchObject({
+    expect(
+      selectShowDetail(showDetailFactory.build({ minAge: 0 })),
+    ).toMatchObject({
       ageRating: '전체 관람가',
     });
   });
@@ -91,7 +62,7 @@ describe('selectShowDetail', () => {
   it('판매 예정이면 판매 오픈 일시를 한국 시각으로 보여 준다', () => {
     expect(
       selectShowDetail(
-        createShow({
+        showDetailFactory.build({
           salesStatus: 'upcoming',
           salesOpenAt: '2026-03-01T05:00:00.000Z',
         }),
@@ -105,7 +76,7 @@ describe('selectShowDetail', () => {
 
   it('공연 판매 상태가 판매 종료면 판매 종료로 표시한다', () => {
     expect(
-      selectShowDetail(createShow({ salesStatus: 'ended' })),
+      selectShowDetail(showDetailFactory.build({ salesStatus: 'ended' })),
     ).toMatchObject({
       salesStatus: { label: '판매 종료', tone: 'neutral' },
       isSalesEnded: true,
@@ -114,18 +85,21 @@ describe('selectShowDetail', () => {
 
   it('회차를 한국 날짜별로 묶고, 회차마다 시각과 판매 상태를 보여 준다', () => {
     const detail = selectShowDetail(
-      createShow({
+      showDetailFactory.build({
         performances: [
           // 한국 시간 3월 1일(일) 14:00, 19:30
-          createPerformance({ id: 1, startsAt: '2026-03-01T05:00:00.000Z' }),
-          createPerformance({
+          performanceFactory.build({
+            id: 1,
+            startsAt: '2026-03-01T05:00:00.000Z',
+          }),
+          performanceFactory.build({
             id: 2,
             startsAt: '2026-03-01T10:30:00.000Z',
             salesStatus: 'sold_out',
             remainingSeats: 0,
           }),
           // UTC로는 3월 1일이지만 한국 시간으로는 3월 2일(월) 00:30이다.
-          createPerformance({
+          performanceFactory.build({
             id: 3,
             startsAt: '2026-03-01T15:30:00.000Z',
             salesStatus: 'cancelled',
@@ -173,14 +147,14 @@ describe('selectShowDetail', () => {
 
   it('남은 좌석은 판매 중 회차에만 보여 준다', () => {
     const detail = selectShowDetail(
-      createShow({
+      showDetailFactory.build({
         performances: [
-          createPerformance({
+          performanceFactory.build({
             id: 1,
             remainingSeats: 3,
             isAlmostSoldOut: true,
           }),
-          createPerformance({ id: 2, salesStatus: 'upcoming' }),
+          performanceFactory.build({ id: 2, salesStatus: 'upcoming' }),
         ],
       }),
     );
