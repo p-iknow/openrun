@@ -17,12 +17,14 @@ import { DATABASE, type Database } from '../db/database.module.js';
 import {
   performanceSeats,
   performances,
+  seatGradeAssignments,
+  seatGrades,
   showDetailImages,
   shows,
 } from '../db/schema/shows.js';
-import { venues } from '../db/schema/venues.js';
+import { seats, sections, venues } from '../db/schema/venues.js';
 import type { ShowListQuery } from './show-list-query.js';
-import type { ShowDetailDto, ShowPageDto } from './show.dto.js';
+import type { SeatGradeDto, ShowDetailDto, ShowPageDto } from './show.dto.js';
 import {
   buildAlmostSoldOutCondition,
   buildPerformanceSalesStatus,
@@ -126,57 +128,87 @@ export class ShowsService {
       remainingSeats,
     });
 
-    const [[show], detailImageRows, performanceRows] = await Promise.all([
-      this.db
-        .select({
-          id: shows.id,
-          title: shows.title,
-          genre: shows.genre,
-          minAge: shows.minAge,
-          runningMinutes: shows.runningMinutes,
-          description: shows.description,
-          posterPath: shows.posterPath,
-          venueId: venues.id,
-          venueName: venues.name,
-          start: period.start,
-          end: period.end,
-          salesStatus: salesStatus.salesStatus,
-          salesOpenAt: salesStatus.salesOpenAt,
-        })
-        .from(shows)
-        .innerJoin(venues, eq(venues.id, shows.venueId))
-        // 회차가 없는 공연은 목록처럼 없는 공연으로 본다.
-        .innerJoin(period, eq(period.showId, shows.id))
-        .innerJoin(salesStatus, eq(salesStatus.showId, shows.id))
-        .where(eq(shows.id, id)),
-      this.db
-        .select({ path: showDetailImages.path })
-        .from(showDetailImages)
-        .where(eq(showDetailImages.showId, id))
-        .orderBy(asc(showDetailImages.position)),
-      this.db
-        .select({
-          id: performances.id,
-          startsAt: performances.startsAt,
-          salesStatus: performanceStatus,
-          remainingSeats,
-          totalSeats,
-          isAlmostSoldOut: buildAlmostSoldOutCondition({
+    const [[show], detailImageRows, seatGradeRows, performanceRows] =
+      await Promise.all([
+        this.db
+          .select({
+            id: shows.id,
+            title: shows.title,
+            genre: shows.genre,
+            minAge: shows.minAge,
+            runningMinutes: shows.runningMinutes,
+            description: shows.description,
+            posterPath: shows.posterPath,
+            venueId: venues.id,
+            venueName: venues.name,
+            start: period.start,
+            end: period.end,
+            salesStatus: salesStatus.salesStatus,
+            salesOpenAt: salesStatus.salesOpenAt,
+          })
+          .from(shows)
+          .innerJoin(venues, eq(venues.id, shows.venueId))
+          // 회차가 없는 공연은 목록처럼 없는 공연으로 본다.
+          .innerJoin(period, eq(period.showId, shows.id))
+          .innerJoin(salesStatus, eq(salesStatus.showId, shows.id))
+          .where(eq(shows.id, id)),
+        this.db
+          .select({ path: showDetailImages.path })
+          .from(showDetailImages)
+          .where(eq(showDetailImages.showId, id))
+          .orderBy(asc(showDetailImages.position)),
+        // 등급과 그 등급 좌석이 있는 구역을 한 행씩 읽는다. 한 구역에 등급이 섞여 있으면 그 구역이 등급마다 한 행씩 나온다.
+        // 좌석이 없는 등급도 빠지지 않게 LEFT JOIN으로 읽는다. 그런 등급은 구역 이름이 null인 행 하나다.
+        this.db
+          .select({
+            id: seatGrades.id,
+            name: seatGrades.name,
+            price: seatGrades.price,
+            sectionName: sections.name,
+          })
+          .from(seatGrades)
+          .leftJoin(
+            seatGradeAssignments,
+            and(
+              eq(seatGradeAssignments.showId, seatGrades.showId),
+              eq(seatGradeAssignments.seatGradeId, seatGrades.id),
+            ),
+          )
+          .leftJoin(seats, eq(seats.id, seatGradeAssignments.seatId))
+          .leftJoin(sections, eq(sections.id, seats.sectionId))
+          .where(eq(seatGrades.showId, id))
+          .groupBy(seatGrades.id, sections.id)
+          // 가격이 같으면 먼저 만든 등급을 앞에 둔다. 구역은 공연장에 둔 순서(id)다.
+          .orderBy(
+            desc(seatGrades.price),
+            asc(seatGrades.id),
+            asc(sections.id),
+          ),
+        this.db
+          .select({
+            id: performances.id,
+            startsAt: performances.startsAt,
             salesStatus: performanceStatus,
             remainingSeats,
             totalSeats,
-          }),
-        })
-        .from(performances)
-        .leftJoin(
-          performanceSeats,
-          eq(performanceSeats.performanceId, performances.id),
-        )
-        // 시작 전 회차만 담는다. 판매 종료 회차는 모두 시작된 회차이고, 시작된 뒤의 취소 회차도 더 고를 수 없어 뺀다.
-        .where(and(eq(performances.showId, id), gt(performances.startsAt, now)))
-        .groupBy(performances.id)
-        .orderBy(asc(performances.startsAt), asc(performances.id)),
-    ]);
+            isAlmostSoldOut: buildAlmostSoldOutCondition({
+              salesStatus: performanceStatus,
+              remainingSeats,
+              totalSeats,
+            }),
+          })
+          .from(performances)
+          .leftJoin(
+            performanceSeats,
+            eq(performanceSeats.performanceId, performances.id),
+          )
+          // 시작 전 회차만 담는다. 판매 종료 회차는 모두 시작된 회차이고, 시작된 뒤의 취소 회차도 더 고를 수 없어 뺀다.
+          .where(
+            and(eq(performances.showId, id), gt(performances.startsAt, now)),
+          )
+          .groupBy(performances.id)
+          .orderBy(asc(performances.startsAt), asc(performances.id)),
+      ]);
 
     if (!show) {
       throw createShowNotFoundException();
@@ -195,12 +227,33 @@ export class ShowsService {
       detailImages: detailImageRows.map(({ path }) => ({
         url: buildShowImageUrl({ baseUrl: this.showImageBaseUrl, path }),
       })),
+      seatGrades: groupSectionNamesByGrade(seatGradeRows),
       performances: performanceRows.map(({ startsAt, ...performance }) => ({
         ...performance,
         startsAt: startsAt.toISOString(),
       })),
     };
   }
+}
+
+// 등급·구역 행을 등급 하나에 구역 이름 목록 하나로 묶는다. 행이 등급 순으로 정렬돼 있어, 처음 나온 순서를 그대로 둔다.
+function groupSectionNamesByGrade(
+  rows: {
+    id: number;
+    name: string;
+    price: number;
+    sectionName: string | null;
+  }[],
+): SeatGradeDto[] {
+  const grades = new Map<number, SeatGradeDto>();
+  for (const { id, name, price, sectionName } of rows) {
+    const grade = grades.get(id) ?? { name, price, sectionNames: [] };
+    if (sectionName !== null) {
+      grade.sectionNames.push(sectionName);
+    }
+    grades.set(id, grade);
+  }
+  return [...grades.values()];
 }
 
 // 공연마다 공연 기간(첫 회차부터 마지막 회차까지의 시작 일시)을 계산하는 서브쿼리다.

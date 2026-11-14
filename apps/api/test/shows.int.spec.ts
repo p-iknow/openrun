@@ -16,11 +16,13 @@ import {
 } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import { Clock } from '../src/clock/clock.module.js';
-import { eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import {
   type Genre,
   performanceSeats,
   performances,
+  seatGradeAssignments,
+  seatGrades,
   showDetailImages,
   shows,
 } from '../src/db/schema/shows.js';
@@ -138,8 +140,22 @@ async function insertShow({
   return show.id;
 }
 
-// 공연장과 구역 하나, 좌석 VENUE_SEAT_COUNT개를 넣고 공연장 id를 돌려준다.
-async function insertVenue(name: string): Promise<number> {
+// 공연장 하나의 구역 배치. 구역마다 열 이름 목록과 열당 좌석 수만큼 좌석을 만든다.
+interface SectionInput {
+  name: string;
+  rows: string[];
+  seatsPerRow: number;
+}
+
+// 공연장과 구역, 좌석을 넣고 공연장 id를 돌려준다. 구역을 주지 않으면 A구역 A열에 좌석 VENUE_SEAT_COUNT개를 둔다.
+async function insertVenue(
+  name: string,
+  {
+    sections: sectionInputs = [
+      { name: 'A구역', rows: ['A'], seatsPerRow: VENUE_SEAT_COUNT },
+    ],
+  }: { sections?: SectionInput[] } = {},
+): Promise<number> {
   const [venue] = await db
     .insert(venues)
     .values({ name })
@@ -147,21 +163,76 @@ async function insertVenue(name: string): Promise<number> {
   if (!venue) {
     throw new Error('공연장을 넣지 못했습니다.');
   }
-  const [section] = await db
-    .insert(sections)
-    .values({ venueId: venue.id, name: 'A구역' })
-    .returning({ id: sections.id });
-  if (!section) {
-    throw new Error('구역을 넣지 못했습니다.');
+  for (const { name: sectionName, rows, seatsPerRow } of sectionInputs) {
+    const [section] = await db
+      .insert(sections)
+      .values({ venueId: venue.id, name: sectionName })
+      .returning({ id: sections.id });
+    if (!section) {
+      throw new Error('구역을 넣지 못했습니다.');
+    }
+    await db.insert(seats).values(
+      rows.flatMap((row) =>
+        Array.from({ length: seatsPerRow }, (_, index) => ({
+          sectionId: section.id,
+          row,
+          number: index + 1,
+        })),
+      ),
+    );
   }
-  await db.insert(seats).values(
-    Array.from({ length: VENUE_SEAT_COUNT }, (_, index) => ({
-      sectionId: section.id,
-      row: 'A',
-      number: index + 1,
-    })),
-  );
   return venue.id;
+}
+
+// 공연에 좌석 등급을 넣고, 등급마다 고른 구역·열의 좌석에 그 등급을 지정한다.
+// rows를 주지 않은 구역은 그 구역의 모든 열이다.
+async function insertSeatGrades({
+  showId,
+  grades,
+}: {
+  showId: number;
+  grades: {
+    name: string;
+    price: number;
+    seats: { section: string; rows?: string[] }[];
+  }[];
+}): Promise<void> {
+  const [show] = await db
+    .select({ venueId: shows.venueId })
+    .from(shows)
+    .where(eq(shows.id, showId));
+  if (!show) {
+    throw new Error('공연이 없습니다.');
+  }
+  for (const { name, price, seats: seatInputs } of grades) {
+    const [grade] = await db
+      .insert(seatGrades)
+      .values({ showId, name, price })
+      .returning({ id: seatGrades.id });
+    if (!grade) {
+      throw new Error('좌석 등급을 넣지 못했습니다.');
+    }
+    for (const { section, rows } of seatInputs) {
+      const gradeSeats = await db
+        .select({ id: seats.id })
+        .from(seats)
+        .innerJoin(sections, eq(sections.id, seats.sectionId))
+        .where(
+          and(
+            eq(sections.venueId, show.venueId),
+            eq(sections.name, section),
+            rows ? inArray(seats.row, rows) : undefined,
+          ),
+        );
+      await db.insert(seatGradeAssignments).values(
+        gradeSeats.map((seat) => ({
+          showId,
+          seatId: seat.id,
+          seatGradeId: grade.id,
+        })),
+      );
+    }
+  }
 }
 
 beforeAll(() => {
@@ -176,7 +247,7 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await db.execute(
-    'TRUNCATE show_detail_images, performance_seats, performances, shows, seats, sections, venues RESTART IDENTITY CASCADE',
+    'TRUNCATE seat_grade_assignments, seat_grades, show_detail_images, performance_seats, performances, shows, seats, sections, venues RESTART IDENTITY CASCADE',
   );
 
   now = new Date(DEFAULT_NOW);
@@ -922,6 +993,7 @@ describe('GET /shows/:id', () => {
       salesStatus: 'on_sale',
       salesOpenAt: null,
       detailImages: [],
+      seatGrades: [],
       performances: [
         {
           id: 2,
@@ -962,6 +1034,90 @@ describe('GET /shows/:id', () => {
       { url: 'https://images.example.com/openrun/details/show-01-1.png' },
       { url: 'https://images.example.com/openrun/details/show-01-2.png' },
     ]);
+  });
+
+  describe('좌석 등급', () => {
+    // 앞 구역 두 개는 두 열, 뒤 구역은 한 열이다.
+    const venueSections: SectionInput[] = [
+      { name: 'A구역', rows: ['A', 'B'], seatsPerRow: 2 },
+      { name: 'B구역', rows: ['A', 'B'], seatsPerRow: 2 },
+      { name: 'C구역', rows: ['A'], seatsPerRow: 2 },
+    ];
+
+    it('가격이 높은 순으로, 등급마다 그 등급 좌석이 있는 구역 이름을 담는다', async () => {
+      const venueId = await insertVenue('샤롯데씨어터', {
+        sections: venueSections,
+      });
+      const showId = await insertShow({
+        venueId,
+        title: '달빛 정원',
+        performanceStarts: ['2026-03-01T05:00:00Z'],
+      });
+      // 넣는 순서와 상관없이 가격이 높은 순으로 담는다.
+      await insertSeatGrades({
+        showId,
+        grades: [
+          { name: 'R석', price: 140_000, seats: [{ section: 'B구역' }] },
+          { name: 'S석', price: 110_000, seats: [{ section: 'C구역' }] },
+          { name: 'VIP석', price: 170_000, seats: [{ section: 'A구역' }] },
+        ],
+      });
+
+      const response = await request(app.getHttpServer()).get(
+        `/shows/${showId}`,
+      );
+
+      expect(response.body.seatGrades).toEqual([
+        { name: 'VIP석', price: 170_000, sectionNames: ['A구역'] },
+        { name: 'R석', price: 140_000, sectionNames: ['B구역'] },
+        { name: 'S석', price: 110_000, sectionNames: ['C구역'] },
+      ]);
+    });
+
+    it('한 구역에 등급이 둘 이상 섞여 있으면 그 구역 이름을 각 등급에 담는다', async () => {
+      const venueId = await insertVenue('샤롯데씨어터', {
+        sections: venueSections,
+      });
+      const showId = await insertShow({
+        venueId,
+        title: '달빛 정원',
+        performanceStarts: ['2026-03-01T05:00:00Z'],
+      });
+      // A구역은 앞 열이 VIP석, 뒤 열이 R석이다.
+      await insertSeatGrades({
+        showId,
+        grades: [
+          {
+            name: 'VIP석',
+            price: 170_000,
+            seats: [{ section: 'A구역', rows: ['A'] }],
+          },
+          {
+            name: 'R석',
+            price: 140_000,
+            seats: [
+              { section: 'A구역', rows: ['B'] },
+              { section: 'B구역' },
+              { section: 'C구역' },
+            ],
+          },
+        ],
+      });
+
+      const response = await request(app.getHttpServer()).get(
+        `/shows/${showId}`,
+      );
+
+      // 구역 이름은 공연장에 구역을 둔 순서다.
+      expect(response.body.seatGrades).toEqual([
+        { name: 'VIP석', price: 170_000, sectionNames: ['A구역'] },
+        {
+          name: 'R석',
+          price: 140_000,
+          sectionNames: ['A구역', 'B구역', 'C구역'],
+        },
+      ]);
+    });
   });
 
   describe('회차 목록', () => {

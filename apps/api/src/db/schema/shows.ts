@@ -1,9 +1,11 @@
 import {
   boolean,
+  foreignKey,
   index,
   integer,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   unique,
@@ -96,4 +98,53 @@ export const showDetailImages = pgTable(
   // 한 공연에 같은 순서가 두 번 들어가지 않게 막는다.
   // 이 제약이 만드는 인덱스가 show_id로 시작하므로, 공연 하나의 상세 이미지를 순서대로 찾을 때도 쓰인다.
   (table) => [unique().on(table.showId, table.position)],
+);
+
+// 공연별로 정하는 좌석 분류(예: VIP석 170,000원)다. 회차마다 가격을 다르게 두지 않는다.
+export const seatGrades = pgTable(
+  'seat_grades',
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    showId: integer('show_id')
+      .notNull()
+      .references(() => shows.id),
+    name: text().notNull(),
+    // 원 단위 정수다. 원보다 작은 단위가 없어 소수를 쓰지 않는다.
+    price: integer().notNull(),
+  },
+  (table) => [
+    // 한 공연에 같은 이름의 등급이 두 번 들어가지 않게 막는다. 이 제약이 만드는 인덱스가 show_id로 시작하므로,
+    // 공연 하나의 등급을 찾을 때도 쓰인다.
+    unique().on(table.showId, table.name),
+    // 좌석 등급 지정이 (등급, 공연) 쌍을 참조할 수 있게 한다. id만으로도 유일하지만, 외래 키는 참조 대상 컬럼 묶음에 유일 제약이 있어야 한다.
+    unique().on(table.id, table.showId),
+  ],
+);
+
+// 공연이 자기 공연장의 좌석 하나에 등급 하나를 지정한 것이다. 한 등급이 여러 좌석에 붙고,
+// 같은 구역 안에서도 열에 따라 등급이 다를 수 있다.
+export const seatGradeAssignments = pgTable(
+  'seat_grade_assignments',
+  {
+    showId: integer('show_id')
+      .notNull()
+      .references(() => shows.id),
+    seatId: integer('seat_id')
+      .notNull()
+      .references(() => seats.id),
+    seatGradeId: integer('seat_grade_id').notNull(),
+  },
+  (table) => [
+    // 공연마다 좌석 하나에 등급은 하나뿐이다. 이 키의 인덱스가 show_id로 시작하므로, 공연 하나의 지정을 찾을 때도 쓰인다.
+    primaryKey({ columns: [table.showId, table.seatId] }),
+    // 다른 공연의 등급을 지정하지 못하게, 등급을 (등급, 공연) 쌍으로 참조한다.
+    // 자동으로 짓는 이름은 PostgreSQL 이름 길이(63자)를 넘어 잘리므로 직접 짓는다.
+    foreignKey({
+      name: 'seat_grade_assignments_seat_grade_fk',
+      columns: [table.seatGradeId, table.showId],
+      foreignColumns: [seatGrades.id, seatGrades.showId],
+    }),
+    // 좌석이 공연의 공연장에 있는지와 공연장의 모든 좌석에 지정했는지는 DB 제약으로 막지 않는다.
+    // 1.3에서는 시드가 지키고, 1.7 어드민에서 등록할 때 검증한다.
+  ],
 );
