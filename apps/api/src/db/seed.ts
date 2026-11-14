@@ -460,7 +460,7 @@ try {
     const venueSeats: {
       venueId: number;
       totalRows: number;
-      seats: { id: number; rowPosition: number }[];
+      seats: { id: number; sectionId: number; rowPosition: number }[];
     }[] = [];
     for (const layout of VENUE_LAYOUTS) {
       const [venue] = await tx
@@ -470,7 +470,11 @@ try {
       if (!venue) {
         throw new Error(`공연장을 넣지 못했습니다: ${layout.name}`);
       }
-      const venueSeatList: { id: number; rowPosition: number }[] = [];
+      const venueSeatList: {
+        id: number;
+        sectionId: number;
+        rowPosition: number;
+      }[] = [];
       let rowOffset = 0;
       for (const { name, rows, seatsPerRow } of layout.sections) {
         const [section] = await tx
@@ -495,6 +499,7 @@ try {
         venueSeatList.push(
           ...sectionSeats.map(({ id, row }) => ({
             id,
+            sectionId: section.id,
             rowPosition: rowOffset + row.charCodeAt(0) - 'A'.charCodeAt(0),
           })),
         );
@@ -512,6 +517,8 @@ try {
       seatId: number;
       seatGradeId: number;
     }[] = [];
+    // 구역 안에서 앞 열과 뒤 열의 등급이 갈리는 공연 수. 공연장과 등급 수에 따라 갈리지 않는 공연도 있어, 하나는 나오는지 끝에서 확인한다.
+    let mixedSectionShowCount = 0;
     const performanceSeatRows: {
       performanceId: number;
       seatId: number;
@@ -553,8 +560,9 @@ try {
         )
         .returning({ id: seatGrades.id });
       // 공연장의 모든 좌석에 등급을 하나씩 지정한다.
+      const gradeIdsBySection = new Map<number, Set<number>>();
       seatGradeAssignmentRows.push(
-        ...venue.seats.map(({ id, rowPosition }) => {
+        ...venue.seats.map(({ id, sectionId, rowPosition }) => {
           const grade =
             grades[
               getSeatGradeIndex({
@@ -566,9 +574,16 @@ try {
           if (!grade) {
             throw new Error(`좌석 등급을 고르지 못했습니다: ${show.title}`);
           }
+          gradeIdsBySection.set(
+            sectionId,
+            (gradeIdsBySection.get(sectionId) ?? new Set()).add(grade.id),
+          );
           return { showId: inserted.id, seatId: id, seatGradeId: grade.id };
         }),
       );
+      if ([...gradeIdsBySection.values()].some((ids) => ids.size > 1)) {
+        mixedSectionShowCount += 1;
+      }
       for (const { soldSeatIndexes, ...performance } of showPerformances) {
         const [insertedPerformance] = await tx
           .insert(performances)
@@ -585,6 +600,12 @@ try {
           })),
         );
       }
+    }
+
+    if (mixedSectionShowCount === 0) {
+      throw new Error(
+        '구역 안에서 등급이 갈리는 공연이 없습니다. 공연장 배치나 장르별 등급 수를 바꿔 하나는 나오게 하세요.',
+      );
     }
 
     for (

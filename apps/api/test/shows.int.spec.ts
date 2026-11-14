@@ -148,14 +148,15 @@ interface SectionInput {
 }
 
 // 공연장과 구역, 좌석을 넣고 공연장 id를 돌려준다. 구역을 주지 않으면 A구역 A열에 좌석 VENUE_SEAT_COUNT개를 둔다.
-async function insertVenue(
-  name: string,
-  {
-    sections: sectionInputs = [
-      { name: 'A구역', rows: ['A'], seatsPerRow: VENUE_SEAT_COUNT },
-    ],
-  }: { sections?: SectionInput[] } = {},
-): Promise<number> {
+async function insertVenue({
+  name,
+  sections: sectionInputs = [
+    { name: 'A구역', rows: ['A'], seatsPerRow: VENUE_SEAT_COUNT },
+  ],
+}: {
+  name: string;
+  sections?: SectionInput[];
+}): Promise<number> {
   const [venue] = await db
     .insert(venues)
     .values({ name })
@@ -281,7 +282,7 @@ describe('GET /shows', () => {
   });
 
   it('항목에 공연장 이름, 첫 회차부터 마지막 회차까지의 공연 기간, 포스터 URL을 담는다', async () => {
-    const venueId = await insertVenue('샤롯데씨어터');
+    const venueId = await insertVenue({ name: '샤롯데씨어터' });
     await insertShow({
       venueId,
       title: '달빛 정원',
@@ -321,7 +322,7 @@ describe('GET /shows', () => {
   });
 
   it('sort가 newest이면 등록 일시가 늦은 순으로, 같으면 나중에 등록한(id가 큰) 순으로 정렬한다', async () => {
-    const venueId = await insertVenue('예술의전당');
+    const venueId = await insertVenue({ name: '예술의전당' });
     await insertShow({
       venueId,
       title: '먼저 등록',
@@ -357,7 +358,7 @@ describe('GET /shows', () => {
   });
 
   it('sort가 start_date이면 기본 정렬과 같다', async () => {
-    const venueId = await insertVenue('예술의전당');
+    const venueId = await insertVenue({ name: '예술의전당' });
     await insertShow({
       venueId,
       title: '늦게 시작',
@@ -381,7 +382,7 @@ describe('GET /shows', () => {
   });
 
   it('첫 회차 일시가 이른 순으로, 같으면 id 순으로 정렬한다', async () => {
-    const venueId = await insertVenue('예술의전당');
+    const venueId = await insertVenue({ name: '예술의전당' });
     await insertShow({
       venueId,
       title: '늦게 시작',
@@ -412,7 +413,7 @@ describe('GET /shows', () => {
   });
 
   it('공연이 20개를 넘으면 첫 20개와 전체 개수, 전체 페이지 수를 돌려준다', async () => {
-    const venueId = await insertVenue('예술의전당');
+    const venueId = await insertVenue({ name: '예술의전당' });
     for (let day = 1; day <= 21; day += 1) {
       await insertShow({
         venueId,
@@ -438,7 +439,7 @@ describe('GET /shows', () => {
   describe('페이지', () => {
     // 3월 1일부터 하루에 하나씩 시작하는 공연 12개. 제목은 `공연 1` ~ `공연 12`이고 정렬 순서와 같다.
     async function insertTwelveShows() {
-      const venueId = await insertVenue('예술의전당');
+      const venueId = await insertVenue({ name: '예술의전당' });
       for (let day = 1; day <= 12; day += 1) {
         await insertShow({
           venueId,
@@ -521,7 +522,7 @@ describe('GET /shows', () => {
   describe('제목 검색', () => {
     // 제목마다 공연을 하나씩, 넣는 순서대로 첫 회차 일시가 이르게 넣는다.
     async function insertShowsTitled(titles: string[]) {
-      const venueId = await insertVenue('예술의전당');
+      const venueId = await insertVenue({ name: '예술의전당' });
       for (const [index, title] of titles.entries()) {
         await insertShow({
           venueId,
@@ -610,7 +611,7 @@ describe('GET /shows', () => {
     async function insertShows(
       inputs: { title: string; genre: Genre; status: 'on_sale' | 'upcoming' }[],
     ) {
-      const venueId = await insertVenue('예술의전당');
+      const venueId = await insertVenue({ name: '예술의전당' });
       for (const [index, { title, genre, status }] of inputs.entries()) {
         await insertShow({
           venueId,
@@ -734,7 +735,7 @@ describe('GET /shows', () => {
   });
 
   it('회차가 없는 공연은 목록과 전체 개수에서 뺀다', async () => {
-    const venueId = await insertVenue('예술의전당');
+    const venueId = await insertVenue({ name: '예술의전당' });
     await insertShow({ venueId, title: '회차 없음', performanceStarts: [] });
 
     const response = await request(app.getHttpServer()).get('/shows');
@@ -767,7 +768,7 @@ describe('GET /shows', () => {
         expected: 'on_sale',
       },
     ])('$moment: $expected', async ({ at, expected }) => {
-      const venueId = await insertVenue('예술의전당');
+      const venueId = await insertVenue({ name: '예술의전당' });
       await insertShow({
         venueId,
         title: '달빛 정원',
@@ -791,7 +792,7 @@ describe('GET /shows', () => {
         expected: 'upcoming',
       },
     ])('$moment: $expected', async ({ at, expected }) => {
-      const venueId = await insertVenue('예술의전당');
+      const venueId = await insertVenue({ name: '예술의전당' });
       await insertShow({
         venueId,
         title: '달빛 정원',
@@ -809,7 +810,7 @@ describe('GET /shows', () => {
     });
 
     it('취소된 회차는 판매 오픈 전이어도 판매 종료라, 그 회차만 있는 공연은 목록에서 빠진다', async () => {
-      const venueId = await insertVenue('예술의전당');
+      const venueId = await insertVenue({ name: '예술의전당' });
       await insertShow({
         venueId,
         title: '달빛 정원',
@@ -821,7 +822,7 @@ describe('GET /shows', () => {
     });
 
     it('남은 회차 좌석이 0이어도 판매 중이다', async () => {
-      const venueId = await insertVenue('예술의전당');
+      const venueId = await insertVenue({ name: '예술의전당' });
       await insertShow({
         venueId,
         title: '달빛 정원',
@@ -833,7 +834,7 @@ describe('GET /shows', () => {
     });
 
     it('남은 회차 좌석이 0이어도 판매 오픈 전이면 판매 예정이다', async () => {
-      const venueId = await insertVenue('예술의전당');
+      const venueId = await insertVenue({ name: '예술의전당' });
       await insertShow({
         venueId,
         title: '달빛 정원',
@@ -884,7 +885,7 @@ describe('GET /shows', () => {
         expected: { salesStatus: 'on_sale', salesOpenAt: null },
       },
     ])('$name', async ({ performances: inputs, expected }) => {
-      const venueId = await insertVenue('예술의전당');
+      const venueId = await insertVenue({ name: '예술의전당' });
       await insertShow({ venueId, title: '달빛 정원', performances: inputs });
 
       const response = await request(app.getHttpServer()).get('/shows');
@@ -893,7 +894,7 @@ describe('GET /shows', () => {
     });
 
     it('끝나지 않은 회차가 모두 취소됐으면 판매 종료라 목록과 전체 개수에서 뺀다', async () => {
-      const venueId = await insertVenue('예술의전당');
+      const venueId = await insertVenue({ name: '예술의전당' });
       await insertShow({
         venueId,
         title: '달빛 정원',
@@ -906,7 +907,7 @@ describe('GET /shows', () => {
     });
 
     it('판매 예정이면 판매 예정 회차 중 가장 이른 판매 오픈 일시를 담는다', async () => {
-      const venueId = await insertVenue('예술의전당');
+      const venueId = await insertVenue({ name: '예술의전당' });
       await insertShow({
         venueId,
         title: '달빛 정원',
@@ -938,7 +939,7 @@ describe('GET /shows', () => {
   });
 
   it('판매 종료 공연은 목록과 전체 개수에서 뺀다', async () => {
-    const venueId = await insertVenue('예술의전당');
+    const venueId = await insertVenue({ name: '예술의전당' });
     await insertShow({
       venueId,
       title: '끝난 공연',
@@ -961,7 +962,7 @@ describe('GET /shows', () => {
 
 describe('GET /shows/:id', () => {
   it('공연 정보, 공연장, 공연 기간, 공연 판매 상태, 회차 목록을 담는다', async () => {
-    const venueId = await insertVenue('샤롯데씨어터');
+    const venueId = await insertVenue({ name: '샤롯데씨어터' });
     const showId = await insertShow({
       venueId,
       title: '달빛 정원',
@@ -1016,7 +1017,7 @@ describe('GET /shows/:id', () => {
   });
 
   it('상세 이미지를 순서대로 완전한 URL로 담는다', async () => {
-    const venueId = await insertVenue('샤롯데씨어터');
+    const venueId = await insertVenue({ name: '샤롯데씨어터' });
     const showId = await insertShow({
       venueId,
       title: '달빛 정원',
@@ -1045,7 +1046,8 @@ describe('GET /shows/:id', () => {
     ];
 
     it('가격이 높은 순으로, 등급마다 그 등급 좌석이 있는 구역 이름을 담는다', async () => {
-      const venueId = await insertVenue('샤롯데씨어터', {
+      const venueId = await insertVenue({
+        name: '샤롯데씨어터',
         sections: venueSections,
       });
       const showId = await insertShow({
@@ -1075,7 +1077,8 @@ describe('GET /shows/:id', () => {
     });
 
     it('한 구역에 등급이 둘 이상 섞여 있으면 그 구역 이름을 각 등급에 담는다', async () => {
-      const venueId = await insertVenue('샤롯데씨어터', {
+      const venueId = await insertVenue({
+        name: '샤롯데씨어터',
         sections: venueSections,
       });
       const showId = await insertShow({
@@ -1144,7 +1147,7 @@ describe('GET /shows/:id', () => {
     }
 
     it('시작한 회차는 빼고, 남은 회차마다 판매 상태와 남은 좌석을 담는다', async () => {
-      const venueId = await insertVenue('예술의전당');
+      const venueId = await insertVenue({ name: '예술의전당' });
       const showId = await insertShow({
         venueId,
         title: '달빛 정원',
@@ -1184,7 +1187,7 @@ describe('GET /shows/:id', () => {
     });
 
     it('남은 회차 좌석이 0이어도 판매 오픈 전이면 매진이 아니라 판매 예정이다', async () => {
-      const venueId = await insertVenue('예술의전당');
+      const venueId = await insertVenue({ name: '예술의전당' });
       const showId = await insertShow({
         venueId,
         title: '달빛 정원',
@@ -1197,7 +1200,7 @@ describe('GET /shows/:id', () => {
     });
 
     it('회차 시작 정각이면 판매 종료라 빠지고, 직전이면 담는다', async () => {
-      const venueId = await insertVenue('예술의전당');
+      const venueId = await insertVenue({ name: '예술의전당' });
       const showId = await insertShow({
         venueId,
         title: '달빛 정원',
@@ -1233,7 +1236,7 @@ describe('GET /shows/:id', () => {
       },
       { name: '매진이면 아니다', soldSeats: 20, expected: false },
     ])('판매 중 회차의 매진 임박: $name', async ({ soldSeats, expected }) => {
-      const venueId = await insertVenue('예술의전당');
+      const venueId = await insertVenue({ name: '예술의전당' });
       const showId = await insertShow({
         venueId,
         title: '달빛 정원',
@@ -1249,7 +1252,7 @@ describe('GET /shows/:id', () => {
     });
 
     it('판매 예정 회차는 남은 좌석이 10% 이하여도 매진 임박이 아니다', async () => {
-      const venueId = await insertVenue('예술의전당');
+      const venueId = await insertVenue({ name: '예술의전당' });
       const showId = await insertShow({
         venueId,
         title: '달빛 정원',
@@ -1262,7 +1265,7 @@ describe('GET /shows/:id', () => {
     });
 
     it('모든 회차가 끝난 공연은 판매 종료이고 회차 목록이 비어 있다', async () => {
-      const venueId = await insertVenue('예술의전당');
+      const venueId = await insertVenue({ name: '예술의전당' });
       const showId = await insertShow({
         venueId,
         title: '끝난 공연',
@@ -1304,7 +1307,7 @@ describe('GET /shows/:id', () => {
     });
 
     it('회차가 없는 공연은 목록처럼 없는 공연으로 본다', async () => {
-      const venueId = await insertVenue('예술의전당');
+      const venueId = await insertVenue({ name: '예술의전당' });
       const showId = await insertShow({ venueId, title: '회차 없음' });
 
       const response = await request(app.getHttpServer()).get(
