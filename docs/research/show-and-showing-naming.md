@@ -189,7 +189,7 @@ Node 문서의 전역 페이지는 `Performance` 클래스를 나열하지 않�
 | `SESSION` | non-reserved | non-reserved |
 | `EVENT`, `PROGRAM` | non-reserved | 없음 |
 | `WORK` | non-reserved | non-reserved |
-| `OCCURRENCE`, `INSTANCE` | 빈칸 | non-reserved |
+| `OCCURRENCE`, `INSTANCE`, `SECTION` | 빈칸 | non-reserved |
 | `PERFORMANCE`, `PRODUCTION`, `ROUND`, `SCHEDULE`, `TITLE`, `RUN`, `SHOWING`, `SHOWTIME` | 표에 없음 | 표에 없음 |
 | `ORDER` | **reserved, requires AS** | reserved |
 | `USER` | **reserved** | reserved |
@@ -228,7 +228,7 @@ Node 문서의 전역 페이지는 `Performance` 클래스를 나열하지 않�
 | `Production` / `Performance` | `PerformanceSeat` | `PerformanceCancellation` | `production_id`, `performance_id` | 극장 용어로 가장 정확하지만 환경 이름과 성능 뜻 양쪽에 걸린다. |
 | `Event` / `Occurrence` | `OccurrenceSeat` | `OccurrenceCancellation` | `event_id`, `occurrence_id` | 범용 플랫폼 관행이지만 아웃박스 이벤트와 직접 부딪힌다. |
 
-`Venue`, `Seat`, `Floor`, `SeatGrade`, `SalesStatus`와는 어느 쌍도 충돌하지 않는다. `FLOOR`는 PG 18.6의 `pg_get_keywords()`에 없는 일반 식별자이고, 테이블 이름도 복수형 `floors`다.
+`Venue`, `Seat`, `Floor`, `SeatGrade`, `SalesStatus`와는 어느 쌍도 충돌하지 않는다. `FLOOR`는 PG 18.6의 `pg_get_keywords()`에 없어 PostgreSQL에서는 일반 식별자이고, 테이블 이름은 복수형 `floors`다.
 
 ## 레포 표
 

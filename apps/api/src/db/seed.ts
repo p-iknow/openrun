@@ -71,6 +71,13 @@ const VENUE_LAYOUTS: { name: string; floors: FloorLayout[] }[] = [
   },
 ];
 
+// 시드가 넣은 좌석 하나. rowPosition은 공연장 전체에서 앞에서부터 몇 번째 열인지(0부터)다.
+interface VenueSeat {
+  id: number;
+  floorId: number;
+  rowPosition: number;
+}
+
 // 장르마다 좌석 등급과 가격(원)이다. 비싼 등급부터 적는다. 실제 예매 서비스의 등급 이름(VIP석, R석, S석, A석)과 가격대를 따랐다.
 // 등급은 공연마다 따로 만들므로, 같은 장르의 공연도 등급 행은 공연마다 있다.
 const SEAT_GRADES_BY_GENRE: Record<Genre, { name: string; price: number }[]> = {
@@ -476,7 +483,7 @@ try {
     const venueSeats: {
       venueId: number;
       totalRows: number;
-      seats: { id: number; floorId: number; rowPosition: number }[];
+      seats: VenueSeat[];
     }[] = [];
     for (const layout of VENUE_LAYOUTS) {
       const [venue] = await tx
@@ -486,11 +493,7 @@ try {
       if (!venue) {
         throw new Error(`공연장을 넣지 못했습니다: ${layout.name}`);
       }
-      const venueSeatList: {
-        id: number;
-        floorId: number;
-        rowPosition: number;
-      }[] = [];
+      const venueSeatList: VenueSeat[] = [];
       let rowOffset = 0;
       for (const { name, rows, seatsPerRow } of layout.floors) {
         const [floor] = await tx

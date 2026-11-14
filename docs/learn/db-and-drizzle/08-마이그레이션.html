@@ -524,8 +524,8 @@ ALTER TABLE "seats" RENAME CONSTRAINT "seats_section_id_sections_id_fk" TO "seat
               <strong>SQL과 스냅숏을 손으로 맞췄다.</strong> 이름 바꾸기는 <code>db:generate</code>가 "새로 만들었나, 이름을 바꿨나"를
               터미널에서 묻는다. 그 대화를 거치지 않고 제약, 외래 키, 시퀀스 이름까지 한 번에 정하려고 <code>drizzle-kit generate --custom</code>으로 빈 SQL 파일을
               만들어 위 SQL을 쓰고, 직전 스냅숏을 복사한 <code>0007_snapshot.json</code>의 <code>sections</code>, <code>section_id</code>를
-              <code>floors</code>, <code>floor_id</code>로 바꿨다. 스냅숏을 손으로 고친 드문 경우라, 다시 <code>db:generate</code>를 돌려
-              "No schema changes"가 나오는지로 스냅숏과 스키마가 같은지 확인했다.
+              <code>floors</code>, <code>floor_id</code>로 바꿨다. 스냅숏을 손으로 고쳤으면 <code>db:generate</code>를 다시 돌린다.
+              "No schema changes"가 나오면 스냅숏과 스키마가 같다.
             </li>
           </ul>
         </section>

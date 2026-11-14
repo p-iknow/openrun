@@ -30,7 +30,7 @@ export const seats = pgTable(
     floorId: integer('floor_id')
       .notNull()
       .references(() => floors.id),
-    // 열 이름(예: A)과 열 안의 번호(1부터)다.
+    // 열 이름과 열 안의 번호(1부터)다. 열 이름은 공연장마다 숫자(예: 3)나 글자(예: C)를 써서 text로 둔다. 시드는 글자를 쓴다.
     row: text().notNull(),
     number: integer().notNull(),
   },
