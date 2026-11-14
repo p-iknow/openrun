@@ -31,7 +31,7 @@ export function signSessionToken({
   token: string;
   secret: string;
 }): string {
-  return `${token}.${buildSignature({ token, secret })}`;
+  return `${token}.${getSignature({ token, secret })}`;
 }
 
 /** 쿠키 값의 서명이 맞으면 토큰을, 아니면 null을 돌려준다. 서명이 틀린 쿠키는 DB를 조회하기 전에 거른다. */
@@ -48,7 +48,7 @@ export function readSignedSessionToken({
   }
   const token = value.slice(0, separator);
   const signature = Buffer.from(value.slice(separator + 1));
-  const expected = Buffer.from(buildSignature({ token, secret }));
+  const expected = Buffer.from(getSignature({ token, secret }));
   if (
     signature.length !== expected.length ||
     !timingSafeEqual(signature, expected)
@@ -58,7 +58,7 @@ export function readSignedSessionToken({
   return token;
 }
 
-function buildSignature({
+function getSignature({
   token,
   secret,
 }: {

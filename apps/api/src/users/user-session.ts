@@ -2,7 +2,11 @@ import type { FactoryProvider } from '@nestjs/common';
 import { createSessionGuard } from '../auth/session-guard.js';
 import { type SessionPolicy, SessionManager } from '../auth/session-manager.js';
 import { Clock } from '../clock/clock.module.js';
-import { readAuthSecret, readCookieDomain } from '../config/env.js';
+import {
+  readAuthSecret,
+  readCookieDomain,
+  readUseSecureCookies,
+} from '../config/env.js';
 import { UserSessionStore } from './user-session-store.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -34,8 +38,7 @@ export const userSessionManagerProvider: FactoryProvider<SessionManager> = {
   provide: USER_SESSION_MANAGER,
   inject: [UserSessionStore, Clock],
   useFactory: (store: UserSessionStore, clock: Clock) => {
-    // 운영 환경은 HTTPS로만 서비스한다. 로컬은 http://localhost라 Secure 쿠키를 쓸 수 없다.
-    const secure = process.env.NODE_ENV === 'production';
+    const secure = readUseSecureCookies();
     return new SessionManager({
       store,
       clock,
