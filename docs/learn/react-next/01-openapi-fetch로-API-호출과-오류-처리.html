@@ -168,7 +168,7 @@ export async function fetchShows(client: ApiClient): Promise&lt;Show[]&gt; {
             <li>
               <strong>클라이언트를 바꿔 끼울 수 있다</strong>
               <code>fetchShows</code>는 클라이언트를 인자로 받는다. 테스트에서는 가짜 <code>fetch</code>를 넣은
-              클라이언트를 주고 API 없이 검증한다(<code>apps/store/src/api/shows.spec.ts</code>). 환경
+              클라이언트를 주면 API 없이 검증할 수 있다. 환경
               변수를 읽는 일은 <code>createServerApiClient</code>만 한다.
             </li>
           </ol>
