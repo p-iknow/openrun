@@ -493,7 +493,7 @@ inner join (
           </p>
           <h3>서브쿼리를 돌려주는 함수</h3>
           <pre><code class="language-ts">// apps/api/src/shows/show-sales-status.ts
-export function showSalesStatusSubquery(db: Database, { now }: { now: Date }) {
+export function showSalesStatusSubquery({ db, now }: { db: Database; now: Date }) {
   return db
     .select({ showId: performances.showId, salesStatus: /* ... */, salesOpenAt: /* ... */ })
     .from(performances)
@@ -502,7 +502,7 @@ export function showSalesStatusSubquery(db: Database, { now }: { now: Date }) {
 }
 
 // 쓰는 곳
-const salesStatus = showSalesStatusSubquery(this.db, { now: this.clock.now() });
+const salesStatus = showSalesStatusSubquery({ db: this.db, now: this.clock.now() });
 this.db.select({ status: salesStatus.salesStatus }).from(shows).innerJoin(salesStatus, eq(salesStatus.showId, shows.id));</code></pre>
           <p>
             서브쿼리도 실행 전의 객체라서 함수가 만들어 돌려줄 수 있다. 여러 쿼리가 같은 계산을 JOIN해야 할 때(예: 공연 목록과
@@ -733,10 +733,10 @@ SELECT pg_typeof(CASE WHEN true THEN 2 ELSE 0 END); -- integer</code></pre>
             보인다. 반대로 <code>now</code>처럼 실행할 때마다 달라지는 값은 파라미터로 보낸다.
           </p>
           <pre><code class="language-ts">// apps/api/src/shows/show-sales-status.ts
-function priorityOf(status: ShowSalesStatus): SQL {
+function toPriority(status: ShowSalesStatus): SQL {
   return sql.raw(String(SHOW_SALES_STATUSES.indexOf(status))); // 'ended' → 2
 }
-function literalOf(status: ShowSalesStatus): SQL {
+function toLiteral(status: ShowSalesStatus): SQL {
   return sql.raw(`'${status}'`); // 'on_sale' → 'on_sale'(작은따옴표 포함)
 }</code></pre>
           <p>
@@ -748,7 +748,7 @@ function literalOf(status: ShowSalesStatus): SQL {
         <section id="sql-join">
           <h2>sql.join: 조각 배열을 하나로 잇기</h2>
           <pre><code class="language-ts">const toStatus = sql.join(
-  SHOW_SALES_STATUSES.map((status) =&gt; sql`when ${priorityOf(status)} then ${literalOf(status)}`),
+  SHOW_SALES_STATUSES.map((status) =&gt; sql`when ${toPriority(status)} then ${toLiteral(status)}`),
   sql` `, // 조각 사이에 넣을 구분자
 );</code></pre>
           <pre><code class="language-sql">when 0 then 'on_sale' when 1 then 'upcoming' when 2 then 'ended'</code></pre>

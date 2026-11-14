@@ -164,7 +164,7 @@ const tokens = readTokens(tokensCss);</code></pre>
  * `selector` 블록의 최상위 내용만 돌려준다. 중괄호 깊이를 세어 짝이 맞는 `}`까지 읽고,
  * `@keyframes` 같은 중첩 블록 안의 내용은 뺀다. 주석이나 문자열 안의 중괄호는 없다고 가정한다.
  */
-function blockAfter(css: string, { selector }: { selector: string }): string {
+function blockAfter({ css, selector }: { css: string; selector: string }): string {
   const start = css.indexOf(`${selector} {`);
   if (start === -1) throw new Error(`tokens.css에 ${selector} 블록이 없다.`);
   let depth = 0;
@@ -280,16 +280,19 @@ function declarations(block: string): [string, string][] {
             <code>@theme</code>의 선언에는 색, 글자 크기, 간격, 모서리가 섞여 있다. 접두어로 한 종류만 고르고
             이름을 다듬는다.
           </p>
-          <pre><code class="language-ts">function themeValues(
-  theme: [string, string][],
-  { prefix }: { prefix: string },
-): ThemeValue[] {
+          <pre><code class="language-ts">function themeValues({
+  theme,
+  prefix,
+}: {
+  theme: [string, string][];
+  prefix: string;
+}): ThemeValue[] {
   return theme
     .filter(([name, value]) =&gt; name.startsWith(prefix) &amp;&amp; value !== 'initial') // ① 고르기
     .map(([name, value]) =&gt; ({ name: name.slice(prefix.length), value }))     // ② 접두어 떼기
     .filter(({ name }) =&gt; !name.includes('--'));                              // ③ 딸린 설정 빼기
 }</code></pre>
-          <p><code>{ prefix: 'text-' }</code>로 따라가 보면 이렇다.</p>
+          <p><code>prefix: 'text-'</code>로 따라가 보면 이렇다.</p>
           <div class="table-wrap">
             <table>
               <thead>
@@ -350,14 +353,14 @@ function declarations(block: string): [string, string][] {
             <code>readTokens</code>는 먼저 팔레트로 "이름 → hex" 사전을 만들고, 의미 색의 값이
             <code>var(--무엇)</code> 꼴이면 그 <code>무엇</code>을 사전에서 찾는다.
           </p>
-          <pre><code class="language-ts">const palette = declarations(blockAfter(css, { selector: ':root' })).map(([name, hex]) =&gt; ({
+          <pre><code class="language-ts">const palette = declarations(blockAfter({ css, selector: ':root' })).map(([name, hex]) =&gt; ({
   name,
   hex,
 }));
 const hexOf = new Map(palette.map((p) =&gt; [p.name, p.hex])); // hexOf.get('blue-500') === '#3182f6'
-const theme = declarations(blockAfter(css, { selector: '@theme' }));
+const theme = declarations(blockAfter({ css, selector: '@theme' }));
 
-const colors = themeValues(theme, { prefix: 'color-' }).map(({ name, value }) =&gt; {
+const colors = themeValues({ theme, prefix: 'color-' }).map(({ name, value }) =&gt; {
   const ref = /^var\(--([\w-]+)\)$/.exec(value)?.[1] ?? null;
   return { name, palette: ref, hex: ref ? (hexOf.get(ref) ?? value) : value };
 });</code></pre>

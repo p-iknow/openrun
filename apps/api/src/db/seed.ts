@@ -46,7 +46,7 @@ interface SectionLayout {
 }
 
 // 구역 이름은 A구역부터 붙이고, 구역마다 같은 열 수와 열당 좌석 수를 쓴다.
-function sectionsOf({
+function buildSections({
   count,
   rows,
   seatsPerRow,
@@ -66,17 +66,17 @@ const VENUE_LAYOUTS: { name: string; sections: SectionLayout[] }[] = [
   // 100석
   {
     name: '낙산 소극장',
-    sections: sectionsOf({ count: 2, rows: 5, seatsPerRow: 10 }),
+    sections: buildSections({ count: 2, rows: 5, seatsPerRow: 10 }),
   },
   // 300석
   {
     name: '한강 아트홀',
-    sections: sectionsOf({ count: 3, rows: 10, seatsPerRow: 10 }),
+    sections: buildSections({ count: 3, rows: 10, seatsPerRow: 10 }),
   },
   // 600석
   {
     name: '서울 그랜드 씨어터',
-    sections: sectionsOf({ count: 4, rows: 10, seatsPerRow: 15 }),
+    sections: buildSections({ count: 4, rows: 10, seatsPerRow: 15 }),
   },
 ];
 
@@ -287,7 +287,7 @@ function buildPerformances({
   });
 }
 
-function seatCountOf(layout: { sections: SectionLayout[] }): number {
+function countSeats(layout: { sections: SectionLayout[] }): number {
   return layout.sections.reduce(
     (sum, { rows, seatsPerRow }) => sum + rows * seatsPerRow,
     0,
@@ -295,7 +295,7 @@ function seatCountOf(layout: { sections: SectionLayout[] }): number {
 }
 
 // 회차마다 판매됨으로 둘 좌석 수를 정한다. 판매 예정이나 취소된 회차는 판매된 좌석이 없다.
-function soldCountsOf({
+function buildSoldCounts({
   performances: list,
   sales,
   seatCount,
@@ -375,8 +375,8 @@ function buildSeedShows(now: number) {
         `공연장 순번이 범위를 벗어났습니다: ${seedShow.show.venueIndex}`,
       );
     }
-    const seatCount = seatCountOf(layout);
-    const soldCounts = soldCountsOf({
+    const seatCount = countSeats(layout);
+    const soldCounts = buildSoldCounts({
       performances: seedShow.performances,
       sales,
       seatCount,
@@ -634,7 +634,7 @@ try {
     0,
   );
   const seatCount = VENUE_LAYOUTS.reduce(
-    (sum, layout) => sum + seatCountOf(layout),
+    (sum, layout) => sum + countSeats(layout),
     0,
   );
   console.log(

@@ -63,7 +63,8 @@ async findPage(): Promise&lt;ShowPageDto&gt; {
     .groupBy(performances.showId)
     .as('period');
   // ② 공연마다 공연 판매 상태와 판매 오픈 일시를 구하는 서브쿼리 (06 문서)
-  const salesStatus = showSalesStatusSubquery(this.db, {
+  const salesStatus = showSalesStatusSubquery({
+    db: this.db,
     now: this.clock.now(),
   });
   // 판매 종료 공연은 목록에서 뺀다. 목록과 전체 개수가 같은 조건을 써야 페이지 수가 맞는다.

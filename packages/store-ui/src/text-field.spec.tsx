@@ -4,11 +4,11 @@ import { TextField } from './text-field.js';
 
 // 서버 렌더링 결과 HTML만 본다. 입력과 포커스 같은 브라우저 동작은 Base UI가 맡고, Storybook에서 확인한다.
 
-function attr(tag: string, { attribute }: { attribute: string }) {
+function attr({ tag, attribute }: { tag: string; attribute: string }) {
   return new RegExp(`\\s${attribute}="([^"]*)"`).exec(tag)?.[1];
 }
 
-function tagOf(html: string, { tag }: { tag: string }) {
+function findTag({ html, tag }: { html: string; tag: string }) {
   const found = new RegExp(`<${tag}\\b[^>]*>`).exec(html)?.[0];
   if (!found) throw new Error(`<${tag}>가 없다:\n${html}`);
   return found;
@@ -18,11 +18,11 @@ describe('TextField', () => {
   it('라벨이 입력 칸을 가리켜 라벨을 누르거나 읽으면 입력 칸으로 연결된다', () => {
     const html = renderToStaticMarkup(<TextField label="공연 제목" />);
 
-    const label = tagOf(html, { tag: 'label' });
-    const input = tagOf(html, { tag: 'input' });
-    expect(attr(input, { attribute: 'id' })).toBeTruthy();
-    expect(attr(label, { attribute: 'for' })).toBe(
-      attr(input, { attribute: 'id' }),
+    const label = findTag({ html, tag: 'label' });
+    const input = findTag({ html, tag: 'input' });
+    expect(attr({ tag: input, attribute: 'id' })).toBeTruthy();
+    expect(attr({ tag: label, attribute: 'for' })).toBe(
+      attr({ tag: input, attribute: 'id' }),
     );
     expect(html).toContain('>공연 제목</label>');
   });
@@ -38,16 +38,18 @@ describe('TextField', () => {
       />,
     );
 
-    const input = tagOf(html, { tag: 'input' });
-    expect(attr(input, { attribute: 'name' })).toBe('q');
-    expect(attr(input, { attribute: 'type' })).toBe('search');
-    expect(attr(input, { attribute: 'placeholder' })).toBe('제목으로 찾기');
-    expect(attr(input, { attribute: 'value' })).toBe('햄릿');
+    const input = findTag({ html, tag: 'input' });
+    expect(attr({ tag: input, attribute: 'name' })).toBe('q');
+    expect(attr({ tag: input, attribute: 'type' })).toBe('search');
+    expect(attr({ tag: input, attribute: 'placeholder' })).toBe(
+      '제목으로 찾기',
+    );
+    expect(attr({ tag: input, attribute: 'value' })).toBe('햄릿');
   });
 
   it('비활성이면 입력 칸이 disabled다', () => {
     const html = renderToStaticMarkup(<TextField label="공연 제목" disabled />);
 
-    expect(tagOf(html, { tag: 'input' })).toMatch(/\sdisabled=""/);
+    expect(findTag({ html, tag: 'input' })).toMatch(/\sdisabled=""/);
   });
 });

@@ -51,7 +51,8 @@ export class ShowsService {
   }: ShowListQuery): Promise<ShowPageDto> {
     // 회차가 없는 공연은 기간 서브쿼리에 행이 없어 목록에 나오지 않는다.
     const period = buildShowPeriodSubquery(this.db);
-    const salesStatus = showSalesStatusSubquery(this.db, {
+    const salesStatus = showSalesStatusSubquery({
+      db: this.db,
       now: this.clock.now(),
     });
     // 목록과 전체 개수가 같은 조건을 써야 페이지 수가 맞는다. 판매 종료 공연은 목록에서 뺀다.
@@ -120,7 +121,7 @@ export class ShowsService {
     const now = this.clock.now();
     // 목록과 같은 서브쿼리로 공연 기간과 공연 판매 상태를 구해, 두 화면의 값이 어긋나지 않는다.
     const period = buildShowPeriodSubquery(this.db);
-    const salesStatus = showSalesStatusSubquery(this.db, { now });
+    const salesStatus = showSalesStatusSubquery({ db: this.db, now });
     const { totalSeats, remainingSeats } = buildSeatCounts();
     const performanceStatus = buildPerformanceSalesStatus({
       now,

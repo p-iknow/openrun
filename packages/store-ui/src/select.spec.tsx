@@ -11,7 +11,7 @@ const sortItems = [
   { value: 'closing', label: '마감 임박순' },
 ];
 
-function attr(tag: string, { attribute }: { attribute: string }) {
+function attr({ tag, attribute }: { tag: string; attribute: string }) {
   return new RegExp(`\\s${attribute}="([^"]*)"`).exec(tag)?.[1];
 }
 
@@ -55,8 +55,8 @@ describe('Select', () => {
     );
 
     const input = /<input\b[^>]*>/.exec(html)?.[0] ?? '';
-    expect(attr(input, { attribute: 'name' })).toBe('sort');
-    expect(attr(input, { attribute: 'value' })).toBe('closing');
+    expect(attr({ tag: input, attribute: 'name' })).toBe('sort');
+    expect(attr({ tag: input, attribute: 'value' })).toBe('closing');
   });
 
   it('inline이면 라벨을 화면에서 숨기고 트리거에는 고른 값만 보인다', () => {
@@ -70,7 +70,7 @@ describe('Select', () => {
     );
 
     const label = /<[a-z]+\b[^>]*>정렬<\/[a-z]+>/.exec(html)?.[0] ?? '';
-    expect(attr(label, { attribute: 'class' })).toContain('sr-only');
+    expect(attr({ tag: label, attribute: 'class' })).toContain('sr-only');
     expect(trigger(html).text).toBe('인기순');
   });
 
