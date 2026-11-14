@@ -21,7 +21,8 @@
     ],
     "esModuleInterop": true,
     "paths": {
-      "@/*": ["./src/*"]
+      "@shared/*": ["./apps-src/@shared/*"],
+      "@apps-src/*": ["./apps-src/*"]
     }
   },
   "include": [
