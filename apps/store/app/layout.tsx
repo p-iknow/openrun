@@ -2,9 +2,9 @@ import localFont from 'next/font/local';
 import Link from 'next/link';
 import { OverlayProvider } from 'overlay-kit';
 import { type ReactNode, Suspense } from 'react';
-import { HeaderSearch } from '../src/shows/header-search';
-import { ShowListSearchForm } from '../src/shows/show-list-search-form';
-import { normalizeShowListQuery } from '../src/shows/show-list-query';
+import { HeaderSearch } from '@/shows/header-search';
+import { ShowListSearchForm } from '@/shows/show-list-search-form';
+import { normalizeShowListQuery } from '@/shows/show-list-query';
 import './globals.css';
 
 const pretendard = localFont({

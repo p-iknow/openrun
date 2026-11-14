@@ -5,7 +5,7 @@ import {
   SHOW_LIST_SALES_STATUSES,
   type ShowListSalesStatus,
 } from './show-list-query';
-import { GENRE_LABELS } from './show-display';
+import { GENRE_LABELS } from '../helpers/show.helpers';
 
 // 장르와 판매 상태 칩에 보이는 이름. 필터 줄의 칩과 필터 시트의 칩이 함께 쓴다.
 

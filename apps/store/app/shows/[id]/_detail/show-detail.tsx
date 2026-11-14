@@ -2,7 +2,7 @@ import { Badge, Button, Drawer, Skeleton } from '@openrun/store-ui';
 import Image from 'next/image';
 import type { ReactNode } from 'react';
 import { CollapsibleDetailImages } from './collapsible-detail-images';
-import type { ShowDetailData } from './select-show-detail';
+import type { ShowDetailData } from './show-detail.helpers';
 
 // 데스크톱(lg)은 2단이다. 왼쪽이 공연 정보, 오른쪽이 스크롤을 따라오는 회차 패널이다.
 // 모바일은 한 단이라 회차 패널을 본문에 두면 공연 정보 맨 아래로 밀려 보이지 않는다. 그래서 NOL 티켓처럼

@@ -2,7 +2,7 @@
 
 import { Badge, Calendar } from '@openrun/store-ui';
 import { useState } from 'react';
-import type { PerformanceDayData } from './select-show-detail';
+import type { PerformanceDayData } from './show-detail.helpers';
 
 // NOL 티켓 상세의 예매 패널처럼 달력에서 날짜를 고르면 그날의 회차를 보여 준다.
 // 회차가 있는 날만 고를 수 있고, 처음에는 가장 이른 날이 골라져 있다. 회차 선택과 예매 버튼은 1.5에서 넣는다.

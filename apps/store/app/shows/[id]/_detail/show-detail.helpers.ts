@@ -1,6 +1,6 @@
 import * as R from 'remeda';
-import { formatKst } from '../format-kst';
-import type { ShowDetail } from './fetch-show-detail';
+import { formatKst } from '@/utils';
+import type { ShowDetail } from '@/api/shows';
 import {
   GENRE_LABELS,
   getSalesOpenAtLabel,
@@ -8,7 +8,7 @@ import {
   PERFORMANCE_SALES_STATUS_BADGES,
   type SalesStatusBadgeData,
   SHOW_SALES_STATUS_BADGES,
-} from './show-display';
+} from '@/helpers/show.helpers';
 
 export interface PerformanceItemData {
   id: number;

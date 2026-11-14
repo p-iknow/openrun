@@ -1,7 +1,7 @@
 import type { components } from '@openrun/api-client';
 import type { BadgeTone } from '@openrun/store-ui';
-import { formatKst } from '../format-kst';
-import type { Genre } from './show-list-query';
+import { formatKst } from '../utils';
+import type { Genre } from '../shows/show-list-query';
 
 // 공연 목록과 공연 상세, 필터가 함께 쓰는 화면 문구다.
 

@@ -1,10 +1,10 @@
-import type { ShowPage } from './fetch-shows';
+import type { ShowPage } from '../api/shows';
 import {
   getSalesOpenAtLabel,
   getShowPeriodLabel,
   type SalesStatusBadgeData,
   SHOW_SALES_STATUS_BADGES,
-} from './show-display';
+} from '../helpers/show.helpers';
 
 export interface ShowCardData {
   id: number;

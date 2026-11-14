@@ -3,7 +3,7 @@
 import { cn } from '@openrun/store-ui';
 import { type ReactNode, useId, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { ChevronDownIcon } from './filter-bar-button';
+import { ChevronDownIcon } from '@/shows/filter-bar-button';
 
 // NOL 티켓처럼 상세 이미지는 처음에 일정 높이까지만 보여 주고, 아래 버튼으로 펼치고 접는다.
 // 상세 이미지가 길어 회차나 다른 정보까지 한참 스크롤해야 하는 것을 막는다.

@@ -2,17 +2,17 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { connection } from 'next/server';
 import { cache } from 'react';
-import { ApiError } from '../../../src/api-error';
-import { createServerApiClient } from '../../../src/api-client';
-import { fetchShowDetail } from '../../../src/shows/fetch-show-detail';
-import { PerformanceCalendar } from '../../../src/shows/performance-calendar';
-import { selectShowDetail } from '../../../src/shows/select-show-detail';
+import { ApiError } from '@/api/api-error';
+import { createServerApiClient } from '@/api/client';
+import { fetchShowDetail } from '@/api/shows';
+import { PerformanceCalendar } from './_detail/performance-calendar';
+import { selectShowDetail } from './_detail/show-detail.helpers';
 import {
   PerformancePanel,
   PerformanceSheet,
   ShowDetailLayout,
   ShowInfo,
-} from '../../../src/shows/show-detail';
+} from './_detail/show-detail';
 
 // generateMetadata와 페이지가 같은 요청 안에서 API를 한 번만 부르도록 React cache로 묶는다.
 // 없는 공연이면 notFound()로 404 화면을 보여 준다.

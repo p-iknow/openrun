@@ -1,18 +1,18 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { connection } from 'next/server';
-import { createServerApiClient } from '../src/api-client';
-import { fetchShows } from '../src/shows/fetch-shows';
-import { selectShowCards } from '../src/shows/select-show-cards';
-import { ShowCard, ShowCardList } from '../src/shows/show-card';
-import { ShowListPagination } from '../src/shows/show-list-pagination';
-import { ShowFilterBar } from '../src/shows/show-filter-bar';
+import { createServerApiClient } from '@/api/client';
+import { fetchShows } from '@/api/shows';
+import { selectShowCards } from '@/shows/select-show-cards';
+import { ShowCard, ShowCardList } from '@/shows/show-card';
+import { ShowListPagination } from '@/shows/show-list-pagination';
+import { ShowFilterBar } from '@/shows/show-filter-bar';
 import {
   getConditionResetHref,
   getLastPageRedirectHref,
   hasNarrowingCondition,
   normalizeShowListQuery,
-} from '../src/shows/show-list-query';
+} from '@/shows/show-list-query';
 
 export default async function HomePage({ searchParams }: PageProps<'/'>) {
   // 이 페이지는 빌드 때 미리 그리지 않고 요청마다 렌더링한다. 그래서 빌드에 API와 DB가 필요 없다.

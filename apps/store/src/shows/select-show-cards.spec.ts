@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ShowPage } from './fetch-shows';
+import type { ShowPage } from '../api/shows';
 import { selectShowCards } from './select-show-cards';
 
 type ShowSummary = ShowPage['items'][number];

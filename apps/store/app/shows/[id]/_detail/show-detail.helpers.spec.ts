@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { ShowDetail } from './fetch-show-detail';
-import { selectShowDetail } from './select-show-detail';
+import type { ShowDetail } from '@/api/shows';
+import { selectShowDetail } from './show-detail.helpers';
 
 type Performance = ShowDetail['performances'][number];
 
