@@ -2,7 +2,8 @@ import { fakerKO as faker } from '@faker-js/faker';
 import { createHash } from 'node:crypto';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { sql } from 'drizzle-orm';
-import { drizzle } from 'drizzle-orm/node-postgres';
+import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
+import type { PgInsertValue, PgTable } from 'drizzle-orm/pg-core';
 import { readDatabaseUrl } from '../config/env.js';
 import {
   GENRES,
@@ -126,6 +127,21 @@ function getSeatGradeIndex({
 
 // 회차 좌석과 좌석 등급 지정을 한 번에 넣는 행 수. 한 쿼리의 파라미터는 65535개까지라 컬럼 3개 기준으로 넉넉히 나눈다.
 const INSERT_CHUNK = 10_000;
+
+// 행이 많아 한 쿼리에 다 넣을 수 없는 테이블에 INSERT_CHUNK 행씩 나눠 넣는다.
+async function insertInChunks<T extends PgTable>({
+  db,
+  table,
+  rows,
+}: {
+  db: Pick<NodePgDatabase, 'insert'>;
+  table: T;
+  rows: PgInsertValue<T>[];
+}): Promise<void> {
+  for (let start = 0; start < rows.length; start += INSERT_CHUNK) {
+    await db.insert(table).values(rows.slice(start, start + INSERT_CHUNK));
+  }
+}
 
 // 회차 배치. 판매 상태는 저장하지 않으므로, 판매 오픈 일시와 시작 일시, 회차 취소로 각 상태가 나오게 한다.
 // 일 단위 오프셋은 오늘(KST) 0시 기준이다. 지난 회차는 어제 이전, 남은 회차는 내일 이후에 둬서
@@ -512,18 +528,11 @@ try {
       });
     }
 
-    const seatGradeAssignmentRows: {
-      showId: number;
-      seatId: number;
-      seatGradeId: number;
-    }[] = [];
+    const seatGradeAssignmentRows: (typeof seatGradeAssignments.$inferInsert)[] =
+      [];
     // 구역 안에서 앞 열과 뒤 열의 등급이 갈리는 공연 수. 공연장과 등급 수에 따라 갈리지 않는 공연도 있어, 하나는 나오는지 끝에서 확인한다.
     let mixedSectionShowCount = 0;
-    const performanceSeatRows: {
-      performanceId: number;
-      seatId: number;
-      isSold: boolean;
-    }[] = [];
+    const performanceSeatRows: (typeof performanceSeats.$inferInsert)[] = [];
     for (const [
       index,
       { show, performances: showPerformances },
@@ -608,24 +617,16 @@ try {
       );
     }
 
-    for (
-      let start = 0;
-      start < seatGradeAssignmentRows.length;
-      start += INSERT_CHUNK
-    ) {
-      await tx
-        .insert(seatGradeAssignments)
-        .values(seatGradeAssignmentRows.slice(start, start + INSERT_CHUNK));
-    }
-    for (
-      let start = 0;
-      start < performanceSeatRows.length;
-      start += INSERT_CHUNK
-    ) {
-      await tx
-        .insert(performanceSeats)
-        .values(performanceSeatRows.slice(start, start + INSERT_CHUNK));
-    }
+    await insertInChunks({
+      db: tx,
+      table: seatGradeAssignments,
+      rows: seatGradeAssignmentRows,
+    });
+    await insertInChunks({
+      db: tx,
+      table: performanceSeats,
+      rows: performanceSeatRows,
+    });
     return performanceSeatRows.length;
   });
   const performanceCount = seedShows.reduce(
