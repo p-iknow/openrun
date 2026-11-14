@@ -162,6 +162,160 @@
           "Shows"
         ]
       }
+    },
+    "/auth/sign-in": {
+      "post": {
+        "operationId": "AuthController_signIn",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "이메일",
+                    "example": "user@example.com"
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "비밀번호"
+                  },
+                  "rememberMe": {
+                    "type": "boolean",
+                    "description": "로그인 상태 유지. 켜면 세션이 7일 동안 유지되고 쓰는 동안 연장된다. 끄면 1일 뒤 끝나고 브라우저를 닫으면 쿠키가 사라진다."
+                  }
+                },
+                "required": [
+                  "email",
+                  "password",
+                  "rememberMe"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "로그인한 세션",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "오류(Problem Details)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/auth/sign-out": {
+      "post": {
+        "operationId": "AuthController_signOut",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": "로그아웃했다. 세션이 이미 끊겼어도 같다."
+          },
+          "default": {
+            "description": "오류(Problem Details)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/auth/session": {
+      "get": {
+        "operationId": "AuthController_getSession",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "현재 세션. 로그인하지 않았으면 null이다.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "nullable": true,
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SessionDto"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "오류(Problem Details)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/me": {
+      "get": {
+        "operationId": "MeController_findMe",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionUserDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "오류(Problem Details)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Me"
+        ]
+      }
     }
   },
   "info": {
@@ -512,6 +666,49 @@
           "detailImages",
           "seatGrades",
           "performances"
+        ]
+      },
+      "SessionUserDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "사용자 ID"
+          },
+          "email": {
+            "type": "string",
+            "description": "이메일"
+          },
+          "name": {
+            "type": "string",
+            "description": "이름"
+          },
+          "emailVerified": {
+            "type": "boolean",
+            "description": "이메일 인증을 마쳤는지"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "name",
+          "emailVerified"
+        ]
+      },
+      "SessionDto": {
+        "type": "object",
+        "properties": {
+          "user": {
+            "description": "로그인한 사용자",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SessionUserDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "user"
         ]
       },
       "FieldErrorDto": {

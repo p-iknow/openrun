@@ -32,6 +32,8 @@ let now: Date;
 beforeAll(() => {
   vi.stubEnv('DATABASE_URL', inject('databaseUrl'));
   vi.stubEnv('SHOW_IMAGE_BASE_URL', SHOW_IMAGE_BASE_URL);
+  // 앱이 부팅 때 세션 쿠키 서명 키를 읽으므로 값이 있어야 한다.
+  vi.stubEnv('AUTH_SECRET', 'test-auth-secret-0123456789abcdefghijklmnop');
 });
 
 afterAll(async () => {
