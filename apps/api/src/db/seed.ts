@@ -15,7 +15,7 @@ import {
   shows,
   type Genre,
 } from './schema/shows.js';
-import { seats, sections, venues } from './schema/venues.js';
+import { floors, seats, venues } from './schema/venues.js';
 import { renderDetailImages } from './seed-detail-image.js';
 import { renderPoster } from './seed-poster.js';
 import { buildShowDescription, SEED_SHOW_CONTENTS } from './seed-shows.js';
@@ -38,45 +38,36 @@ const MINUTE_MS = 60 * 1000;
 // 한국은 서머타임이 없어 UTC+9로 고정이다.
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
-// 공연장마다 구역과 좌석 배치. 구역마다 열 수 × 열당 좌석 수만큼 좌석을 만든다.
-interface SectionLayout {
+// 공연장마다 층과 좌석 배치. 층마다 열 수 × 열당 좌석 수만큼 좌석을 만들고, 열 이름은 층마다 A열부터 붙인다.
+// 층은 1층부터 무대에서 먼 순서로 적는다.
+interface FloorLayout {
   name: string;
   rows: number;
   seatsPerRow: number;
 }
 
-// 구역 이름은 A구역부터 붙이고, 구역마다 같은 열 수와 열당 좌석 수를 쓴다.
-function buildSections({
-  count,
-  rows,
-  seatsPerRow,
-}: {
-  count: number;
-  rows: number;
-  seatsPerRow: number;
-}): SectionLayout[] {
-  return Array.from({ length: count }, (_, index) => ({
-    name: `${String.fromCharCode('A'.charCodeAt(0) + index)}구역`,
-    rows,
-    seatsPerRow,
-  }));
-}
-
-const VENUE_LAYOUTS: { name: string; sections: SectionLayout[] }[] = [
+const VENUE_LAYOUTS: { name: string; floors: FloorLayout[] }[] = [
   // 100석
   {
     name: '낙산 소극장',
-    sections: buildSections({ count: 2, rows: 5, seatsPerRow: 10 }),
+    floors: [{ name: '1층', rows: 10, seatsPerRow: 10 }],
   },
   // 300석
   {
     name: '한강 아트홀',
-    sections: buildSections({ count: 3, rows: 10, seatsPerRow: 10 }),
+    floors: [
+      { name: '1층', rows: 20, seatsPerRow: 10 },
+      { name: '2층', rows: 10, seatsPerRow: 10 },
+    ],
   },
   // 600석
   {
     name: '서울 그랜드 씨어터',
-    sections: buildSections({ count: 4, rows: 10, seatsPerRow: 15 }),
+    floors: [
+      { name: '1층', rows: 20, seatsPerRow: 15 },
+      { name: '2층', rows: 10, seatsPerRow: 15 },
+      { name: '3층', rows: 10, seatsPerRow: 15 },
+    ],
   },
 ];
 
@@ -109,9 +100,9 @@ const SEAT_GRADES_BY_GENRE: Record<Genre, { name: string; price: number }[]> = {
   ],
 };
 
-// 좌석 하나의 등급 순번(0이 가장 비싼 등급)이다. 구역을 A구역부터 무대에서 먼 쪽으로 이어 놓은 것으로 보고,
+// 좌석 하나의 등급 순번(0이 가장 비싼 등급)이다. 층을 1층부터 무대에서 먼 쪽으로 이어 놓은 것으로 보고,
 // 공연장 전체의 열을 앞에서부터 등급 수만큼 나눠 앞 열일수록 비싼 등급을 준다.
-// 나누는 경계가 구역 중간에 걸리면 그 구역은 앞 열과 뒤 열의 등급이 갈린다(예: 낙산 소극장의 뮤지컬은 A구역이 VIP석과 R석으로 갈린다).
+// 나누는 경계가 층 중간에 걸리면 그 층은 앞 열과 뒤 열의 등급이 갈린다(예: 층이 하나인 낙산 소극장은 등급이 둘 이상인 모든 공연에서 1층의 등급이 갈린다).
 // 공연장 전체 열 수(최소 10)가 등급 수(최대 4)보다 많아 모든 등급에 좌석이 있다.
 function getSeatGradeIndex({
   rowPosition,
@@ -295,8 +286,8 @@ function buildPerformances({
   });
 }
 
-function countSeats(layout: { sections: SectionLayout[] }): number {
-  return layout.sections.reduce(
+function countSeats(layout: { floors: FloorLayout[] }): number {
+  return layout.floors.reduce(
     (sum, { rows, seatsPerRow }) => sum + rows * seatsPerRow,
     0,
   );
@@ -395,7 +386,7 @@ function buildSeedShows(now: number) {
       ...seedShow,
       performances: seedShow.performances.map((performance, index) => ({
         ...performance,
-        // 공연장 좌석 목록 안의 순번이다. 판매된 좌석이 구역 곳곳에 흩어지도록 무작위로 고른다.
+        // 공연장 좌석 목록 안의 순번이다. 판매된 좌석이 층 곳곳에 흩어지도록 무작위로 고른다.
         soldSeatIndexes: new Set(
           faker.helpers.arrayElements(
             Array.from({ length: seatCount }, (_, i) => i),
@@ -478,14 +469,14 @@ const db = drizzle(readDatabaseUrl());
 try {
   const performanceSeatCount = await db.transaction(async (tx) => {
     await tx.execute(
-      sql`TRUNCATE ${seatGradeAssignments}, ${seatGrades}, ${showDetailImages}, ${performanceSeats}, ${performances}, ${shows}, ${seats}, ${sections}, ${venues} RESTART IDENTITY`,
+      sql`TRUNCATE ${seatGradeAssignments}, ${seatGrades}, ${showDetailImages}, ${performanceSeats}, ${performances}, ${shows}, ${seats}, ${floors}, ${venues} RESTART IDENTITY`,
     );
 
     // 공연장마다 좌석 목록. 회차 좌석은 이 목록의 좌석 수만큼 만들고, 좌석 등급은 공연장 전체에서 몇 번째 열인지(rowPosition)로 정한다.
     const venueSeats: {
       venueId: number;
       totalRows: number;
-      seats: { id: number; sectionId: number; rowPosition: number }[];
+      seats: { id: number; floorId: number; rowPosition: number }[];
     }[] = [];
     for (const layout of VENUE_LAYOUTS) {
       const [venue] = await tx
@@ -497,24 +488,24 @@ try {
       }
       const venueSeatList: {
         id: number;
-        sectionId: number;
+        floorId: number;
         rowPosition: number;
       }[] = [];
       let rowOffset = 0;
-      for (const { name, rows, seatsPerRow } of layout.sections) {
-        const [section] = await tx
-          .insert(sections)
+      for (const { name, rows, seatsPerRow } of layout.floors) {
+        const [floor] = await tx
+          .insert(floors)
           .values({ venueId: venue.id, name })
-          .returning({ id: sections.id });
-        if (!section) {
-          throw new Error(`구역을 넣지 못했습니다: ${name}`);
+          .returning({ id: floors.id });
+        if (!floor) {
+          throw new Error(`층을 넣지 못했습니다: ${name}`);
         }
-        const sectionSeats = await tx
+        const floorSeats = await tx
           .insert(seats)
           .values(
             Array.from({ length: rows }, (_, rowIndex) =>
               Array.from({ length: seatsPerRow }, (_, seatIndex) => ({
-                sectionId: section.id,
+                floorId: floor.id,
                 row: String.fromCharCode('A'.charCodeAt(0) + rowIndex),
                 number: seatIndex + 1,
               })),
@@ -522,9 +513,9 @@ try {
           )
           .returning({ id: seats.id, row: seats.row });
         venueSeatList.push(
-          ...sectionSeats.map(({ id, row }) => ({
+          ...floorSeats.map(({ id, row }) => ({
             id,
-            sectionId: section.id,
+            floorId: floor.id,
             rowPosition: rowOffset + row.charCodeAt(0) - 'A'.charCodeAt(0),
           })),
         );
@@ -539,8 +530,8 @@ try {
 
     const seatGradeAssignmentRows: (typeof seatGradeAssignments.$inferInsert)[] =
       [];
-    // 구역 안에서 앞 열과 뒤 열의 등급이 갈리는 공연 수. 공연장과 등급 수에 따라 갈리지 않는 공연도 있어, 하나는 나오는지 끝에서 확인한다.
-    let mixedSectionShowCount = 0;
+    // 층 안에서 앞 열과 뒤 열의 등급이 갈리는 공연 수. 공연장과 등급 수에 따라 갈리지 않는 공연도 있어, 하나는 나오는지 끝에서 확인한다.
+    let mixedFloorShowCount = 0;
     const performanceSeatRows: (typeof performanceSeats.$inferInsert)[] = [];
     for (const [
       index,
@@ -578,9 +569,9 @@ try {
         )
         .returning({ id: seatGrades.id });
       // 공연장의 모든 좌석에 등급을 하나씩 지정한다.
-      const gradeIdsBySection = new Map<number, Set<number>>();
+      const gradeIdsByFloor = new Map<number, Set<number>>();
       seatGradeAssignmentRows.push(
-        ...venue.seats.map(({ id, sectionId, rowPosition }) => {
+        ...venue.seats.map(({ id, floorId, rowPosition }) => {
           const grade =
             grades[
               getSeatGradeIndex({
@@ -592,15 +583,15 @@ try {
           if (!grade) {
             throw new Error(`좌석 등급을 고르지 못했습니다: ${show.title}`);
           }
-          gradeIdsBySection.set(
-            sectionId,
-            (gradeIdsBySection.get(sectionId) ?? new Set()).add(grade.id),
+          gradeIdsByFloor.set(
+            floorId,
+            (gradeIdsByFloor.get(floorId) ?? new Set()).add(grade.id),
           );
           return { showId: inserted.id, seatId: id, seatGradeId: grade.id };
         }),
       );
-      if ([...gradeIdsBySection.values()].some((ids) => ids.size > 1)) {
-        mixedSectionShowCount += 1;
+      if ([...gradeIdsByFloor.values()].some((ids) => ids.size > 1)) {
+        mixedFloorShowCount += 1;
       }
       for (const { soldSeatIndexes, ...performance } of showPerformances) {
         const [insertedPerformance] = await tx
@@ -620,9 +611,9 @@ try {
       }
     }
 
-    if (mixedSectionShowCount === 0) {
+    if (mixedFloorShowCount === 0) {
       throw new Error(
-        '구역 안에서 등급이 갈리는 공연이 없습니다. 공연장 배치나 장르별 등급 수를 바꿔 하나는 나오게 하세요.',
+        '층 안에서 등급이 갈리는 공연이 없습니다. 공연장 배치나 장르별 등급 수를 바꿔 하나는 나오게 하세요.',
       );
     }
 

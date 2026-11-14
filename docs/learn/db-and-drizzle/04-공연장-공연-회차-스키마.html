@@ -214,7 +214,7 @@ export const performances = pgTable(
           <div class="callout warn">
             <p>
               외래 키 때문에 시드는
-              <code>TRUNCATE performance_seats, performances, shows, seats, sections, venues RESTART IDENTITY</code>처럼
+              <code>TRUNCATE performance_seats, performances, shows, seats, floors, venues RESTART IDENTITY</code>처럼
               서로 가리키는 여섯 테이블을 한 문장에서 비운다. <code>shows</code>만 비우면 그 행을 가리키는
               <code>performances</code>가 남아 있어서 PostgreSQL이 거부한다. <code>RESTART IDENTITY</code>로 <a href="02-drizzle-스키마-문법.html#identity">번호</a>를 1로 되돌려,
               통합 테스트가 <code>id: 1</code>을 기대할 수 있다.

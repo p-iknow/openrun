@@ -8,7 +8,7 @@ import {
   showDetailImages,
   shows,
 } from '../src/db/schema/shows.js';
-import { seats, sections, venues } from '../src/db/schema/venues.js';
+import { floors, seats, venues } from '../src/db/schema/venues.js';
 import { db } from './db.js';
 
 // 테스트 데이터 팩토리. build()는 기본값을 채운 행을 DB에 넣고 id를 돌려준다.
@@ -50,7 +50,7 @@ interface ShowInput {
   seatGrades: { name: string; price: number }[];
 }
 
-// 공연장과 구역 하나, 좌석 VENUE_SEAT_COUNT개를 넣고 공연장 id를 돌려준다.
+// 공연장과 층 하나, 좌석 VENUE_SEAT_COUNT개를 넣고 공연장 id를 돌려준다.
 export const venueFactory = Factory.Async.makeFactory<VenueInput>({
   name: '예술의전당',
 }).transform(insertVenue);
@@ -89,16 +89,16 @@ async function insertVenue({ name }: VenueInput): Promise<number> {
   if (!venue) {
     throw new Error('공연장을 넣지 못했습니다.');
   }
-  const [section] = await db
-    .insert(sections)
-    .values({ venueId: venue.id, name: 'A구역' })
-    .returning({ id: sections.id });
-  if (!section) {
-    throw new Error('구역을 넣지 못했습니다.');
+  const [floor] = await db
+    .insert(floors)
+    .values({ venueId: venue.id, name: '1층' })
+    .returning({ id: floors.id });
+  if (!floor) {
+    throw new Error('층을 넣지 못했습니다.');
   }
   await db.insert(seats).values(
     Array.from({ length: VENUE_SEAT_COUNT }, (_, index) => ({
-      sectionId: section.id,
+      floorId: floor.id,
       row: 'A',
       number: index + 1,
     })),
@@ -124,8 +124,8 @@ async function insertShow({
   const venueSeats = await db
     .select({ id: seats.id })
     .from(seats)
-    .innerJoin(sections, eq(sections.id, seats.sectionId))
-    .where(eq(sections.venueId, show.venueId))
+    .innerJoin(floors, eq(floors.id, seats.floorId))
+    .where(eq(floors.venueId, show.venueId))
     .orderBy(seats.id);
   for (const input of performanceInputs) {
     const { startsAt, salesOpenAt, isCancelled, soldSeats } =

@@ -255,7 +255,7 @@ enrollments.filter((e) =&gt; e.studentId === 1); // 철수가 듣는 수업</cod
               <div class="erd-title">seats <small>좌석</small></div>
               <ul>
                 <li data-key="PK">id</li>
-                <li data-key="FK">section_id</li>
+                <li data-key="FK">floor_id</li>
                 <li>row</li>
                 <li>number</li>
               </ul>
@@ -273,21 +273,21 @@ enrollments.filter((e) =&gt; e.studentId === 1); // 철수가 듣는 수업</cod
             <li>좌석 하나는 회차 <strong>여러 개</strong>에서 팔린다(그 공연장에서 열리는 모든 회차).</li>
           </ul>
           <p>
-            "팔렸나"는 좌석만의 정보가 아니다. A구역 1열 1번이 11-20 회차에서는 팔렸어도 11-21 회차에서는 비어 있을 수 있다.
+            "팔렸나"는 좌석만의 정보가 아니다. 1층 A열 1번이 11-20 회차에서는 팔렸어도 11-21 회차에서는 비어 있을 수 있다.
             <strong>이 회차의 이 좌석</strong>에 붙는 정보라서 연결 행에 둔다.
           </p>
           <div class="table-wrap">
             <table>
               <thead><tr><th colspan="5">performance_seats (회차 좌석)</th></tr><tr><th>id</th><th>performance_id</th><th>seat_id</th><th>is_sold</th><th>뜻</th></tr></thead>
               <tbody>
-                <tr><td>1</td><td><strong>7</strong></td><td><strong>500</strong></td><td>true</td><td>11-20 회차의 A구역 1열 1번은 팔림</td></tr>
+                <tr><td>1</td><td><strong>7</strong></td><td><strong>500</strong></td><td>true</td><td>11-20 회차의 1층 A열 1번은 팔림</td></tr>
                 <tr><td>2</td><td><strong>8</strong></td><td><strong>500</strong></td><td>false</td><td>11-21 회차의 같은 자리는 비어 있음</td></tr>
               </tbody>
             </table>
           </div>
           <p>
             <code>unique(performance_id, seat_id)</code>가 같은 회차에 같은 좌석이 두 번 생기는 것을 막는다. 자세한 내용은
-            <a href="07-구역-좌석-회차-좌석-스키마.html#performance-seats">07 문서</a>에 있다.
+            <a href="07-층-좌석-회차-좌석-스키마.html#performance-seats">07 문서</a>에 있다.
           </p>
 
           <h3 id="seat-grade-assignments">좌석 등급 지정: 공연 × 좌석 → 등급</h3>
@@ -296,14 +296,14 @@ enrollments.filter((e) =&gt; e.studentId === 1); // 철수가 듣는 수업</cod
             <li>좌석 하나는 공연 <strong>여러 개</strong>에서 등급을 받는다(같은 공연장에서 열리는 공연마다).</li>
           </ul>
           <p>
-            같은 A구역 1열 1번이 뮤지컬 A에서는 VIP석이고 콘서트 B에서는 스탠딩이다. 등급은 <strong>이 공연의 이 좌석</strong>에 붙는
+            같은 1층 A열 1번이 뮤지컬 A에서는 VIP석이고 콘서트 B에서는 스탠딩이다. 등급은 <strong>이 공연의 이 좌석</strong>에 붙는
             정보라서 연결 행에 둔다.
           </p>
           <div class="table-wrap">
             <table>
               <thead><tr><th colspan="4">seat_grade_assignments (좌석 등급 지정)</th></tr><tr><th>show_id</th><th>seat_id</th><th>seat_grade_id</th><th>뜻</th></tr></thead>
               <tbody>
-                <tr><td><strong>1</strong></td><td><strong>500</strong></td><td><strong>10</strong></td><td>뮤지컬 A의 A구역 1열 1번은 VIP석</td></tr>
+                <tr><td><strong>1</strong></td><td><strong>500</strong></td><td><strong>10</strong></td><td>뮤지컬 A의 1층 A열 1번은 VIP석</td></tr>
                 <tr><td><strong>2</strong></td><td><strong>500</strong></td><td><strong>20</strong></td><td>콘서트 B의 같은 자리는 스탠딩</td></tr>
               </tbody>
             </table>
@@ -515,14 +515,14 @@ enrollments.filter((e) =&gt; e.studentId === 1); // 철수가 듣는 수업</cod
           <div class="quiz">
             <p class="quiz-q">1. 아래 관계마다 외래 키 하나로 될지, 연결 테이블이 필요할지 답한다.</p>
             <ul>
-              <li>가. 구역과 좌석</li>
+              <li>가. 층과 좌석</li>
               <li>나. 공연과 출연 배우</li>
               <li>다. 공연과 좌석 등급</li>
             </ul>
             <details class="quiz-answer">
               <summary>답 보기</summary>
               <div class="fold-body">
-                <p>가: 좌석 하나는 구역 하나에만 있다. 일대다라서 <code>seats.section_id</code> 외래 키 하나로 된다.</p>
+                <p>가: 좌석 하나는 층 하나에만 있다. 일대다라서 <code>seats.floor_id</code> 외래 키 하나로 된다.</p>
                 <p>
                   나: 공연 하나에 배우가 여러 명이고, 배우 한 명은 공연 여러 개에 나온다. 다대다라서 연결 테이블이 필요하다. 배역 이름
                   같은 정보는 연결 행에 둔다.
@@ -542,7 +542,7 @@ enrollments.filter((e) =&gt; e.studentId === 1); // 철수가 듣는 수업</cod
               <summary>답 보기</summary>
               <div class="fold-body">
                 <p>
-                  좌석은 회차와 상관없이 하나뿐이라, 11-20 회차에서 A구역 1열 1번을 팔면 11-21 회차를 포함한 모든 회차에서 그 자리가
+                  좌석은 회차와 상관없이 하나뿐이라, 11-20 회차에서 1층 A열 1번을 팔면 11-21 회차를 포함한 모든 회차에서 그 자리가
                   팔린 것으로 보인다. 판매 여부는 회차와 좌석의 조합에 붙는 정보라서 연결 행에 두어야 한다.
                 </p>
               </div>
