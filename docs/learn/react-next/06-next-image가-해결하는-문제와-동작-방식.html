@@ -40,13 +40,13 @@
           기능(<code>/_next/image</code>) 두 부분으로 되어 있다. 먼저 일반 <code>&lt;img&gt;</code>로는 어떤 문제가 생기는지 보고,
           컴포넌트가 어떤 HTML을 만들고, 브라우저가 그중 어떤 파일을 고르고, 서버가 그 파일을 어떻게 만들어 캐시하는지 차례로
           본다. 내용은 Next 16.4.5의 문서와 소스 코드를 기준으로 했고, 예시는 공연 카드의
-          포스터(<code>apps/store/src/shows/show-card.tsx</code>)다.
+          포스터(<code>apps/store/apps-src/_index/index-page.sub/show-card.tsx</code>)다.
         </p>
 
         <section id="problem">
           <h2>해결하려는 문제</h2>
           <p>포스터를 일반 <code>&lt;img&gt;</code>로 그리면 이렇게 된다.</p>
-          <pre><code class="language-tsx">&lt;img src="http://localhost:3001/posters/show-01-3fa2b1c9.png" alt="" /&gt;</code></pre>
+          <pre><code class="language-tsx">&lt;img src="http://localhost:3001/show-images/posters/show-01-3fa2b1c9.png" alt="" /&gt;</code></pre>
           <p>코드는 짧지만, 휴대폰으로 공연 목록을 여는 순간 다섯 가지 문제가 한꺼번에 생긴다.</p>
 
           <h3>1. 화면보다 훨씬 큰 파일을 받는다</h3>
@@ -240,7 +240,7 @@
   class="object-cover"
   style="position:absolute;height:100%;width:100%;left:0;top:0;right:0;bottom:0;color:transparent"
   sizes="(min-width: 1024px) 280px, (min-width: 640px) 33vw, 96px"
-  srcset="/_next/image?url=http%3A%2F%2Flocalhost%3A3001%2Fposters%2Fshow-01-3fa2b1c9.png&amp;w=256&amp;q=75 256w,
+  srcset="/_next/image?url=http%3A%2F%2Flocalhost%3A3001%2Fshow-images%2Fposters%2Fshow-01-3fa2b1c9.png&amp;w=256&amp;q=75 256w,
           /_next/image?url=...&amp;w=384&amp;q=75 384w,
           /_next/image?url=...&amp;w=640&amp;q=75 640w,
           ...
@@ -525,7 +525,7 @@ srcset 폭 = [256, 384, 640, 750, 828, 1080, 1200, 1920, 2048, 3840]</code></pre
             </li>
             <li>
               <strong>원본 받기</strong>
-              상대 주소(<code>/posters/a.png</code>)는 네트워크를 거치지 않고 서버 안에서 그 경로를 처리해 받는다. 절대 주소는 HTTP로
+              상대 주소(<code>/show-images/posters/a.png</code>)는 네트워크를 거치지 않고 서버 안에서 그 경로를 처리해 받는다. 절대 주소는 HTTP로
               받아 오며, 이때 호스트가 사설 IP로 풀리면 거절하고 리다이렉트는 3번까지 따라간다.
             </li>
             <li>
@@ -675,9 +675,9 @@ X-Nextjs-Cache: MISS</code></pre>
         <section id="remote">
           <h2>원본이 public이 아니라 원격 CDN에 있을 때</h2>
           <p>
-            지금 포스터는 스토어의 <code>public/posters/</code>에 있고, 스토어 자신이 정적 파일로 내보낸다. 실제 서비스에서는 이미지를 앱
+            지금 포스터는 스토어의 <code>public/show-images/posters/</code>에 있고, 스토어 자신이 정적 파일로 내보낸다. 실제 서비스에서는 이미지를 앱
             서버에 두지 않는다. 운영자가 올린 포스터는 S3나 MinIO 같은 객체 저장소에 넣고, 그 앞에 CloudFront 같은 CDN을 두어
-            <code>https://cdn.openrun.example/posters/show-01-3fa2b1c9.png</code>처럼 내보낸다. 이 저장소도 1.7에서 MinIO로 옮긴다. 이때
+            <code>https://cdn.openrun.example/show-images/posters/show-01-3fa2b1c9.png</code>처럼 내보낸다. 이 저장소도 1.7에서 MinIO로 옮긴다. 이때
             "누가 이미지를 줄이느냐"에 따라 세 가지 구성이 있다.
           </p>
 
@@ -706,13 +706,13 @@ X-Nextjs-Cache: MISS</code></pre>
           </div>
           <pre><code class="language-ts">// next.config.ts: CDN 호스트와 포스터 경로만 허용한다
 images: {
-  remotePatterns: [new URL('https://cdn.openrun.example/posters/**')],
+  remotePatterns: [new URL('https://cdn.openrun.example/show-images/**')],
   // CDN은 공인 IP라 dangerouslyAllowLocalIP는 켜지 않는다
 }</code></pre>
           <ul>
             <li>
               <strong>지금 구성과 달라지는 점:</strong> 원본 호스트가 공인 IP라서 사설 IP 차단을 끄지 않아도 된다. 지금처럼
-              <code>POSTER_BASE_URL</code>만 바꾸면 <code>remotePatterns</code>와 <code>dangerouslyAllowLocalIP</code>가 따라 바뀐다.
+              <code>SHOW_IMAGE_BASE_URL</code>만 바꾸면 <code>remotePatterns</code>와 <code>dangerouslyAllowLocalIP</code>가 따라 바뀐다.
             </li>
             <li>
               <strong>캐시 기간:</strong> Next 캐시의 기간은 <code>minimumCacheTTL</code>과 원본 응답의 <code>Cache-Control</code> 중 큰
@@ -741,7 +741,7 @@ images: {
 'use client';
 
 export default function cdnLoader({ src, width, quality }: { src: string; width: number; quality?: number }) {
-  const url = new URL(src); // 예: https://cdn.openrun.example/posters/show-01-3fa2b1c9.png
+  const url = new URL(src); // 예: https://cdn.openrun.example/show-images/posters/show-01-3fa2b1c9.png
   url.searchParams.set('width', String(width));
   url.searchParams.set('quality', String(quality ?? 75));
   url.searchParams.set('format', 'auto'); // 형식 고르기도 CDN이 Accept를 보고 한다
@@ -751,8 +751,8 @@ export default function cdnLoader({ src, width, quality }: { src: string; width:
 // next.config.ts
 images: { loader: 'custom', loaderFile: './src/image-loader.ts' }</code></pre>
           <pre><code class="language-html">&lt;!-- 만들어지는 srcset: 브라우저가 CDN에 직접 요청한다 --&gt;
-&lt;img srcset="https://cdn.openrun.example/posters/show-01-3fa2b1c9.png?width=256&amp;quality=75&amp;format=auto 256w,
-             https://cdn.openrun.example/posters/show-01-3fa2b1c9.png?width=384&amp;quality=75&amp;format=auto 384w, ..." /&gt;</code></pre>
+&lt;img srcset="https://cdn.openrun.example/show-images/posters/show-01-3fa2b1c9.png?width=256&amp;quality=75&amp;format=auto 256w,
+             https://cdn.openrun.example/show-images/posters/show-01-3fa2b1c9.png?width=384&amp;quality=75&amp;format=auto 384w, ..." /&gt;</code></pre>
           <ul>
             <li>
               <strong>그대로 남는 것:</strong> 컴포넌트가 하는 일(<code>srcset</code>, <code>sizes</code>, lazy, 자리 잡기)은 그대로다.
@@ -836,7 +836,7 @@ images: { loader: 'custom', loaderFile: './src/image-loader.ts' }</code></pre>
             <p>
               어느 구성이든 <strong>컴포넌트의 역할</strong>(크기별 후보, <code>sizes</code>, lazy, 자리 잡기)과 <strong>주소로 캐시한다는
               사실</strong>은 바뀌지 않는다. 바뀌는 것은 <code>srcset</code>의 주소가 어디를 가리키고, 누가 이미지를 줄이느냐뿐이다. 그래서
-              API는 포스터의 완전한 URL을 주고, 저장 위치가 바뀌면 <code>POSTER_BASE_URL</code>(그리고 B라면 loader)만 바꾼다.
+              API는 포스터의 완전한 URL을 주고, 저장 위치가 바뀌면 <code>SHOW_IMAGE_BASE_URL</code>(그리고 B라면 loader)만 바꾼다.
             </p>
           </div>
         </section>
@@ -845,14 +845,14 @@ images: { loader: 'custom', loaderFile: './src/image-loader.ts' }</code></pre>
           <h2>우리 프로젝트에서는</h2>
           <ul>
             <li>
-              API가 포스터의 완전한 URL(<code>POSTER_BASE_URL</code> + 포스터 경로)을 주므로 <code>src</code>가 절대 주소다. 그래서
+              API가 포스터의 완전한 URL(<code>SHOW_IMAGE_BASE_URL</code> + 저장소 안 경로)을 주므로 <code>src</code>가 절대 주소다. 그래서
               최적화 서버가 원본을 HTTP로 받고, 개발에서는 그 호스트가 <code>localhost</code>라 사설 IP 차단에 걸린다.
-              <code>apps/store/next.config.ts</code>는 <code>POSTER_BASE_URL</code>의 호스트가 <code>localhost</code>,
+              <code>apps/store/next.config.ts</code>는 <code>SHOW_IMAGE_BASE_URL</code>의 호스트가 <code>localhost</code>,
               <code>127.0.0.1</code>, <code>[::1]</code>일 때만 <code>dangerouslyAllowLocalIP</code>를 켜고,
-              <code>remotePatterns</code>는 그 주소의 <code>/posters/**</code> 하나만 허용한다.
+              <code>remotePatterns</code>는 그 주소의 <code>/show-images/**</code> 하나만 허용한다.
             </li>
             <li>
-              <code>POSTER_BASE_URL</code>이 없으면 <code>remotePatterns</code>가 빈 목록이다. 빌드는 통과하지만 카드를 그릴 때
+              <code>SHOW_IMAGE_BASE_URL</code>이 없으면 <code>remotePatterns</code>가 빈 목록이다. 빌드는 통과하지만 카드를 그릴 때
               "hostname is not configured" 오류가 난다. 값을 바꾸면 스토어 서버를 다시 켜야 한다.
             </li>
             <li>포스터 경로에 내용 해시를 넣어 캐시 버스팅을 한다(#42).</li>
@@ -900,7 +900,7 @@ images: { loader: 'custom', loaderFile: './src/image-loader.ts' }</code></pre>
             </p>
           </details>
           <details>
-            <summary>4. src를 절대 주소 대신 /posters/show-01-3fa2b1c9.png 처럼 상대 주소로 주면 dangerouslyAllowLocalIP가 필요할까?</summary>
+            <summary>4. src를 절대 주소 대신 /show-images/posters/show-01-3fa2b1c9.png 처럼 상대 주소로 주면 dangerouslyAllowLocalIP가 필요할까?</summary>
             <p>
               필요 없다. 상대 주소는 최적화 서버가 네트워크로 받지 않고 서버 안에서 그 경로를 처리해 받으므로 사설 IP 검사를 거치지 않는다.
               대신 <code>localPatterns</code>로 허용 경로를 정한다. 우리는 스펙이 완전한 URL을 요구하고 나중에 포스터가 다른 호스트로 옮겨

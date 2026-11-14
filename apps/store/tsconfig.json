@@ -19,7 +19,11 @@
         "name": "next"
       }
     ],
-    "esModuleInterop": true
+    "esModuleInterop": true,
+    "paths": {
+      "@shared/*": ["./apps-src/@shared/*"],
+      "@apps-src/*": ["./apps-src/*"]
+    }
   },
   "include": [
     "next-env.d.ts",

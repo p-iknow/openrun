@@ -66,21 +66,25 @@ function themeValues(
 }
 
 export function readTokens(css: string): Tokens {
-  const palette = declarations(blockAfter(css, { selector: ':root' })).map(([name, hex]) => ({
-    name,
-    hex,
-  }));
+  const palette = declarations(blockAfter(css, { selector: ':root' })).map(
+    ([name, hex]) => ({
+      name,
+      hex,
+    }),
+  );
   const hexOf = new Map(palette.map((p) => [p.name, p.hex]));
   const theme = declarations(blockAfter(css, { selector: '@theme' }));
 
-  const colors = themeValues(theme, { prefix: 'color-' }).map(({ name, value }) => {
-    const ref = /^var\(--([\w-]+)\)$/.exec(value)?.[1] ?? null;
-    return {
-      name,
-      palette: ref,
-      hex: ref ? (hexOf.get(ref) ?? value) : value,
-    };
-  });
+  const colors = themeValues(theme, { prefix: 'color-' }).map(
+    ({ name, value }) => {
+      const ref = /^var\(--([\w-]+)\)$/.exec(value)?.[1] ?? null;
+      return {
+        name,
+        palette: ref,
+        hex: ref ? (hexOf.get(ref) ?? value) : value,
+      };
+    },
+  );
 
   return {
     palette,

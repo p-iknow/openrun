@@ -25,3 +25,5 @@ export type { ToggleGroupItem, ToggleGroupProps } from './toggle-group.js';
 export * as Drawer from './drawer.js';
 // Drawer와 같은 까닭으로 'use client' 파일의 부품을 이 파일에서 묶는다.
 export * as Dialog from './dialog.js';
+export { Calendar, getAdjacentMonth, getCalendarWeeks } from './calendar.js';
+export type { CalendarProps } from './calendar.js';

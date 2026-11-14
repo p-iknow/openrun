@@ -830,6 +830,10 @@ Object.entries(Object.groupBy(performances, (p) =&gt; p.show_id)).map(([showId, 
               여러 값을 값 하나로 줄인다.
             </li>
           </ol>
+          <p>
+            기본 키로 묶으면 그 테이블의 다른 컬럼도 하나로 정해져서 집계 없이 쓸 수 있다(함수 종속성). 여러 케이스와 함께
+            <a href="11-행-단위-값과-그룹-단위-값.html">11 행 단위 값과 그룹 단위 값, 함수 종속성</a>에서 다룬다.
+          </p>
           <p>묶음 안에서 행마다 값이 다른 컬럼을 그대로 쓰면 어느 행의 값을 줄지 정할 수 없어 PostgreSQL이 거절한다.</p>
           <pre><code class="language-sql">SELECT show_id, starts_at FROM performances GROUP BY show_id;
 -- ERROR: column "performances.starts_at" must appear in the GROUP BY clause

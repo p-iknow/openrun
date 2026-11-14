@@ -36,6 +36,13 @@
       "when": 1794329443618,
       "tag": "0004_add_poster_path_to_shows",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794468731738,
+      "tag": "0005_create_show_detail_images",
+      "breakpoints": true
     }
   ]
 }

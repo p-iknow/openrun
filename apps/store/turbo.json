@@ -4,7 +4,7 @@
   "tasks": {
     "build": {
       "outputs": [".next/**", "!.next/cache/**"],
-      "env": ["POSTER_BASE_URL"]
+      "env": ["SHOW_IMAGE_BASE_URL"]
     }
   }
 }

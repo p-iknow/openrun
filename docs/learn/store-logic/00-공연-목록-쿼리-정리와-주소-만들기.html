@@ -34,7 +34,7 @@
         <h1>00 공연 목록 쿼리: 정리하고 주소 만들기</h1>
         <p class="lead">
           공연 목록 주소(<code>/?q=정원&amp;sort=newest&amp;page=2</code>)의 쿼리를 읽고, 고치고, 다시 주소로 만드는
-          함수들을 실제 값을 넣어 정리한다. 모두 <code>apps/store/src/shows/show-list-query.ts</code>에 있다.
+          함수들을 실제 값을 넣어 정리한다. 모두 <code>apps/store/apps-src/@shared/feature/show/helper/show-list-query.ts</code>에 있다.
         </p>
 
         <section id="overview">
@@ -48,7 +48,7 @@
               <div class="lane-title">주소 → 쿼리 (읽기)</div>
               <ol class="chain">
                 <li><span>서버 page.tsx: normalizeShowListQuery</span></li>
-                <li><span>클라이언트 HeaderSearch: getShowListQueryFromSearch</span></li>
+                <li><span>클라이언트 ShowSearch: getShowListQueryFromSearch</span></li>
               </ol>
             </div>
             <div class="lane green">
@@ -305,7 +305,7 @@ function toSearch(searchParams: SearchParams): URLSearchParams {
         <section id="from-search">
           <h2>getShowListQueryFromSearch: 클라이언트에서 읽기</h2>
           <p>
-            헤더의 <code>HeaderSearch</code>는 레이아웃에 있어 <code>searchParams</code>를 받지 못하므로
+            헤더의 <code>ShowSearch</code>는 레이아웃에 있어 <code>searchParams</code>를 받지 못하므로
             <code>useSearchParams()</code>로 주소를 읽는다(<a href="../react-next/08-useSearchParams와-Suspense-경계.html#layout">react-next 08 문서</a>).
             그 값은 <code>URLSearchParams</code>라서, Next의 <code>searchParams</code>와 같은 모양(한 번이면 글자,
             여러 번이면 배열)으로 바꾼 뒤 <a href="#normalize">normalizeShowListQuery</a>에 넘긴다. 규칙을 두 번 쓰지
@@ -360,7 +360,7 @@ export function getShowListQueryFromSearch(
             <code>정원</code>을 쓰고 서버는 버리면, 같은 주소를 두 곳이 다르게 읽는다.
           </p>
           <p>
-            <code>HeaderSearch</code>는 목록 화면(<code>/</code>)이 아니면 빈 <code>URLSearchParams</code>를 넘긴다.
+            <code>ShowSearch</code>는 목록 화면(<code>/</code>)이 아니면 빈 <code>URLSearchParams</code>를 넘긴다.
             그래서 다른 화면에서는 쿼리가 기본값 <code>{ page: 1, q: null, sort: 'start_date' }</code>이 되고, 검색은
             정렬 없이 새로 시작한다.
           </p>
@@ -775,8 +775,8 @@ export function getLastPageRedirectHref({
         <section id="more">
           <h2>더 읽기</h2>
           <ul>
-            <li><code>apps/store/src/shows/show-list-query.ts</code>: 이 문서의 함수들</li>
-            <li><code>apps/store/src/shows/show-list-query.spec.ts</code>: 같은 규칙을 단위 테스트로 적은 것</li>
+            <li><code>apps/store/apps-src/@shared/feature/show/helper/show-list-query.ts</code>: 이 문서의 함수들</li>
+            <li><code>apps/store/apps-src/@shared/feature/show/helper/show-list-query.spec.ts</code>: 같은 규칙을 단위 테스트로 적은 것</li>
             <li>
               <a href="../react-next/09-검색-폼-제출과-비제어-입력.html">react-next 09 문서</a>: 검색 폼과 정렬 시트가 이 함수들로
               옮겨 가는 방법과, 주소가 바뀔 때 칸을 다시 채우는 <code>key</code>

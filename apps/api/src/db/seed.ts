@@ -6,23 +6,28 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import { readDatabaseUrl } from '../config/env.js';
 import {
   GENRES,
-  type Genre,
   performanceSeats,
   performances,
+  showDetailImages,
   shows,
 } from './schema/shows.js';
 import { seats, sections, venues } from './schema/venues.js';
+import { renderDetailImages } from './seed-detail-image.js';
 import { renderPoster } from './seed-poster.js';
+import { buildShowDescription, SEED_SHOW_CONTENTS } from './seed-shows.js';
 
 // 개발용 시드다. 매번 비우고 같은 id부터 다시 넣는다.
-// Faker 시드 값을 고정하고 Faker를 부르는 순서가 실행 시각과 무관하므로, 공연 구성(제목, 장르, 공연장, 회차 수)은 늘 같다.
+// 공연의 제목, 장르, 관람 연령, 러닝타임, 소개는 seed-shows.ts에 직접 쓴 내용이다.
+// Faker 시드 값을 고정하고 Faker를 부르는 순서가 실행 시각과 무관하므로, 공연장과 회차 수도 늘 같다.
 // 날짜만 실행 시각 기준 상대값이라, 몇 주가 지나도 판매 예정부터 판매 종료까지, 매진 회차와 매진 임박 회차까지 모든 경우가 남는다.
 const FAKER_SEED = 20261109;
-const SHOW_COUNT = 20;
 
-// 포스터는 스토어의 정적 파일 폴더에 쓰고, 스토어가 /posters/<포스터 경로>로 내보낸다(POSTER_BASE_URL).
+// 공연 이미지(포스터, 상세 이미지)는 스토어의 정적 파일 폴더에 쓰고, 스토어가 /show-images/<저장소 안 경로>로 내보낸다(SHOW_IMAGE_BASE_URL).
 // 이 폴더는 git에 올리지 않고 시드를 돌릴 때마다 비우고 다시 만든다. 1.7에서 MinIO 업로드로 바꾼다.
-const POSTER_DIR = new URL('../../../store/public/posters/', import.meta.url);
+const SHOW_IMAGE_DIR = new URL(
+  '../../../store/public/show-images/',
+  import.meta.url,
+);
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MINUTE_MS = 60 * 1000;
@@ -73,35 +78,6 @@ const VENUE_LAYOUTS: { name: string; sections: SectionLayout[] }[] = [
 
 // 회차 좌석을 한 번에 넣는 행 수. 한 쿼리의 파라미터는 65535개까지라 컬럼 3개 기준으로 넉넉히 나눈다.
 const PERFORMANCE_SEAT_CHUNK = 10_000;
-
-const TITLE_FIRST_WORDS = [
-  '달빛',
-  '겨울',
-  '붉은',
-  '푸른',
-  '마지막',
-  '작은',
-  '한여름',
-  '새벽',
-  '오래된',
-  '비밀의',
-  '노란',
-  '잃어버린',
-];
-const TITLE_SECOND_WORDS = [
-  '정원',
-  '기차',
-  '편지',
-  '등대',
-  '왈츠',
-  '서커스',
-  '도서관',
-  '골목',
-  '항해',
-  '초상',
-  '여름밤',
-  '숲',
-];
 
 // 회차 배치. 판매 상태는 저장하지 않으므로, 판매 오픈 일시와 시작 일시, 회차 취소로 각 상태가 나오게 한다.
 // 일 단위 오프셋은 오늘(KST) 0시 기준이다. 지난 회차는 어제 이전, 남은 회차는 내일 이후에 둬서
@@ -200,12 +176,6 @@ function kstAt(
   return new Date(today + day * DAY_MS + (hour * 60 + minute) * MINUTE_MS);
 }
 
-function minAgeOf(genre: Genre): number {
-  return genre === 'kids_family'
-    ? faker.helpers.arrayElement([0, 4])
-    : faker.helpers.arrayElement([0, 7, 8, 12, 15]);
-}
-
 function buildPerformances({
   scenario,
   count,
@@ -299,28 +269,21 @@ function soldCountsOf({
 }
 
 function buildShows(today: number) {
-  const titles = faker.helpers.uniqueArray(
-    () =>
-      `${faker.helpers.arrayElement(TITLE_FIRST_WORDS)} ${faker.helpers.arrayElement(TITLE_SECOND_WORDS)}`,
-    SHOW_COUNT,
-  );
-
-  return titles.map((title, index) => {
-    // 장르 필터에서 빈 장르가 없도록 돌아가며 붙인다.
-    const genre = GENRES[index % GENRES.length] ?? 'musical';
+  return SEED_SHOW_CONTENTS.map((content, index) => {
     const scenario = FIXED_SCENARIOS[index] ?? randomScenario();
     const performanceCount = faker.number.int({ min: 3, max: 15 });
     return {
+      content,
       show: {
         venueIndex: faker.number.int({
           min: 0,
           max: VENUE_LAYOUTS.length - 1,
         }),
-        title,
-        genre,
-        minAge: minAgeOf(genre),
-        runningMinutes: faker.number.int({ min: 6, max: 18 }) * 10,
-        description: faker.lorem.paragraphs(2),
+        title: content.title,
+        genre: content.genre,
+        minAge: content.minAge,
+        runningMinutes: content.runningMinutes,
+        description: buildShowDescription(content),
         createdAt: kstAt(today, {
           day: -faker.number.int({ min: 1, max: 60 }),
           hour: 10,
@@ -403,15 +366,38 @@ const posters = await Promise.all(
     });
     const hash = createHash('sha256').update(png).digest('hex').slice(0, 8);
     return {
-      path: `show-${String(index + 1).padStart(2, '0')}-${hash}.png`,
+      path: `posters/show-${String(index + 1).padStart(2, '0')}-${hash}.png`,
       png,
     };
   }),
 );
-await rm(POSTER_DIR, { recursive: true, force: true });
-await mkdir(POSTER_DIR, { recursive: true });
+// 상세 이미지는 포스터와 같은 색으로 공연마다 세 장(소개, 관람 포인트, 예매·관람 안내)을 만든다. 경로의 해시는 포스터와 같은 이유로 넣는다.
+const detailImages = await Promise.all(
+  seedShows.map(async ({ content }, index) => {
+    const images = await renderDetailImages({
+      content,
+      variant: Math.floor(index / GENRES.length),
+    });
+    return images.map((png, imageIndex) => {
+      const hash = createHash('sha256').update(png).digest('hex').slice(0, 8);
+      return {
+        position: imageIndex + 1,
+        path: `details/show-${String(index + 1).padStart(2, '0')}-${imageIndex + 1}-${hash}.png`,
+        png,
+      };
+    });
+  }),
+);
+
+await rm(SHOW_IMAGE_DIR, { recursive: true, force: true });
+await Promise.all([
+  mkdir(new URL('posters/', SHOW_IMAGE_DIR), { recursive: true }),
+  mkdir(new URL('details/', SHOW_IMAGE_DIR), { recursive: true }),
+]);
 await Promise.all(
-  posters.map(({ path, png }) => writeFile(new URL(path, POSTER_DIR), png)),
+  [...posters, ...detailImages.flat()].map(({ path, png }) =>
+    writeFile(new URL(path, SHOW_IMAGE_DIR), png),
+  ),
 );
 
 const db = drizzle(readDatabaseUrl());
@@ -419,7 +405,7 @@ const db = drizzle(readDatabaseUrl());
 try {
   const performanceSeatCount = await db.transaction(async (tx) => {
     await tx.execute(
-      sql`TRUNCATE ${performanceSeats}, ${performances}, ${shows}, ${seats}, ${sections}, ${venues} RESTART IDENTITY`,
+      sql`TRUNCATE ${showDetailImages}, ${performanceSeats}, ${performances}, ${shows}, ${seats}, ${sections}, ${venues} RESTART IDENTITY`,
     );
 
     // 공연장마다 좌석 id 목록. 회차 좌석은 이 목록의 좌석 수만큼 만든다.
@@ -483,6 +469,12 @@ try {
       if (!inserted) {
         throw new Error(`공연을 넣지 못했습니다: ${show.title}`);
       }
+      await tx.insert(showDetailImages).values(
+        (detailImages[index] ?? []).map(({ png: _png, ...image }) => ({
+          ...image,
+          showId: inserted.id,
+        })),
+      );
       for (const { soldSeatIndexes, ...performance } of showPerformances) {
         const [insertedPerformance] = await tx
           .insert(performances)
@@ -523,7 +515,7 @@ try {
     0,
   );
   console.log(
-    `공연장 ${VENUE_LAYOUTS.length}곳(좌석 ${seatCount}석), 공연 ${seedShows.length}개, 회차 ${performanceCount}개, 회차 좌석 ${performanceSeatCount}개를 넣고 포스터 ${posters.length}장을 만들었습니다.`,
+    `공연장 ${VENUE_LAYOUTS.length}곳(좌석 ${seatCount}석), 공연 ${seedShows.length}개, 회차 ${performanceCount}개, 회차 좌석 ${performanceSeatCount}개를 넣고 포스터 ${posters.length}장, 상세 이미지 ${detailImages.flat().length}장을 만들었습니다.`,
   );
 } finally {
   await db.$client.end();

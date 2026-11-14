@@ -108,10 +108,10 @@
         <section id="prerender">
           <h2>빌드 때 페이지를 미리 그린다</h2>
           <p>우리 스토어 페이지는 이렇게 생겼다.</p>
-          <pre><code class="language-tsx">// apps/store/app/page.tsx
+          <pre><code class="language-tsx">// apps/store/apps-src/_index/index-page.tsx
 import { connection } from 'next/server';
-import { createServerApiClient } from '../src/api-client';
-import { fetchShows } from '../src/shows/fetch-shows';
+import { createServerApiClient } from '@shared/api/client';
+import { fetchShows } from '@shared/api/shows';
 
 export default async function HomePage() {
   // 이 페이지는 빌드 때 미리 그리지 않고 요청마다 렌더링한다. 그래서 빌드에 API와 DB가 필요 없다.

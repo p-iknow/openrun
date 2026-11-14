@@ -100,7 +100,7 @@
 
         <section id="throw">
           <h2>return이 없어도 되는 이유</h2>
-          <p>스토어의 공연 목록 페이지(<code>apps/store/app/page.tsx</code>)는 이렇게 쓴다.</p>
+          <p>스토어의 공연 목록 페이지(<code>apps/store/apps-src/_index/index-page.tsx</code>)는 이렇게 쓴다.</p>
           <pre><code class="language-tsx">const { query, redirectTo } = normalizeShowListQuery(await searchParams);
 if (redirectTo !== null) {
   redirect(redirectTo); // return이 없다
@@ -439,7 +439,7 @@ function unstable_rethrow(error) {
 
         <section id="ours">
           <h2>우리 프로젝트에서는</h2>
-          <p><code>apps/store/app/page.tsx</code>가 <code>redirect</code>를 두 번 쓴다. 둘 다 <code>try</code> 밖이다.</p>
+          <p><code>apps/store/apps-src/_index/index-page.tsx</code>가 <code>redirect</code>를 두 번 쓴다. 둘 다 <code>try</code> 밖이다.</p>
           <div class="table-wrap">
             <table>
               <thead>

@@ -21,6 +21,7 @@ import {
   type Genre,
   performanceSeats,
   performances,
+  showDetailImages,
   shows,
 } from '../src/db/schema/shows.js';
 import { seats, sections, venues } from '../src/db/schema/venues.js';
@@ -33,8 +34,8 @@ const DEFAULT_SALES_OPEN_AT = '2026-01-01T01:00:00Z';
 const DEFAULT_CREATED_AT = '2025-12-01T00:00:00Z';
 // 공연장 하나의 좌석 수.
 const VENUE_SEAT_COUNT = 20;
-// 포스터 URL은 이 값과 포스터 경로를 합친다. 끝의 /는 있어도 없어도 같은 URL이 나온다.
-const POSTER_BASE_URL = 'https://posters.example.com/openrun/';
+// 공연 이미지 URL은 이 값과 저장소 안 경로를 합친다. 끝의 /는 있어도 없어도 같은 URL이 나온다.
+const SHOW_IMAGE_BASE_URL = 'https://images.example.com/openrun/';
 
 interface PerformanceInput {
   startsAt: string;
@@ -44,143 +45,157 @@ interface PerformanceInput {
   soldSeats?: number;
 }
 
-describe('GET /shows', () => {
-  const db = drizzle(inject('databaseUrl'));
-  let app: INestApplication<App>;
-  // 테스트마다 바꿀 수 있는 현재 시각. 앱의 Clock이 이 값을 돌려준다.
-  let now: Date;
+const db = drizzle(inject('databaseUrl'));
+let app: INestApplication<App>;
+// 테스트마다 바꿀 수 있는 현재 시각. 앱의 Clock이 이 값을 돌려준다.
+let now: Date;
 
-  // 공연 하나와 그 회차를 넣고 공연 id를 돌려준다. 목록 응답에 나오지 않는 컬럼은 고정값으로 채운다.
-  // 회차는 시작 일시만(performanceStarts) 주거나, 판매 오픈 일시와 회차 취소까지(performances) 준다.
-  async function insertShow({
-    venueId,
-    title,
-    genre = 'musical',
-    posterPath = 'poster.png',
-    createdAt = DEFAULT_CREATED_AT,
-    performanceStarts = [],
-    performances: performanceInputs = [],
-  }: {
-    venueId: number;
-    title: string;
-    genre?: Genre;
-    posterPath?: string;
-    createdAt?: string;
-    performanceStarts?: string[];
-    performances?: PerformanceInput[];
-  }): Promise<number> {
-    const [show] = await db
-      .insert(shows)
-      .values({
-        venueId,
-        title,
-        genre,
-        minAge: 8,
-        runningMinutes: 150,
-        description: '소개',
-        posterPath,
-        createdAt: new Date(createdAt),
-      })
-      .returning({ id: shows.id });
-    if (!show) {
-      throw new Error('공연을 넣지 못했습니다.');
-    }
-    const rows: PerformanceInput[] = [
-      ...performanceStarts.map((startsAt) => ({ startsAt })),
-      ...performanceInputs,
-    ];
-    const venueSeats = await db
-      .select({ id: seats.id })
-      .from(seats)
-      .innerJoin(sections, eq(sections.id, seats.sectionId))
-      .where(eq(sections.venueId, venueId))
-      .orderBy(seats.id);
-    for (const {
-      startsAt,
-      salesOpenAt = DEFAULT_SALES_OPEN_AT,
-      isCancelled,
-      soldSeats = 0,
-    } of rows) {
-      const [performance] = await db
-        .insert(performances)
-        .values({
-          showId: show.id,
-          startsAt: new Date(startsAt),
-          salesOpenAt: new Date(salesOpenAt),
-          isCancelled,
-        })
-        .returning({ id: performances.id });
-      if (!performance) {
-        throw new Error('회차를 넣지 못했습니다.');
-      }
-      await db.insert(performanceSeats).values(
-        venueSeats.map((seat, index) => ({
-          performanceId: performance.id,
-          seatId: seat.id,
-          isSold: index < soldSeats,
-        })),
-      );
-    }
-    return show.id;
+// 공연 하나와 그 회차를 넣고 공연 id를 돌려준다. 주지 않은 컬럼은 고정값으로 채운다.
+// 회차는 시작 일시만(performanceStarts) 주거나, 판매 오픈 일시와 회차 취소까지(performances) 준다.
+async function insertShow({
+  venueId,
+  title,
+  genre = 'musical',
+  posterPath = 'posters/poster.png',
+  createdAt = DEFAULT_CREATED_AT,
+  minAge = 8,
+  runningMinutes = 150,
+  description = '소개',
+  performanceStarts = [],
+  performances: performanceInputs = [],
+  detailImages = [],
+}: {
+  venueId: number;
+  title: string;
+  genre?: Genre;
+  posterPath?: string;
+  createdAt?: string;
+  minAge?: number;
+  runningMinutes?: number;
+  description?: string;
+  performanceStarts?: string[];
+  performances?: PerformanceInput[];
+  // 상세 이미지. position은 넣은 순서와 따로 준다.
+  detailImages?: { position: number; path: string }[];
+}): Promise<number> {
+  const [show] = await db
+    .insert(shows)
+    .values({
+      venueId,
+      title,
+      genre,
+      minAge,
+      runningMinutes,
+      description,
+      posterPath,
+      createdAt: new Date(createdAt),
+    })
+    .returning({ id: shows.id });
+  if (!show) {
+    throw new Error('공연을 넣지 못했습니다.');
   }
-
-  // 공연장과 구역 하나, 좌석 VENUE_SEAT_COUNT개를 넣고 공연장 id를 돌려준다.
-  async function insertVenue(name: string): Promise<number> {
-    const [venue] = await db
-      .insert(venues)
-      .values({ name })
-      .returning({ id: venues.id });
-    if (!venue) {
-      throw new Error('공연장을 넣지 못했습니다.');
+  const rows: PerformanceInput[] = [
+    ...performanceStarts.map((startsAt) => ({ startsAt })),
+    ...performanceInputs,
+  ];
+  const venueSeats = await db
+    .select({ id: seats.id })
+    .from(seats)
+    .innerJoin(sections, eq(sections.id, seats.sectionId))
+    .where(eq(sections.venueId, venueId))
+    .orderBy(seats.id);
+  for (const {
+    startsAt,
+    salesOpenAt = DEFAULT_SALES_OPEN_AT,
+    isCancelled,
+    soldSeats = 0,
+  } of rows) {
+    const [performance] = await db
+      .insert(performances)
+      .values({
+        showId: show.id,
+        startsAt: new Date(startsAt),
+        salesOpenAt: new Date(salesOpenAt),
+        isCancelled,
+      })
+      .returning({ id: performances.id });
+    if (!performance) {
+      throw new Error('회차를 넣지 못했습니다.');
     }
-    const [section] = await db
-      .insert(sections)
-      .values({ venueId: venue.id, name: 'A구역' })
-      .returning({ id: sections.id });
-    if (!section) {
-      throw new Error('구역을 넣지 못했습니다.');
-    }
-    await db.insert(seats).values(
-      Array.from({ length: VENUE_SEAT_COUNT }, (_, index) => ({
-        sectionId: section.id,
-        row: 'A',
-        number: index + 1,
+    await db.insert(performanceSeats).values(
+      venueSeats.map((seat, index) => ({
+        performanceId: performance.id,
+        seatId: seat.id,
+        isSold: index < soldSeats,
       })),
     );
-    return venue.id;
   }
+  if (detailImages.length > 0) {
+    await db
+      .insert(showDetailImages)
+      .values(detailImages.map((image) => ({ ...image, showId: show.id })));
+  }
+  return show.id;
+}
 
-  beforeAll(() => {
-    vi.stubEnv('DATABASE_URL', inject('databaseUrl'));
-    vi.stubEnv('POSTER_BASE_URL', POSTER_BASE_URL);
-  });
+// 공연장과 구역 하나, 좌석 VENUE_SEAT_COUNT개를 넣고 공연장 id를 돌려준다.
+async function insertVenue(name: string): Promise<number> {
+  const [venue] = await db
+    .insert(venues)
+    .values({ name })
+    .returning({ id: venues.id });
+  if (!venue) {
+    throw new Error('공연장을 넣지 못했습니다.');
+  }
+  const [section] = await db
+    .insert(sections)
+    .values({ venueId: venue.id, name: 'A구역' })
+    .returning({ id: sections.id });
+  if (!section) {
+    throw new Error('구역을 넣지 못했습니다.');
+  }
+  await db.insert(seats).values(
+    Array.from({ length: VENUE_SEAT_COUNT }, (_, index) => ({
+      sectionId: section.id,
+      row: 'A',
+      number: index + 1,
+    })),
+  );
+  return venue.id;
+}
 
-  afterAll(async () => {
-    vi.unstubAllEnvs();
-    await db.$client.end();
-  });
+beforeAll(() => {
+  vi.stubEnv('DATABASE_URL', inject('databaseUrl'));
+  vi.stubEnv('SHOW_IMAGE_BASE_URL', SHOW_IMAGE_BASE_URL);
+});
 
-  beforeEach(async () => {
-    await db.execute(
-      'TRUNCATE performance_seats, performances, shows, seats, sections, venues RESTART IDENTITY CASCADE',
-    );
+afterAll(async () => {
+  vi.unstubAllEnvs();
+  await db.$client.end();
+});
 
-    now = new Date(DEFAULT_NOW);
-    const moduleRef = await Test.createTestingModule({
-      imports: [AppModule],
-    })
-      .overrideProvider(Clock)
-      .useValue({ now: () => now })
-      .compile();
+beforeEach(async () => {
+  await db.execute(
+    'TRUNCATE show_detail_images, performance_seats, performances, shows, seats, sections, venues RESTART IDENTITY CASCADE',
+  );
 
-    app = moduleRef.createNestApplication();
-    await app.init();
-  });
+  now = new Date(DEFAULT_NOW);
+  const moduleRef = await Test.createTestingModule({
+    imports: [AppModule],
+  })
+    .overrideProvider(Clock)
+    .useValue({ now: () => now })
+    .compile();
 
-  afterEach(async () => {
-    await app.close();
-  });
+  app = moduleRef.createNestApplication();
+  await app.init();
+});
 
+afterEach(async () => {
+  await app.close();
+});
+
+describe('GET /shows', () => {
   it('공연이 없으면 빈 첫 페이지를 돌려준다', async () => {
     const response = await request(app.getHttpServer()).get('/shows');
 
@@ -199,7 +214,7 @@ describe('GET /shows', () => {
     await insertShow({
       venueId,
       title: '달빛 정원',
-      posterPath: 'show-01.png',
+      posterPath: 'posters/show-01.png',
       // 넣는 순서와 상관없이 가장 이른 회차와 가장 늦은 회차를 고른다.
       performanceStarts: [
         '2026-03-10T10:30:00Z',
@@ -224,7 +239,7 @@ describe('GET /shows', () => {
           },
           salesStatus: 'on_sale',
           salesOpenAt: null,
-          posterUrl: 'https://posters.example.com/openrun/show-01.png',
+          posterUrl: 'https://images.example.com/openrun/posters/show-01.png',
         },
       ],
       page: 1,
@@ -870,5 +885,277 @@ describe('GET /shows', () => {
       response.body.items.map((item: { title: string }) => item.title),
     ).toEqual(['판매 중 공연']);
     expect(response.body).toMatchObject({ totalCount: 1, totalPages: 1 });
+  });
+});
+
+describe('GET /shows/:id', () => {
+  it('공연 정보, 공연장, 공연 기간, 공연 판매 상태, 회차 목록을 담는다', async () => {
+    const venueId = await insertVenue('샤롯데씨어터');
+    const showId = await insertShow({
+      venueId,
+      title: '달빛 정원',
+      genre: 'play',
+      posterPath: 'posters/show-01.png',
+      minAge: 13,
+      runningMinutes: 120,
+      description: '달빛 아래 정원에서 벌어지는 이야기',
+      // 넣는 순서와 상관없이 시작 일시 순으로 담는다.
+      performanceStarts: ['2026-03-10T10:30:00Z', '2026-03-01T05:00:00Z'],
+    });
+
+    const response = await request(app.getHttpServer()).get(`/shows/${showId}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      id: showId,
+      title: '달빛 정원',
+      genre: 'play',
+      minAge: 13,
+      runningMinutes: 120,
+      description: '달빛 아래 정원에서 벌어지는 이야기',
+      posterUrl: 'https://images.example.com/openrun/posters/show-01.png',
+      venue: { id: venueId, name: '샤롯데씨어터' },
+      period: {
+        start: '2026-03-01T05:00:00.000Z',
+        end: '2026-03-10T10:30:00.000Z',
+      },
+      salesStatus: 'on_sale',
+      salesOpenAt: null,
+      detailImages: [],
+      performances: [
+        {
+          id: 2,
+          startsAt: '2026-03-01T05:00:00.000Z',
+          salesStatus: 'on_sale',
+          remainingSeats: VENUE_SEAT_COUNT,
+          totalSeats: VENUE_SEAT_COUNT,
+          isAlmostSoldOut: false,
+        },
+        {
+          id: 1,
+          startsAt: '2026-03-10T10:30:00.000Z',
+          salesStatus: 'on_sale',
+          remainingSeats: VENUE_SEAT_COUNT,
+          totalSeats: VENUE_SEAT_COUNT,
+          isAlmostSoldOut: false,
+        },
+      ],
+    });
+  });
+
+  it('상세 이미지를 순서대로 완전한 URL로 담는다', async () => {
+    const venueId = await insertVenue('샤롯데씨어터');
+    const showId = await insertShow({
+      venueId,
+      title: '달빛 정원',
+      performanceStarts: ['2026-03-01T05:00:00Z'],
+      // 넣는 순서와 상관없이 position 순으로 담는다.
+      detailImages: [
+        { position: 2, path: 'details/show-01-2.png' },
+        { position: 1, path: 'details/show-01-1.png' },
+      ],
+    });
+
+    const response = await request(app.getHttpServer()).get(`/shows/${showId}`);
+
+    expect(response.body.detailImages).toEqual([
+      { url: 'https://images.example.com/openrun/details/show-01-1.png' },
+      { url: 'https://images.example.com/openrun/details/show-01-2.png' },
+    ]);
+  });
+
+  describe('회차 목록', () => {
+    // 기본 현재 시각(2026-02-01) 기준 회차들
+    const onSale = { startsAt: '2026-03-05T10:00:00Z' };
+    const upcoming = {
+      startsAt: '2026-03-01T10:00:00Z',
+      salesOpenAt: '2026-02-10T05:00:00Z',
+    };
+    const cancelled = { startsAt: '2026-03-02T10:00:00Z', isCancelled: true };
+    const ended = { startsAt: '2026-01-20T10:00:00Z' };
+    const soldOut = {
+      startsAt: '2026-03-03T10:00:00Z',
+      soldSeats: VENUE_SEAT_COUNT,
+    };
+
+    async function fetchPerformances(
+      showId: number,
+    ): Promise<Record<string, unknown>[]> {
+      const response = await request(app.getHttpServer()).get(
+        `/shows/${showId}`,
+      );
+      return response.body.performances;
+    }
+
+    it('시작한 회차는 빼고, 남은 회차마다 판매 상태와 남은 좌석을 담는다', async () => {
+      const venueId = await insertVenue('예술의전당');
+      const showId = await insertShow({
+        venueId,
+        title: '달빛 정원',
+        performances: [
+          ended,
+          // 시작한 뒤의 취소 회차도 더 고를 수 없어 뺀다.
+          { startsAt: '2026-01-25T10:00:00Z', isCancelled: true },
+          onSale,
+          upcoming,
+          cancelled,
+          soldOut,
+        ],
+      });
+
+      expect(await fetchPerformances(showId)).toEqual([
+        expect.objectContaining({
+          startsAt: '2026-03-01T10:00:00.000Z',
+          salesStatus: 'upcoming',
+        }),
+        expect.objectContaining({
+          startsAt: '2026-03-02T10:00:00.000Z',
+          salesStatus: 'cancelled',
+        }),
+        expect.objectContaining({
+          startsAt: '2026-03-03T10:00:00.000Z',
+          salesStatus: 'sold_out',
+          remainingSeats: 0,
+          totalSeats: VENUE_SEAT_COUNT,
+        }),
+        expect.objectContaining({
+          startsAt: '2026-03-05T10:00:00.000Z',
+          salesStatus: 'on_sale',
+          remainingSeats: VENUE_SEAT_COUNT,
+          totalSeats: VENUE_SEAT_COUNT,
+        }),
+      ]);
+    });
+
+    it('남은 회차 좌석이 0이어도 판매 오픈 전이면 매진이 아니라 판매 예정이다', async () => {
+      const venueId = await insertVenue('예술의전당');
+      const showId = await insertShow({
+        venueId,
+        title: '달빛 정원',
+        performances: [{ ...upcoming, soldSeats: VENUE_SEAT_COUNT }],
+      });
+
+      expect(await fetchPerformances(showId)).toEqual([
+        expect.objectContaining({ salesStatus: 'upcoming', remainingSeats: 0 }),
+      ]);
+    });
+
+    it('회차 시작 정각이면 판매 종료라 빠지고, 직전이면 담는다', async () => {
+      const venueId = await insertVenue('예술의전당');
+      const showId = await insertShow({
+        venueId,
+        title: '달빛 정원',
+        performanceStarts: ['2026-03-01T10:00:00Z', '2026-03-02T10:00:00Z'],
+      });
+      now = new Date('2026-03-01T10:00:00Z');
+
+      expect(await fetchPerformances(showId)).toEqual([
+        expect.objectContaining({ startsAt: '2026-03-02T10:00:00.000Z' }),
+      ]);
+
+      now = new Date(new Date('2026-03-01T10:00:00Z').getTime() - 1);
+
+      expect(await fetchPerformances(showId)).toHaveLength(2);
+    });
+
+    // 공연장 좌석이 20석이므로 2석(10%)이 경계다.
+    it.each([
+      {
+        name: '남은 좌석이 10%를 넘으면 아니다',
+        soldSeats: 17,
+        expected: false,
+      },
+      {
+        name: '남은 좌석이 10%면 매진 임박이다',
+        soldSeats: 18,
+        expected: true,
+      },
+      {
+        name: '남은 좌석이 1석이면 매진 임박이다',
+        soldSeats: 19,
+        expected: true,
+      },
+      { name: '매진이면 아니다', soldSeats: 20, expected: false },
+    ])('판매 중 회차의 매진 임박: $name', async ({ soldSeats, expected }) => {
+      const venueId = await insertVenue('예술의전당');
+      const showId = await insertShow({
+        venueId,
+        title: '달빛 정원',
+        performances: [{ ...onSale, soldSeats }],
+      });
+
+      expect(await fetchPerformances(showId)).toEqual([
+        expect.objectContaining({
+          remainingSeats: VENUE_SEAT_COUNT - soldSeats,
+          isAlmostSoldOut: expected,
+        }),
+      ]);
+    });
+
+    it('판매 예정 회차는 남은 좌석이 10% 이하여도 매진 임박이 아니다', async () => {
+      const venueId = await insertVenue('예술의전당');
+      const showId = await insertShow({
+        venueId,
+        title: '달빛 정원',
+        performances: [{ ...upcoming, soldSeats: 19 }],
+      });
+
+      expect(await fetchPerformances(showId)).toEqual([
+        expect.objectContaining({ isAlmostSoldOut: false }),
+      ]);
+    });
+
+    it('모든 회차가 끝난 공연은 판매 종료이고 회차 목록이 비어 있다', async () => {
+      const venueId = await insertVenue('예술의전당');
+      const showId = await insertShow({
+        venueId,
+        title: '끝난 공연',
+        performances: [ended],
+      });
+
+      const response = await request(app.getHttpServer()).get(
+        `/shows/${showId}`,
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body).toMatchObject({
+        salesStatus: 'ended',
+        performances: [],
+      });
+    });
+  });
+
+  describe('없는 공연', () => {
+    it.each([
+      { name: '없는 id', path: '/shows/999' },
+      { name: '정수가 아닌 id', path: '/shows/abc' },
+      { name: '소수 id', path: '/shows/1.5' },
+      { name: 'integer 범위를 넘는 id', path: '/shows/2147483648' },
+    ])('$name는 404 Problem Details로 응답한다', async ({ path }) => {
+      const response = await request(app.getHttpServer()).get(path);
+
+      expect(response.status).toBe(404);
+      expect(response.headers['content-type']).toMatch(
+        /^application\/problem\+json/,
+      );
+      expect(response.body).toEqual({
+        type: 'about:blank',
+        title: 'Not Found',
+        status: 404,
+        detail: '공연을 찾을 수 없습니다.',
+        code: 'SHOW_NOT_FOUND',
+      });
+    });
+
+    it('회차가 없는 공연은 목록처럼 없는 공연으로 본다', async () => {
+      const venueId = await insertVenue('예술의전당');
+      const showId = await insertShow({ venueId, title: '회차 없음' });
+
+      const response = await request(app.getHttpServer()).get(
+        `/shows/${showId}`,
+      );
+
+      expect(response.status).toBe(404);
+    });
   });
 });

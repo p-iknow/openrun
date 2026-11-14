@@ -1,0 +1,1225 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>11 행 단위 값과 그룹 단위 값, 함수 종속성</title>
+    <link rel="stylesheet" href="../learn.css" />
+    <script src="../vendor/highlightjs/highlight.min.js" defer></script>
+    <script src="../learn.js" defer></script>
+  </head>
+  <body>
+    <div class="layout">
+      <nav aria-label="목차">
+        <strong>목차</strong>
+        <ol>
+          <li><a href="#idea">한 칸에는 값 하나</a></li>
+          <li><a href="#data">예시 데이터</a></li>
+          <li><a href="#row">행 단위 값</a></li>
+          <li><a href="#group">그룹 단위 값</a></li>
+          <li><a href="#combine">식을 조합할 때의 규칙</a></li>
+          <li><a href="#clause">절마다 쓸 수 있는 값</a></li>
+          <li><a href="#cases">케이스 모음</a></li>
+          <li><a href="#join">JOIN이 행을 불린다</a></li>
+          <li><a href="#fd">함수 종속성</a></li>
+          <li><a href="#fd-not">함수 종속성으로 인정하지 않는 경우</a></li>
+          <li><a href="#repo">이 저장소 코드 읽기</a></li>
+          <li><a href="#check">확인 문제</a></li>
+        </ol>
+      </nav>
+
+      <main>
+        <h1>11 행 단위 값과 그룹 단위 값, 함수 종속성</h1>
+        <p class="lead">
+          <code>GROUP BY</code> 쿼리에서 어떤 값을 <code>SELECT</code>에 그대로 쓸 수 있고 어떤 값은 집계로 감싸야 하는지를,
+          값을 행 단위와 그룹 단위로 나누는 방법으로 설명한다. 기본 키로 묶으면 다른 컬럼을 집계 없이 쓸 수 있는 이유(함수
+          종속성)도 함께 다룬다.
+        </p>
+
+        <section id="idea">
+          <h2>한 칸에는 값 하나</h2>
+          <p>
+            집계 함수와 <code>GROUP BY</code>의 기본은
+            <a href="01-프론트엔드-개발자를-위한-DB-개념.html#aggregate">db-and-drizzle 01 문서의 집계 함수와 GROUP BY</a>에
+            있다. 이 문서는 그 위에서 "왜 이 값은 되고 저 값은 안 되나"를 판단하는 방법 하나를 익힌다.
+          </p>
+          <div class="callout">
+            <p>
+              <strong>행 단위 값</strong>은 행마다 하나씩 있는 값이다. <strong>그룹 단위 값</strong>은 묶음마다 하나씩 있는
+              값이다. <code>GROUP BY</code>가 있으면 결과는 묶음당 한 줄이므로, <code>SELECT</code>에는 그룹 단위 값만 올 수
+              있다.
+            </p>
+          </div>
+          <p>
+            결과 표의 한 칸에는 값이 하나만 들어간다. 묶음 하나에 행이 여러 개 들어 있는데, 행마다 다른 값을 그 칸에 넣으려
+            하면 "여러 개 중 무엇을 넣지?"라는 질문에 답할 수 없다. PostgreSQL의 다음 에러가 바로 이 질문이다.
+          </p>
+          <pre><code>ERROR: column "performances.starts_at" must appear in the GROUP BY clause
+       or be used in an aggregate function</code></pre>
+          <p>
+            자바스크립트로 비유하면 행 단위 값은 <code>rows.map((row) =&gt; ...)</code>의 콜백 안에서만 쓸 수 있는 값이고,
+            그룹 단위 값은 <code>rows.length</code>나 <code>rows.reduce(...)</code>처럼 배열 전체에서 하나로 나오는 값이다.
+          </p>
+        </section>
+
+        <section id="data">
+          <h2>예시 데이터</h2>
+          <p>
+            이 문서의 예시는 모두 아래 세 테이블을 쓴다. 이 저장소의 공연(<code>shows</code>), 회차(<code>performances</code>),
+            회차 좌석(<code>performance_seats</code>)을 컬럼 몇 개만 남겨 줄인 것이다. 세 테이블 모두 <code>id</code>가
+            <a href="01-프론트엔드-개발자를-위한-DB-개념.html#pk">기본 키</a>다. 예시의 결과는 PostgreSQL 18에서 실제로 실행해
+            확인했다.
+          </p>
+          <h3><code>shows</code> (공연)</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>id</th>
+                  <th>title</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>1</td>
+                  <td>뮤지컬 A</td>
+                </tr>
+                <tr>
+                  <td>2</td>
+                  <td>연극 B</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <h3><code>performances</code> (회차)</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>id</th>
+                  <th>show_id</th>
+                  <th>starts_at</th>
+                  <th>is_cancelled</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>11</td>
+                  <td>1</td>
+                  <td>3월 1일 19:30</td>
+                  <td>false</td>
+                </tr>
+                <tr>
+                  <td>12</td>
+                  <td>1</td>
+                  <td>3월 2일 14:00</td>
+                  <td>true</td>
+                </tr>
+                <tr>
+                  <td>21</td>
+                  <td>2</td>
+                  <td>3월 5일 20:00</td>
+                  <td>false</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <h3><code>performance_seats</code> (회차 좌석)</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>id</th>
+                  <th>performance_id</th>
+                  <th>is_sold</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>101</td>
+                  <td>11</td>
+                  <td>true</td>
+                </tr>
+                <tr>
+                  <td>102</td>
+                  <td>11</td>
+                  <td>false</td>
+                </tr>
+                <tr>
+                  <td>103</td>
+                  <td>11</td>
+                  <td>false</td>
+                </tr>
+                <tr>
+                  <td>201</td>
+                  <td>12</td>
+                  <td>false</td>
+                </tr>
+                <tr>
+                  <td>202</td>
+                  <td>12</td>
+                  <td>false</td>
+                </tr>
+                <tr>
+                  <td>301</td>
+                  <td>21</td>
+                  <td>true</td>
+                </tr>
+                <tr>
+                  <td>302</td>
+                  <td>21</td>
+                  <td>true</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="row">
+          <h2>행 단위 값</h2>
+          <p>
+            <code>GROUP BY</code>도 집계 함수도 없는 쿼리에서는 입력 한 행이 결과 한 행이 된다. 이때 <code>SELECT</code>의 값은
+            모두 행마다 계산되는 행 단위 값이다.
+          </p>
+          <pre><code class="language-sql">SELECT id,
+       starts_at,
+       case when is_cancelled then '취소' else '정상' end AS state
+FROM performances;</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>id</th>
+                  <th>starts_at</th>
+                  <th>state</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>11</td>
+                  <td>3월 1일 19:30</td>
+                  <td>정상</td>
+                </tr>
+                <tr>
+                  <td>12</td>
+                  <td>3월 2일 14:00</td>
+                  <td>취소</td>
+                </tr>
+                <tr>
+                  <td>21</td>
+                  <td>3월 5일 20:00</td>
+                  <td>정상</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            컬럼(<code>id</code>, <code>starts_at</code>)과 컬럼으로 만든 식(<code>case</code>)은 모두 행 단위다.
+            <a href="01-프론트엔드-개발자를-위한-DB-개념.html#case"><code>case</code></a>는 행 하나의 값을 받아 값 하나를
+            돌려주는 계산기라서, 행을 합치지 않는다. 자바스크립트의 <code>performances.map((row) =&gt; ...)</code>과 같다.
+          </p>
+        </section>
+
+        <section id="group">
+          <h2>그룹 단위 값</h2>
+          <p>
+            <code>GROUP BY show_id</code>를 붙이면 회차 행이 공연별 묶음으로 모이고, 결과는 묶음마다 한 줄이 된다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>묶음 (<code>show_id</code>)</th>
+                  <th>묶음에 들어간 행</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>1</td>
+                  <td>회차 11 (3월 1일 19:30, false), 회차 12 (3월 2일 14:00, true)</td>
+                </tr>
+                <tr>
+                  <td>2</td>
+                  <td>회차 21 (3월 5일 20:00, false)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>결과 표의 공연 1 줄에 각 값을 넣어 보면 무엇이 되고 무엇이 안 되는지 보인다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>SELECT에 쓴 값</th>
+                  <th>공연 1 줄에 들어갈 값</th>
+                  <th>종류</th>
+                  <th>가능?</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>show_id</code></td>
+                  <td>1</td>
+                  <td><span class="badge green">그룹</span></td>
+                  <td>된다. 묶은 기준이라 묶음 안에서 모두 같다</td>
+                </tr>
+                <tr>
+                  <td><code>count(*)</code></td>
+                  <td>2</td>
+                  <td><span class="badge green">그룹</span></td>
+                  <td>된다. 두 행을 개수 하나로 줄였다</td>
+                </tr>
+                <tr>
+                  <td><code>min(starts_at)</code></td>
+                  <td>3월 1일 19:30</td>
+                  <td><span class="badge green">그룹</span></td>
+                  <td>된다. 두 값을 최솟값 하나로 줄였다</td>
+                </tr>
+                <tr>
+                  <td><code>starts_at</code></td>
+                  <td>3월 1일 19:30? 3월 2일 14:00?</td>
+                  <td><span class="badge blue">행</span></td>
+                  <td>안 된다. 후보가 둘이다</td>
+                </tr>
+                <tr>
+                  <td><code>is_cancelled</code></td>
+                  <td>false? true?</td>
+                  <td><span class="badge blue">행</span></td>
+                  <td>안 된다. 후보가 둘이다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            공연 2 묶음에는 회차가 하나뿐이라 <code>starts_at</code>도 값이 하나다. 그래도 PostgreSQL은 거절한다. 데이터를
+            보고 판단하지 않고, <strong>값이 하나라는 것이 쿼리 모양만으로 보장되는지</strong>로 판단하기 때문이다. 내일 회차가
+            하나 더 생겨도 쿼리가 깨지지 않아야 하니까.
+          </p>
+          <h3>그룹 단위로 인정받는 값</h3>
+          <ol class="steps green">
+            <li>
+              <strong>GROUP BY에 적은 컬럼이나 식</strong>
+              위 예의 <code>show_id</code>. 묶은 기준이므로 묶음 안에서 모두 같다.
+            </li>
+            <li>
+              <strong>집계 함수의 결과</strong>
+              <code>count</code>, <code>min</code>, <code>max</code>, <code>sum</code>, <code>bool_or</code> 등. 여러 행을 값
+              하나로 줄인다.
+            </li>
+            <li>
+              <strong>GROUP BY에 기본 키를 적은 테이블의 다른 컬럼</strong>
+              <code>GROUP BY performances.id</code>면 <code>performances.starts_at</code>도 그룹 단위다. 이것이
+              <a href="#fd">함수 종속성</a>이다.
+            </li>
+            <li>
+              <strong>상수와 파라미터</strong>
+              <code>'on_sale'</code>, <code>now</code>처럼 쿼리 전체에서 하나인 값.
+            </li>
+            <li>
+              <strong>위 값들로만 만든 식</strong>
+              <code>count(*) &gt;= 2</code>, <code>case when min(starts_at) &lt; now then ... end</code> 등.
+            </li>
+          </ol>
+        </section>
+
+        <section id="combine">
+          <h2>식을 조합할 때의 규칙</h2>
+          <p>식이 복잡해도 아래 네 규칙으로 종류를 정할 수 있다.</p>
+          <h3>규칙 1: 연산자, <code>case</code>, 일반 함수는 종류를 그대로 물려받는다</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>식</th>
+                  <th>입력의 종류</th>
+                  <th>결과의 종류</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>starts_at &lt; '2026-03-02'</code></td>
+                  <td>행</td>
+                  <td><span class="badge blue">행</span></td>
+                </tr>
+                <tr>
+                  <td><code>case when is_cancelled then 0 else 1 end</code></td>
+                  <td>행</td>
+                  <td><span class="badge blue">행</span></td>
+                </tr>
+                <tr>
+                  <td><code>count(*) + 1</code></td>
+                  <td>그룹</td>
+                  <td><span class="badge green">그룹</span></td>
+                </tr>
+                <tr>
+                  <td><code>case when count(*) &gt;= 2 then '여러 회차' end</code></td>
+                  <td>그룹</td>
+                  <td><span class="badge green">그룹</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p><code>case</code>는 행을 합치지 못한다. 입력이 행 단위면 결과도 행 단위, 입력이 그룹 단위면 결과도 그룹 단위다.</p>
+          <h3>규칙 2: 집계 함수만 행 단위를 그룹 단위로 바꾼다</h3>
+          <pre><code class="language-sql">min(starts_at)                                   -- 행 단위 starts_at들 → 그룹 단위 하나
+sum(case when is_cancelled then 0 else 1 end)    -- 행 단위 0/1들 → 그룹 단위 합 하나
+count(*) filter (where is_cancelled)             -- FILTER 조건도 행 단위로 평가된다</code></pre>
+          <p>
+            집계 함수 괄호 안과 <a href="01-프론트엔드-개발자를-위한-DB-개념.html#filter"><code>FILTER</code></a> 조건 안은 행
+            단위 세상이다. 그 행의 어떤 컬럼이든 쓸 수 있다. 괄호를 빠져나오는 순간 그룹 단위가 된다.
+          </p>
+          <h3>규칙 3: 행 단위와 그룹 단위를 섞으면 행 단위가 된다</h3>
+          <pre><code class="language-sql">SELECT show_id, starts_at - min(starts_at) FROM performances GROUP BY show_id;
+-- ERROR: column "performances.starts_at" must appear in the GROUP BY clause ...</code></pre>
+          <p>
+            <code>min(starts_at)</code>은 그룹 단위지만 앞의 <code>starts_at</code>이 행 단위라서, 식 전체가 "어느 회차의
+            <code>starts_at</code>에서 빼지?"가 된다. 하나라도 행 단위가 섞이면 결과는 행 단위다.
+          </p>
+          <h3>규칙 4: 집계 안에 집계를 넣을 수 없다</h3>
+          <pre><code class="language-sql">SELECT max(count(*)) FROM performances GROUP BY show_id;
+-- ERROR: aggregate function calls cannot be nested</code></pre>
+          <p>
+            <code>count(*)</code>는 이미 그룹 단위라 묶음 안에 값이 하나뿐이다. 다시 줄일 여러 행이 없다. "공연별 회차 수 중
+            최댓값"이 필요하면 공연별로 센 결과를 <a href="01-프론트엔드-개발자를-위한-DB-개념.html#subquery">서브쿼리</a>로
+            감싸고 바깥에서 다시 <code>max</code>를 구한다.
+          </p>
+        </section>
+
+        <section id="clause">
+          <h2>절마다 쓸 수 있는 값</h2>
+          <p>
+            <a href="01-프론트엔드-개발자를-위한-DB-개념.html#query-order">실행 순서</a>로 보면, <code>GROUP BY</code>를 기준으로
+            앞은 행 단위 세상이고 뒤는 그룹 단위 세상이다.
+          </p>
+          <div class="flow">
+            <div class="lane blue">
+              <div class="lane-title">행 단위 세상</div>
+              <ol class="chain">
+                <li><span>FROM / JOIN</span></li>
+                <li><span>WHERE</span></li>
+              </ol>
+            </div>
+            <div class="lane green">
+              <div class="lane-title">그룹 단위 세상 (GROUP BY가 있을 때)</div>
+              <ol class="chain">
+                <li><span>GROUP BY: 묶고 집계</span></li>
+                <li><span>HAVING</span></li>
+                <li><span>SELECT</span></li>
+                <li><span>ORDER BY</span></li>
+              </ol>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>절</th>
+                  <th>쓸 수 있는 값</th>
+                  <th>예</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>WHERE</code></td>
+                  <td>행 단위만</td>
+                  <td>
+                    <code>where is_cancelled = false</code>는 된다. <code>where count(*) &gt;= 2</code>는 아직 묶음이 없어서
+                    <code>aggregate functions are not allowed in WHERE</code> 에러다
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>HAVING</code></td>
+                  <td>그룹 단위만</td>
+                  <td>
+                    <code>having count(*) &gt;= 2</code>는 된다. <code>having is_cancelled</code>는 행 단위라 에러다
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>SELECT</code></td>
+                  <td>그룹 단위만</td>
+                  <td>이 문서 전체의 주제</td>
+                </tr>
+                <tr>
+                  <td><code>ORDER BY</code></td>
+                  <td>그룹 단위만</td>
+                  <td>
+                    <code>group by show_id order by starts_at</code>은 "묶음을 어느 회차의 시각으로 정렬하지?"라서 에러다.
+                    <code>order by min(starts_at)</code>은 된다
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            <code>GROUP BY</code>가 없는 쿼리는 <code>SELECT</code>와 <code>ORDER BY</code>도 행 단위 세상이다. 단, 집계 함수가
+            하나라도 있으면 아래 <a href="#case-whole">케이스 1</a>처럼 전체가 한 묶음이 된다.
+          </p>
+        </section>
+
+        <section id="cases">
+          <h2>케이스 모음</h2>
+          <p>
+            케이스마다 쿼리, 묶음, 결과(또는 에러)를 함께 적는다. 결과 표의 칸이 그룹 단위 값으로만 채워지는지 확인하며 읽는다.
+          </p>
+
+          <h3 id="case-whole">케이스 1: GROUP BY 없이 집계하면 전체가 한 묶음이다</h3>
+          <pre><code class="language-sql">SELECT count(*) FROM performances;</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>count</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>3</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            집계 함수가 있으면 <code>GROUP BY</code>가 없어도 테이블 전체가 묶음 하나가 된다. 그래서 행 단위 컬럼을 함께 쓰면
+            같은 에러가 난다.
+          </p>
+          <pre><code class="language-sql">SELECT starts_at, count(*) FROM performances;
+-- ERROR: column "performances.starts_at" must appear in the GROUP BY clause ...</code></pre>
+          <p>
+            행이 하나도 없어도 결과는 한 줄이다. <code>count(*)</code>는 0, <code>max(...)</code>는 <code>NULL</code>이 나온다.
+            반면 <code>GROUP BY</code>가 있으면 묶음이 하나도 없으니 결과도 0줄이다.
+          </p>
+
+          <h3>케이스 2: 공연별로 묶어 세고 최솟값, 최댓값 구하기</h3>
+          <pre><code class="language-sql">SELECT show_id,
+       count(*)                              AS performance_count,
+       min(starts_at)                        AS first_at,
+       max(starts_at)                        AS last_at,
+       count(*) filter (where is_cancelled)  AS cancelled_count
+FROM performances
+GROUP BY show_id;</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>show_id</th>
+                  <th>performance_count</th>
+                  <th>first_at</th>
+                  <th>last_at</th>
+                  <th>cancelled_count</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>1</td>
+                  <td>2</td>
+                  <td>3월 1일 19:30</td>
+                  <td>3월 2일 14:00</td>
+                  <td>1</td>
+                </tr>
+                <tr>
+                  <td>2</td>
+                  <td>1</td>
+                  <td>3월 5일 20:00</td>
+                  <td>3월 5일 20:00</td>
+                  <td>0</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            <code>show_id</code>는 묶은 기준, 나머지는 모두 집계라서 전부 그룹 단위다. <code>filter</code> 안의
+            <code>is_cancelled</code>는 행 단위지만 집계 안이라 괜찮다(규칙 2). 이 저장소의 공연 기간 서브쿼리
+            (<code>apps/api/src/shows/shows.service.ts</code>의 <code>buildShowPeriodSubquery</code>)가 이 모양이다.
+          </p>
+
+          <h3>케이스 3: case가 집계 밖에 있을 때와 안에 있을 때</h3>
+          <pre><code class="language-sql">SELECT show_id,
+       case when count(*) &gt;= 2 then '여러 회차' else '한 회차' end AS label,   -- 집계 밖
+       sum(case when is_cancelled then 0 else 1 end)              AS active      -- 집계 안
+FROM performances
+GROUP BY show_id;</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>show_id</th>
+                  <th>label</th>
+                  <th>active</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>1</td>
+                  <td>여러 회차</td>
+                  <td>1</td>
+                </tr>
+                <tr>
+                  <td>2</td>
+                  <td>한 회차</td>
+                  <td>1</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <ul>
+            <li>
+              <code>label</code>의 <code>case</code>는 입력이 <code>count(*)</code>(그룹 단위)라서 결과도 그룹 단위다. 묶음마다
+              한 번 평가된다.
+            </li>
+            <li>
+              <code>active</code>의 <code>case</code>는 입력이 <code>is_cancelled</code>(행 단위)라서 결과도 행 단위다. 공연 1이면
+              회차 11에서 1, 회차 12에서 0이 나온다. 그 값들을 <code>sum</code>이 묶음마다 1로 줄인다.
+            </li>
+          </ul>
+          <p>
+            같은 <code>case</code>라도 무엇을 입력으로 받느냐에 따라 종류가 갈린다. 집계 괄호 안에 있으면 행 단위, 밖에 있으면
+            그룹 단위 입력만 받을 수 있다.
+          </p>
+
+          <h3>케이스 4: 집계 밖의 case에 행 단위 값을 넣으면 에러</h3>
+          <pre><code class="language-sql">SELECT show_id,
+       case when is_cancelled then '취소 있음' else '없음' end
+FROM performances
+GROUP BY show_id;
+-- ERROR: column "performances.is_cancelled" must appear in the GROUP BY clause ...</code></pre>
+          <p>
+            공연 1 묶음에는 <code>is_cancelled</code>가 false와 true 둘이다. 어느 값으로 <code>case</code>를 평가할지 정할 수
+            없다. "회차 중 하나라도 취소면"이라는 뜻이었다면 집계로 바꾼다.
+          </p>
+          <pre><code class="language-sql">case when bool_or(is_cancelled) then '취소 있음' else '없음' end
+-- 또는
+case when count(*) filter (where is_cancelled) &gt; 0 then '취소 있음' else '없음' end</code></pre>
+          <p>
+            집계로 바꿀 때는 "여러 값을 어떻게 하나로 볼지"를 정해야 한다. 하나라도 참인지(<code>bool_or</code>), 모두
+            참인지(<code>bool_and</code>), 가장 이른 값(<code>min</code>)인지. 이 결정이 곧 도메인 규칙이다.
+          </p>
+
+          <h3>케이스 5: 묶음을 거를 때는 WHERE가 아니라 HAVING</h3>
+          <pre><code class="language-sql">-- 회차가 두 개 이상인 공연만
+SELECT show_id, count(*) FROM performances GROUP BY show_id HAVING count(*) &gt;= 2;</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>show_id</th>
+                  <th>count</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>1</td>
+                  <td>2</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            "취소되지 않은 회차만 세기"처럼 행을 거르는 조건은 <code>WHERE</code>(행 단위), "회차가 두 개 이상인 공연"처럼
+            묶음을 거르는 조건은 <code>HAVING</code>(그룹 단위)에 쓴다.
+          </p>
+
+          <h3>케이스 6: GROUP BY에 식을 쓰면 그 식이 그룹 단위다</h3>
+          <pre><code class="language-sql">SELECT starts_at &lt; '2026-03-02' AS before_mar_2, count(*)
+FROM performances
+GROUP BY starts_at &lt; '2026-03-02';</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>before_mar_2</th>
+                  <th>count</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>false</td>
+                  <td>2</td>
+                </tr>
+                <tr>
+                  <td>true</td>
+                  <td>1</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            묶은 기준은 <code>starts_at</code>이 아니라 <code>starts_at &lt; '2026-03-02'</code>라는 식이다. 그래서 이 식
+            자체는 그룹 단위지만, <code>starts_at</code>은 여전히 행 단위다(false 묶음에 3월 2일, 3월 5일이 섞여 있다).
+            PostgreSQL은 <code>GROUP BY before_mar_2</code>처럼 <code>SELECT</code>의 별칭으로 묶는 것도 허용한다. 표준 SQL에는
+            없는 확장이다.
+          </p>
+        </section>
+
+        <section id="join">
+          <h2>JOIN이 행을 불린다</h2>
+          <p>
+            <code>GROUP BY</code>는 원래 테이블이 아니라 <strong><code>FROM</code>과 <code>JOIN</code>을 마친 결과</strong>에
+            적용된다. 일대다 관계를 <a href="01-프론트엔드-개발자를-위한-DB-개념.html#join">JOIN</a>하면 부모 행이 자식 수만큼
+            복사되어 늘어난다.
+          </p>
+          <pre><code class="language-sql">SELECT * FROM performances p
+JOIN performance_seats ps ON ps.performance_id = p.id;</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>p.id</th>
+                  <th>p.show_id</th>
+                  <th>p.starts_at</th>
+                  <th>ps.id</th>
+                  <th>ps.is_sold</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>11</td>
+                  <td>1</td>
+                  <td>3월 1일 19:30</td>
+                  <td>101</td>
+                  <td>true</td>
+                </tr>
+                <tr>
+                  <td>11</td>
+                  <td>1</td>
+                  <td>3월 1일 19:30</td>
+                  <td>102</td>
+                  <td>false</td>
+                </tr>
+                <tr>
+                  <td>11</td>
+                  <td>1</td>
+                  <td>3월 1일 19:30</td>
+                  <td>103</td>
+                  <td>false</td>
+                </tr>
+                <tr>
+                  <td>12</td>
+                  <td>1</td>
+                  <td>3월 2일 14:00</td>
+                  <td>201</td>
+                  <td>false</td>
+                </tr>
+                <tr>
+                  <td>12</td>
+                  <td>1</td>
+                  <td>3월 2일 14:00</td>
+                  <td>202</td>
+                  <td>false</td>
+                </tr>
+                <tr>
+                  <td>21</td>
+                  <td>2</td>
+                  <td>3월 5일 20:00</td>
+                  <td>301</td>
+                  <td>true</td>
+                </tr>
+                <tr>
+                  <td>21</td>
+                  <td>2</td>
+                  <td>3월 5일 20:00</td>
+                  <td>302</td>
+                  <td>true</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            회차 3행이 7행이 됐다. <code>performances</code>에서 <code>id</code>가 기본 키라 행마다 하나였어도, JOIN 결과에서는
+            같은 <code>p.id</code>가 여러 번 나온다. 그래서 회차별로 좌석을 세려면 <code>p.id</code>로 다시 묶어야 한다.
+          </p>
+
+          <h3>케이스 7: 회차별 좌석 수 세기</h3>
+          <pre><code class="language-sql">SELECT p.id,
+       p.starts_at,
+       count(ps.id)                              AS total_seats,
+       count(ps.id) filter (where not ps.is_sold) AS remaining_seats
+FROM performances p
+JOIN performance_seats ps ON ps.performance_id = p.id
+GROUP BY p.id;</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>id</th>
+                  <th>starts_at</th>
+                  <th>total_seats</th>
+                  <th>remaining_seats</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>11</td>
+                  <td>3월 1일 19:30</td>
+                  <td>3</td>
+                  <td>2</td>
+                </tr>
+                <tr>
+                  <td>12</td>
+                  <td>3월 2일 14:00</td>
+                  <td>2</td>
+                  <td>2</td>
+                </tr>
+                <tr>
+                  <td>21</td>
+                  <td>3월 5일 20:00</td>
+                  <td>2</td>
+                  <td>0</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>값</th>
+                  <th>종류</th>
+                  <th>이유</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>p.id</code></td>
+                  <td><span class="badge green">그룹</span></td>
+                  <td>GROUP BY에 적은 컬럼</td>
+                </tr>
+                <tr>
+                  <td><code>p.starts_at</code></td>
+                  <td><span class="badge green">그룹</span></td>
+                  <td>
+                    <code>p.id</code>가 <code>performances</code>의 기본 키라서. 집계 함수가 아닌데도 된다.
+                    <a href="#fd">함수 종속성</a>
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>count(ps.id)</code></td>
+                  <td><span class="badge green">그룹</span></td>
+                  <td>집계</td>
+                </tr>
+                <tr>
+                  <td><code>ps.is_sold</code></td>
+                  <td><span class="badge blue">행</span></td>
+                  <td>회차 11 묶음 안에서 true, false, false로 다르다. 그대로 쓰면 에러</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>케이스 8: 불어난 행을 모르고 세면 숫자가 틀린다</h3>
+          <p>같은 JOIN에서 공연별로 묶고 회차 수를 세려 하면 이렇게 된다.</p>
+          <pre><code class="language-sql">SELECT p.show_id, count(*), count(distinct p.id)
+FROM performances p
+JOIN performance_seats ps ON ps.performance_id = p.id
+GROUP BY p.show_id;</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>show_id</th>
+                  <th>count(*)</th>
+                  <th>count(distinct p.id)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>1</td>
+                  <td>5</td>
+                  <td>2</td>
+                </tr>
+                <tr>
+                  <td>2</td>
+                  <td>2</td>
+                  <td>1</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout warn">
+            <p>
+              <code>count(*)</code>는 회차 수가 아니라 JOIN으로 불어난 행 수(좌석 수)를 센다. 에러가 나지 않아서 알아채기
+              어렵다. 집계 전에 "지금 한 묶음에 무엇이 몇 줄 들어 있나"를 그려 보면 피할 수 있다. 회차 수가 필요하면
+              <code>count(distinct p.id)</code>를 쓰거나, 좌석 JOIN 없이 따로 센다.
+            </p>
+          </div>
+
+          <h3>LEFT JOIN과 count(*)</h3>
+          <p>
+            이 저장소의 회차 쿼리는 <code>LEFT JOIN</code>을 쓴다. LEFT JOIN에서 짝이 없는 부모 행은 자식 컬럼이 모두
+            <code>NULL</code>인 행 하나로 남는다. <code>count(*)</code>는 이 행도 세서 1이 되고, <code>count(ps.id)</code>는
+            <code>NULL</code>을 세지 않아 0이 된다. 그래서 자식 수를 셀 때는 <code>count(자식.id)</code>를 쓴다.
+          </p>
+        </section>
+
+        <section id="fd">
+          <h2>함수 종속성</h2>
+          <p>
+            케이스 7에서 <code>p.starts_at</code>은 집계 함수도 아니고 <code>GROUP BY</code>에도 없는데 쓸 수 있었다. 이 절은 그
+            이유를 다룬다.
+          </p>
+          <h3>뜻: A가 정해지면 B가 하나로 정해진다</h3>
+          <div class="callout">
+            <p>
+              <strong>함수 종속성</strong>: 컬럼 A의 값을 알면 컬럼 B의 값이 하나로 정해질 때, "B는 A에 함수 종속이다"라고
+              한다. 수학의 함수처럼 입력(A) 하나에 출력(B)이 하나라서 붙은 이름이다.
+            </p>
+          </div>
+          <p>
+            <code>performances</code>에서 <code>id</code>는 기본 키라 같은 <code>id</code>를 가진 행이 하나뿐이다. 그러니
+            <code>id</code>를 알면 그 행이 정해지고, 그 행의 <code>starts_at</code>, <code>show_id</code>,
+            <code>is_cancelled</code>도 하나로 정해진다. 기본 키가 정해지면 그 테이블의 모든 컬럼이 정해진다.
+          </p>
+          <p>자바스크립트로는 <code>id</code>를 키로 둔 <code>Map</code>과 같다.</p>
+          <pre><code class="language-ts">const performanceById = new Map([
+  [11, { showId: 1, startsAt: '3월 1일 19:30', isCancelled: false }],
+  [12, { showId: 1, startsAt: '3월 2일 14:00', isCancelled: true }],
+]);
+
+performanceById.get(11)!.startsAt; // id 하나 → startsAt 하나. Map은 키가 겹칠 수 없으니까</code></pre>
+          <p>
+            반대 방향은 성립하지 않는다. <code>show_id = 1</code>을 알아도 <code>starts_at</code>은 3월 1일일 수도, 3월 2일일
+            수도 있다. <code>starts_at</code>은 <code>show_id</code>에 함수 종속이 아니다.
+          </p>
+
+          <h3>GROUP BY와의 관계</h3>
+          <p>
+            <code>GROUP BY p.id</code>로 묶으면 한 묶음 안의 행은 모두 <code>p.id</code>가 같다. <code>p.starts_at</code>이
+            <code>p.id</code>에 함수 종속이므로, 한 묶음 안의 <code>p.starts_at</code>도 모두 같다. 값이 하나로 정해지니 그룹
+            단위로 인정된다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>묶음 (<code>p.id</code>)</th>
+                  <th>묶음 안의 <code>p.starts_at</code></th>
+                  <th>묶음 안의 <code>ps.is_sold</code></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>11</td>
+                  <td>19:30, 19:30, 19:30 → 하나</td>
+                  <td>true, false, false → 여럿</td>
+                </tr>
+                <tr>
+                  <td>12</td>
+                  <td>14:00, 14:00 → 하나</td>
+                  <td>false, false → 지금은 같지만 보장 없음</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            JOIN으로 행이 불어나도 <code>performances</code> 쪽 컬럼은 회차 11의 한 행을 세 번 복사한 것뿐이다. 그래서 같은
+            값이라는 게 <strong>보장된다</strong>. 회차 12의 <code>ps.is_sold</code>가 우연히 둘 다 false인 것과는 다르다.
+          </p>
+          <p>
+            함수 종속성이 없다면 <code>GROUP BY p.id, p.starts_at, p.show_id, p.is_cancelled</code>처럼 쓰려는 컬럼을 모두
+            <code>GROUP BY</code>에 나열해야 한다. 결과는 같다. 이미 <code>p.id</code>로 나뉜 묶음이 더 쪼개지지 않으니까.
+          </p>
+
+          <h3>PostgreSQL이 인정하는 조건</h3>
+          <div class="callout">
+            <p>
+              <code>GROUP BY</code>에 어떤 테이블의 <strong>기본 키 컬럼이 모두</strong> 들어 있으면, 그 테이블의 다른 컬럼은
+              집계 없이 쓸 수 있다.
+            </p>
+          </div>
+          <p>
+            PostgreSQL은 데이터를 보지 않고 <strong>쿼리를 분석할 때 스키마의 기본 키 제약만 보고</strong> 판단한다. 데이터가
+            몇 행이든 결과가 같다. 이 규칙은 SQL 표준에 있고 PostgreSQL은 9.1부터 지원한다. MySQL도
+            <code>ONLY_FULL_GROUP_BY</code> 모드(5.7부터 기본)에서 비슷하게 동작한다.
+          </p>
+        </section>
+
+        <section id="fd-not">
+          <h2>함수 종속성으로 인정하지 않는 경우</h2>
+          <p>
+            논리적으로는 값이 하나로 정해지는데도 PostgreSQL이 인정하지 않는 경우가 있다. PostgreSQL은 "같은 테이블의 기본 키"
+            하나만 근거로 쓰기 때문이다. 아래는 모두 PostgreSQL 18에서 에러를 확인한 경우다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>경우</th>
+                  <th>쿼리</th>
+                  <th>논리적으로는</th>
+                  <th>PostgreSQL</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>UNIQUE NOT NULL 컬럼으로 묶음</td>
+                  <td><code>GROUP BY s.title</code> 후 <code>s.id</code></td>
+                  <td>title이 유일하면 행이 하나</td>
+                  <td>에러. 기본 키만 인정한다</td>
+                </tr>
+                <tr>
+                  <td>외래 키를 따라간 부모 컬럼</td>
+                  <td><code>GROUP BY p.id</code> 후 <code>s.title</code></td>
+                  <td>회차 하나에 공연은 하나</td>
+                  <td>에러. <code>shows</code>의 기본 키가 GROUP BY에 없다</td>
+                </tr>
+                <tr>
+                  <td>JOIN 조건으로 같은 값인 컬럼</td>
+                  <td><code>GROUP BY ps.performance_id</code> 후 <code>p.starts_at</code></td>
+                  <td>JOIN 조건상 <code>p.id</code>와 같은 값</td>
+                  <td>에러. <code>p.id</code>로 묶은 게 아니다</td>
+                </tr>
+                <tr>
+                  <td>복합 기본 키의 일부</td>
+                  <td>기본 키 (a, b)인데 <code>GROUP BY a</code></td>
+                  <td>a만으로는 행이 여럿</td>
+                  <td>에러. 기본 키 컬럼이 모두 있어야 한다</td>
+                </tr>
+                <tr>
+                  <td>서브쿼리 결과의 컬럼</td>
+                  <td><code>FROM (SELECT * FROM shows) x GROUP BY x.id</code> 후 <code>x.title</code></td>
+                  <td><code>x.id</code>는 원래 기본 키</td>
+                  <td>에러. 서브쿼리 결과에는 기본 키 제약이 없다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <h3>외래 키 쪽을 자세히 보기</h3>
+          <p>두 번째 경우가 가장 헷갈린다. 회차 하나는 공연 하나에 속하니 공연 제목도 하나로 정해질 것 같다.</p>
+          <pre><code class="language-sql">SELECT p.id, s.title
+FROM performances p
+JOIN shows s ON s.id = p.show_id
+GROUP BY p.id;
+-- ERROR: column "s.title" must appear in the GROUP BY clause ...</code></pre>
+          <p>
+            <code>s.title</code>은 <code>shows</code>의 컬럼이고, <code>GROUP BY</code>에는 <code>performances</code>의 기본 키만
+            있다. PostgreSQL은 테이블마다 따로 따지고, 외래 키를 따라가 추론하지 않는다. 해결 방법은 세 가지다.
+          </p>
+          <ol class="steps blue">
+            <li>
+              <strong>그 테이블의 기본 키도 GROUP BY에 넣는다</strong>
+              <code>GROUP BY p.id, s.id</code>. 이제 <code>shows</code>의 모든 컬럼을 쓸 수 있다. 묶음은 더 쪼개지지 않는다(회차
+              하나에 공연이 하나라서). 가장 흔히 쓰는 방법이다.
+            </li>
+            <li>
+              <strong>쓰려는 컬럼을 GROUP BY에 넣는다</strong>
+              <code>GROUP BY p.id, s.title</code>. 컬럼이 하나둘이면 간단하다.
+            </li>
+            <li>
+              <strong>집계로 감싼다</strong>
+              <code>min(s.title)</code> 또는 PostgreSQL 16부터 있는 <code>any_value(s.title)</code>. "어차피 하나니까 아무거나
+              달라"는 뜻이다. 의도를 읽기 어려워서 앞의 두 방법을 먼저 고려한다.
+            </li>
+          </ol>
+          <details class="fold">
+            <summary>선택 읽기: 왜 PostgreSQL은 더 똑똑하게 추론하지 않나</summary>
+            <div class="fold-body">
+              <p>
+                쿼리가 맞는지 틀린지는 데이터가 아니라 스키마와 쿼리 모양만으로 정해져야 한다. 그래야 데이터가 바뀌어도
+                어제 되던 쿼리가 오늘 에러가 나지 않는다. 기본 키는 "이 테이블에서 같은 값이 두 번 나오지 않는다"는 가장
+                확실한 약속이라 판단 근거로 쓰기 좋다.
+              </p>
+              <p>
+                UNIQUE 제약은 <code>NULL</code>을 여러 번 허용할 수 있고, 외래 키나 JOIN 조건을 따라가는 추론은 쿼리 모양에
+                따라 복잡해진다. PostgreSQL은 판단을 단순하고 예측 가능하게 두는 쪽을 골랐다. 대신 기본 키 제약을 지우면
+                이 규칙에 기댄 쿼리가 깨진다. 그래서 그런 쿼리로 만든 뷰가 있으면 PostgreSQL은 기본 키 제약 삭제를
+                거절한다(<code>view ... depends on constraint ..._pkey</code>).
+              </p>
+            </div>
+          </details>
+        </section>
+
+        <section id="repo">
+          <h2>이 저장소 코드 읽기</h2>
+          <p>
+            같은 컬럼이라도 <strong>무엇으로 묶었느냐</strong>에 따라 종류가 달라진다. 이 저장소의 두 쿼리가 좋은 비교다.
+            쿼리를 읽을 때는 먼저 "무엇으로 묶었나, 한 묶음에 무엇이 몇 줄 들어가나"부터 확인한다.
+          </p>
+
+          <h3>회차 목록: 회차로 묶음</h3>
+          <p>
+            <code>apps/api/src/shows/shows.service.ts</code>의 공연 상세 회차 쿼리는
+            <code>.groupBy(performances.id)</code>로 묶는다. 한 묶음은 회차 하나와 그 좌석들이다(<a href="#join">케이스 7</a>과
+            같은 모양).
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>값</th>
+                  <th>종류</th>
+                  <th>이유</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>performances.id</code></td>
+                  <td><span class="badge green">그룹</span></td>
+                  <td>GROUP BY 컬럼</td>
+                </tr>
+                <tr>
+                  <td><code>performances.startsAt</code></td>
+                  <td><span class="badge green">그룹</span></td>
+                  <td>함수 종속성</td>
+                </tr>
+                <tr>
+                  <td><code>remainingSeats</code>, <code>totalSeats</code></td>
+                  <td><span class="badge green">그룹</span></td>
+                  <td><code>count(performanceSeats.id)</code> 집계</td>
+                </tr>
+                <tr>
+                  <td><code>salesStatus</code></td>
+                  <td><span class="badge green">그룹</span></td>
+                  <td>
+                    <code>case</code>의 입력이 <code>isCancelled</code>, <code>startsAt</code>, <code>salesOpenAt</code>(함수
+                    종속성)과 <code>remainingSeats</code>(집계)뿐이다
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>isAlmostSoldOut</code></td>
+                  <td><span class="badge green">그룹</span></td>
+                  <td>위 그룹 단위 값들로 만든 조건식</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>공연 판매 상태: 공연으로 묶음</h3>
+          <p>
+            <code>apps/api/src/shows/show-sales-status.ts</code>의 <code>showSalesStatusSubquery</code>는
+            <code>.groupBy(performances.showId)</code>로 묶는다. 한 묶음은 공연 하나와 그 회차들이다. 이번에는
+            <code>performances</code>의 기본 키로 묶지 않았으니, 회차 컬럼은 모두 행 단위다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>값</th>
+                  <th>종류</th>
+                  <th>이유</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>performancePriority</code>의 <code>case</code></td>
+                  <td><span class="badge blue">행</span></td>
+                  <td>입력인 <code>startsAt</code>, <code>salesOpenAt</code>이 회차마다 다르다</td>
+                </tr>
+                <tr>
+                  <td><code>min(${priority})</code> (<code>showPriority</code>)</td>
+                  <td><span class="badge green">그룹</span></td>
+                  <td>행 단위 순번을 집계로 줄였다</td>
+                </tr>
+                <tr>
+                  <td><code>case ${showPriority} when 0 then 'on_sale' ...</code></td>
+                  <td><span class="badge green">그룹</span></td>
+                  <td>그룹 단위 값으로 만든 <code>case</code></td>
+                </tr>
+                <tr>
+                  <td><code>min(salesOpenAt) filter (where ${priority} = 1)</code></td>
+                  <td><span class="badge green">그룹</span></td>
+                  <td>집계. <code>filter</code> 안의 <code>priority</code>는 행 단위라도 된다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            회차 목록 쿼리에서 그룹 단위였던 <code>startsAt</code>이 여기서는 행 단위다. 그래서 회차 상태를 정하는
+            <code>case</code>를 그대로 쓰지 못하고, 순번으로 바꾼 뒤 <code>min</code>으로 감쌌다. 자세한 흐름은
+            <a href="06-판매-상태-쿼리-읽기.html">06 판매 상태 쿼리 읽기</a>에 있다.
+          </p>
+        </section>
+
+        <section id="check">
+          <h2>확인 문제</h2>
+          <div class="quiz">
+            <p class="quiz-q">1. 아래 값 중 SELECT에 바로 쓸 수 있는 것은?</p>
+            <p class="quiz-context">
+              <code>FROM performances GROUP BY show_id</code> 쿼리다. 예시 데이터의 <code>performances</code>를 쓴다.
+            </p>
+            <ol>
+              <li><code>max(starts_at)</code></li>
+              <li><code>starts_at &lt;= now</code></li>
+              <li><code>count(*) filter (where is_cancelled)</code></li>
+              <li><code>case when count(*) = 1 then '단일 회차' end</code></li>
+              <li><code>show_id + 100</code></li>
+            </ol>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <ol>
+                  <li>된다. 집계라서 그룹 단위다.</li>
+                  <li>안 된다. <code>starts_at</code>이 행 단위다. <code>bool_or(starts_at &lt;= now)</code>처럼 집계로 감싼다.</li>
+                  <li>된다. 집계이고, <code>filter</code> 안은 행 단위여도 된다.</li>
+                  <li>된다. 그룹 단위 값(<code>count(*)</code>)으로 만든 <code>case</code>다.</li>
+                  <li>된다. 묶은 기준(<code>show_id</code>)과 상수로 만든 식이다.</li>
+                </ol>
+              </div>
+            </details>
+          </div>
+
+          <div class="quiz">
+            <p class="quiz-q">2. 이 쿼리는 실행될까? 안 된다면 어떻게 고칠까?</p>
+            <p class="quiz-context">회차 목록에 공연 제목을 붙이려고 한다. <a href="#fd-not">함수 종속성으로 인정하지 않는 경우</a>를 묻는다.</p>
+            <pre><code class="language-sql">SELECT p.id, p.starts_at, s.title, count(ps.id)
+FROM performances p
+JOIN shows s ON s.id = p.show_id
+JOIN performance_seats ps ON ps.performance_id = p.id
+GROUP BY p.id;</code></pre>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  <code>s.title</code>에서 에러가 난다. <code>p.starts_at</code>은 <code>performances</code>의 기본 키로 묶었으니
+                  되지만, <code>s.title</code>은 <code>shows</code>의 컬럼이라 함수 종속성이 적용되지 않는다. 외래 키를 따라
+                  추론하지 않는다.
+                </p>
+                <p>
+                  <code>GROUP BY p.id, s.id</code>로 고친다. 회차 하나에 공연은 하나라 묶음이 더 쪼개지지 않고, 이제
+                  <code>shows</code>의 모든 컬럼을 쓸 수 있다.
+                </p>
+              </div>
+            </details>
+          </div>
+
+          <div class="quiz">
+            <p class="quiz-q">3. 결과는 무엇일까?</p>
+            <p class="quiz-context">예시 데이터로 <a href="#join">JOIN이 행을 불린다</a>를 묻는다.</p>
+            <pre><code class="language-sql">SELECT p.show_id, count(*) FILTER (WHERE p.is_cancelled)
+FROM performances p
+JOIN performance_seats ps ON ps.performance_id = p.id
+GROUP BY p.show_id;</code></pre>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  공연 1은 2, 공연 2는 0이다. 취소된 회차는 12 하나지만, 좌석 JOIN으로 회차 12의 행이 좌석 수(2개)만큼
+                  불어났기 때문이다. 취소된 회차 수를 세려면 <code>count(distinct p.id) filter (where p.is_cancelled)</code>를
+                  쓰거나 좌석 JOIN 없이 센다.
+                </p>
+              </div>
+            </details>
+          </div>
+
+          <div class="quiz">
+            <p class="quiz-q">4. 이 diff 뒤에도 쿼리가 실행될까?</p>
+            <p class="quiz-context"><a href="#join">케이스 7</a>의 쿼리에서 묶는 기준을 바꾼다.</p>
+            <pre><code class="language-diff"> SELECT p.id, p.starts_at, count(ps.id)
+ FROM performances p
+ JOIN performance_seats ps ON ps.performance_id = p.id
+-GROUP BY p.id;
++GROUP BY ps.performance_id;</code></pre>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  안 된다. JOIN 조건 때문에 <code>ps.performance_id</code>와 <code>p.id</code>는 값이 같지만, PostgreSQL은
+                  <code>performances</code>의 기본 키로 묶었는지만 본다. <code>p.id</code>와 <code>p.starts_at</code>이 모두
+                  에러다.
+                </p>
+              </div>
+            </details>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
