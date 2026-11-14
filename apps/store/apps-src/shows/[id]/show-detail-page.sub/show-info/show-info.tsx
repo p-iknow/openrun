@@ -95,6 +95,28 @@ export function ShowInfo({ show }: { show: ShowDetailData }) {
                 <dd className="break-keep">{value}</dd>
               </div>
             ))}
+            {/* NOL 티켓처럼 공연 정보 목록에 등급별 가격을 둔다. 등급마다 그 등급 좌석이 있는 구역을 함께 적는다. */}
+            {show.seatGrades.length === 0 ? null : (
+              <div className="col-span-2 grid grid-cols-subgrid">
+                <dt className="text-text-secondary">가격</dt>
+                <dd>
+                  <ul className="flex flex-col gap-xs">
+                    {show.seatGrades.map((grade) => (
+                      <li
+                        key={grade.name}
+                        className="flex flex-wrap gap-x-sm break-keep"
+                      >
+                        <span className="font-semibold">{grade.name}</span>
+                        <span>{grade.price}</span>
+                        <span className="text-text-secondary">
+                          {grade.sections}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </dd>
+              </div>
+            )}
           </dl>
         </>
       }
@@ -143,7 +165,7 @@ export function ShowInfoSkeleton() {
           <Skeleton className="h-[24px] w-[56px] rounded-badge" />
           <Skeleton className="h-[32px] w-3/4 rounded-badge" />
           <div className="flex flex-col gap-xs">
-            {Array.from({ length: 5 }, (_, index) => (
+            {Array.from({ length: 6 }, (_, index) => (
               <Skeleton key={index} className="h-[20px] w-2/3 rounded-badge" />
             ))}
           </div>
