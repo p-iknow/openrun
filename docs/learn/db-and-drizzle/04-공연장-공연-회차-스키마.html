@@ -501,8 +501,8 @@ SELECT count(*) FROM "shows" WHERE "venue_id" IS NULL;  -- 0이어야 한다</co
           </details>
           <details>
             <summary>
-              6. 통합 테스트의 <code>insertShow</code>는 공연에 <code>createdAt</code>을 넣지 않고, 회차의 <code>isCancelled</code>는
-              주지 않을 수도 있다(<code>undefined</code>). 그래도 타입 오류가 나지 않는 이유는?
+              6. 공연을 INSERT할 때 <code>createdAt</code>을 빼거나 회차의 <code>isCancelled</code>를 <code>undefined</code>로
+              두어도 타입 오류가 나지 않는 이유는?
             </summary>
             <p>
               둘 다 <code>NOT NULL</code>이지만 기본값(<code>DEFAULT now()</code>, <code>DEFAULT false</code>)이 있어서 INSERT
