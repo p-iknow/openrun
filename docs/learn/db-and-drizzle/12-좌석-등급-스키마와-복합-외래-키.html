@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>12 좌석 등급 스키마와 복합 외래 키</title>
+    <link rel="stylesheet" href="../learn.css" />
+    <script src="../vendor/highlightjs/highlight.min.js" defer></script>
+    <script src="../learn.js" defer></script>
+  </head>
+  <body>
+    <div class="layout">
+      <nav aria-label="목차">
+        <strong>목차</strong>
+        <ol>
+          <li><a href="#structure">좌석 등급에 관련된 테이블</a></li>
+          <li><a href="#data">예시 데이터</a></li>
+          <li><a href="#problem">막고 싶은 행: 다른 공연의 등급</a></li>
+          <li><a href="#composite-fk">해결: 등급과 공연을 묶어 가리키기</a></li>
+          <li><a href="#unique">seat_grades에 unique(id, show_id)를 둔 이유</a></li>
+          <li><a href="#why-show-id">지정 테이블에 show_id를 둔 이유</a></li>
+          <li><a href="#not-db">DB로 막지 않는 규칙</a></li>
+          <li><a href="#check">스스로 확인하기</a></li>
+        </ol>
+      </nav>
+
+      <main>
+        <h1>12 좌석 등급 스키마와 복합 외래 키</h1>
+        <p class="lead">
+          공연 상세에 등급별 가격을 보여 주려고 만든 좌석 등급(<code>seat_grades</code>)과 좌석 등급 지정(<code>seat_grade_assignments</code>) 테이블을
+          본다. 특히 "공연 1의 좌석에 공연 2의 등급을 지정하는 일"을 복합 외래 키로 막는 방법과, 그러려고
+          <code>seat_grades</code>에 의미로는 중복인 <code>unique(id, show_id)</code>를 둔 이유를 따라간다. 복합 외래 키 개념은
+          <a href="01-프론트엔드-개발자를-위한-DB-개념.html#composite-fk">db-and-drizzle 01 문서</a>, <code>foreignKey()</code> 문법은
+          <a href="02-drizzle-스키마-문법.html#foreign-key">db-and-drizzle 02 문서</a>에 있다.
+        </p>
+
+        <section id="structure">
+          <h2>좌석 등급에 관련된 테이블</h2>
+          <p>
+            좌석(<code>seats</code>)은 공연장에 실제로 있는 자리라서 공연과 상관없이 있다. 등급은 공연마다 정한다. 같은 공연장의
+            같은 자리라도 뮤지컬에서는 VIP석이고 콘서트에서는 R석일 수 있다. 그래서 "이 공연에서 이 자리는 이 등급"이라는 기록을
+            따로 둔다. 그 기록이 좌석 등급 지정이다.
+          </p>
+          <div class="erd" style="--erd-cols: 3">
+            <div class="erd-table" data-table="venues" style="grid-area: 1 / 1">
+              <div class="erd-title">venues <small>공연장</small></div>
+              <ul>
+                <li data-key="PK">id</li>
+                <li>name</li>
+              </ul>
+            </div>
+            <div class="erd-table" data-table="sections" style="grid-area: 2 / 1">
+              <div class="erd-title">sections <small>구역</small></div>
+              <ul>
+                <li data-key="PK">id</li>
+                <li data-key="FK" data-ref="venues.id">venue_id</li>
+                <li>name</li>
+              </ul>
+            </div>
+            <div class="erd-table" data-table="seats" style="grid-area: 3 / 1">
+              <div class="erd-title">seats <small>좌석</small></div>
+              <ul>
+                <li data-key="PK">id</li>
+                <li data-key="FK" data-ref="sections.id">section_id</li>
+                <li>row</li>
+                <li>number</li>
+              </ul>
+            </div>
+            <div class="erd-table" data-table="shows" style="grid-area: 1 / 2">
+              <div class="erd-title">shows <small>공연</small></div>
+              <ul>
+                <li data-key="PK">id</li>
+                <li data-key="FK" data-ref="venues.id">venue_id</li>
+                <li>title</li>
+              </ul>
+            </div>
+            <div class="erd-table" data-table="seat_grade_assignments" style="grid-area: 3 / 2">
+              <div class="erd-title">seat_grade_assignments <small>좌석 등급 지정</small></div>
+              <ul>
+                <li data-key="PK FK" data-ref="shows.id" data-ref-composite="seat_grades.show_id">show_id</li>
+                <li data-key="PK FK" data-ref="seats.id">seat_id</li>
+                <li data-key="FK" data-ref-composite="seat_grades.id">seat_grade_id</li>
+              </ul>
+              <p class="erd-constraints">PRIMARY KEY (show_id, seat_id)</p>
+            </div>
+            <div class="erd-table" data-table="seat_grades" style="grid-area: 2 / 3 / 4 / 4; align-self: center">
+              <div class="erd-title">seat_grades <small>좌석 등급</small></div>
+              <ul>
+                <li data-key="PK">id</li>
+                <li data-key="FK" data-ref="shows.id">show_id</li>
+                <li>name</li>
+                <li>price</li>
+              </ul>
+              <p class="erd-constraints">
+                UNIQUE (show_id, name)<br /><span class="erd-mark">UNIQUE (id, show_id)</span>
+              </p>
+            </div>
+          </div>
+          <p class="erd-note">
+            회색 선은 외래 키다. 세 갈래 까마귀 발(N) 쪽이 "여러 개", 막대(1) 쪽이 "하나"다. 초록 점선은 두 칸을 묶어 거는 복합 외래 키
+            <code>(seat_grade_id, show_id) → (id, show_id)</code>다. 상자나 칸에 마우스를 올리면 이어진 선만 보인다.
+          </p>
+          <p>
+            지정 테이블은 공연과 좌석을 잇는 <a href="13-다대다-관계와-연결-테이블.html">연결 테이블</a>이다. <code>show_id → shows</code>, <code>seat_id → seats</code>,
+            그리고 <code>seat_grade_id</code>로 등급을 가리킨다. 등급을 가리키는 방법이 이 문서의 주제다.
+          </p>
+          <pre><code class="language-ts">// apps/api/src/db/schema/shows.ts
+export const seatGrades = pgTable(
+  'seat_grades',
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    showId: integer('show_id').notNull().references(() =&gt; shows.id),
+    name: text().notNull(),
+    price: integer().notNull(),
+  },
+  (table) =&gt; [
+    unique().on(table.showId, table.name),
+    unique().on(table.id, table.showId), // ← 이 문서가 설명하는 줄
+  ],
+);
+
+export const seatGradeAssignments = pgTable(
+  'seat_grade_assignments',
+  {
+    showId: integer('show_id').notNull().references(() =&gt; shows.id),
+    seatId: integer('seat_id').notNull().references(() =&gt; seats.id),
+    seatGradeId: integer('seat_grade_id').notNull(),
+  },
+  (table) =&gt; [
+    primaryKey({ columns: [table.showId, table.seatId] }),
+    foreignKey({
+      name: 'seat_grade_assignments_seat_grade_fk',
+      columns: [table.seatGradeId, table.showId],
+      foreignColumns: [seatGrades.id, seatGrades.showId],
+    }),
+  ],
+);</code></pre>
+        </section>
+
+        <section id="data">
+          <h2>예시 데이터</h2>
+          <p>
+            이 문서의 예시는 모두 아래 데이터를 쓴다. 같은 공연장에서 공연 둘이 열리고, 좌석은 둘만 본다. 굵은 글씨는 다른
+            테이블을 가리키는 외래 키다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th colspan="2">shows (공연)</th></tr><tr><th>id</th><th>title</th></tr></thead>
+              <tbody>
+                <tr><td>1</td><td>뮤지컬 A</td></tr>
+                <tr><td>2</td><td>콘서트 B</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th colspan="4">seat_grades (좌석 등급)</th></tr><tr><th>id</th><th>show_id</th><th>name</th><th>price</th></tr></thead>
+              <tbody>
+                <tr><td>10</td><td><strong>1</strong></td><td>VIP석</td><td>170,000</td></tr>
+                <tr><td>11</td><td><strong>1</strong></td><td>R석</td><td>130,000</td></tr>
+                <tr><td>20</td><td><strong>2</strong></td><td>스탠딩</td><td>99,000</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th colspan="2">seats (좌석)</th></tr><tr><th>id</th><th>위치</th></tr></thead>
+              <tbody>
+                <tr><td>500</td><td>A구역 1열 1번</td></tr>
+                <tr><td>501</td><td>A구역 1열 2번</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>지정은 아직 좌석 500에만 했다. 같은 좌석 500이 공연마다 다른 등급을 갖는다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th colspan="4">seat_grade_assignments (좌석 등급 지정)</th></tr><tr><th>show_id</th><th>seat_id</th><th>seat_grade_id</th><th>뜻</th></tr></thead>
+              <tbody>
+                <tr><td><strong>1</strong></td><td><strong>500</strong></td><td><strong>10</strong></td><td>뮤지컬 A에서 이 자리는 VIP석</td></tr>
+                <tr><td><strong>2</strong></td><td><strong>500</strong></td><td><strong>20</strong></td><td>콘서트 B에서 이 자리는 스탠딩</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="problem">
+          <h2>막고 싶은 행: 다른 공연의 등급</h2>
+          <p>좌석 501에 뮤지컬 A의 등급을 지정하려는데, 실수로 이런 행을 넣는다고 하자.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>show_id</th><th>seat_id</th><th>seat_grade_id</th><th>뜻</th></tr></thead>
+              <tbody>
+                <tr><td>1</td><td>501</td><td>20</td><td>뮤지컬 A에서 이 자리는 <strong>스탠딩</strong></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            등급 20(스탠딩)은 <strong>콘서트 B의 등급</strong>이다. 이 행이 들어가면 뮤지컬 A의 좌석 화면에 뮤지컬 A가 정한 적 없는
+            99,000원짜리 스탠딩이 보인다.
+          </p>
+
+          <h3 id="single-fk">외래 키를 seat_grade_id 하나로만 걸면</h3>
+          <pre><code class="language-ts">seatGradeId: integer('seat_grade_id').notNull().references(() =&gt; seatGrades.id),</code></pre>
+          <p>DB는 이것만 검사한다.</p>
+          <div class="callout"><p>"<code>seat_grades</code>에 id가 20인 행이 있나?" → 있다 → 통과</p></div>
+          <p>
+            그 등급이 <strong>어느 공연의 것인지는 보지 않는다.</strong> 지정 행의 <code>show_id</code>는 1이고 등급 20의
+            <code>show_id</code>는 2인데, 단일 외래 키는 이 두 값을 비교하지 않는다.
+          </p>
+        </section>
+
+        <section id="composite-fk">
+          <h2>해결: 등급과 공연을 묶어 가리키기</h2>
+          <p>외래 키를 두 컬럼 묶음으로 건다.</p>
+          <pre><code class="language-ts">foreignKey({
+  columns:        [table.seatGradeId, table.showId],      // 지정 행에서 꺼낼 두 값
+  foreignColumns: [seatGrades.id,     seatGrades.showId], // 등급 테이블에서 찾을 두 컬럼
+})</code></pre>
+          <pre><code class="language-sql">ALTER TABLE "seat_grade_assignments" ADD CONSTRAINT "seat_grade_assignments_seat_grade_fk"
+  FOREIGN KEY ("seat_grade_id","show_id") REFERENCES "public"."seat_grades"("id","show_id");</code></pre>
+          <p>이제 DB는 이렇게 검사한다.</p>
+          <div class="callout"><p>"<code>seat_grades</code>에 id가 <code>seat_grade_id</code><strong>이면서</strong> show_id가 <code>show_id</code>인 행이 있나?"</p></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>넣으려는 지정 (show_id, seat_id, seat_grade_id)</th><th>찾는 등급 (id, show_id)</th><th>결과</th></tr></thead>
+              <tbody>
+                <tr><td>(1, 501, 11)</td><td>(11, 1)</td><td><span class="badge green">통과</span> 등급 11은 공연 1의 것</td></tr>
+                <tr><td>(1, 501, 20)</td><td>(20, 1)</td><td><span class="badge blue">거부</span> 등급 20의 show_id는 2라서 (20, 1)인 행이 없다</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            지정 행의 <code>show_id</code>가 외래 키 검사에 함께 들어가므로, <strong>지정의 공연과 등급의 공연은 늘 같다.</strong>
+            API나 시드 코드에 버그가 있어도 DB가 거부한다.
+          </p>
+          <pre><code>ERROR:  insert or update on table "seat_grade_assignments" violates foreign key constraint "seat_grade_assignments_seat_grade_fk"
+DETAIL:  Key (seat_grade_id, show_id)=(20, 1) is not present in table "seat_grades".</code></pre>
+          <div class="callout warn">
+            <p>
+              예시를 좌석 501로 든 이유가 있다. 좌석 500에는 공연 1의 지정이 이미 있어서, <code>(1, 500, 20)</code>을 넣으면 외래 키
+              검사 전에 기본 키 <code>(show_id, seat_id)</code>에서 먼저 실패한다. PostgreSQL은 기본 키·유니크 검사를 행을 넣는
+              순간에 하고, 외래 키 검사는 그 뒤에 한다.
+            </p>
+          </div>
+          <p>
+            복합 외래 키는 자동 이름(<code>seat_grade_assignments_seat_grade_id_show_id_seat_grades_id_show_id_fk</code>)이
+            PostgreSQL 이름 길이 63바이트를 넘어 잘리므로, <code>name</code>으로 직접 지었다.
+          </p>
+        </section>
+
+        <section id="unique">
+          <h2>seat_grades에 unique(id, show_id)를 둔 이유</h2>
+          <p>
+            위 외래 키는 <code>seat_grades</code>의 <code>(id, show_id)</code> 묶음을 가리킨다. PostgreSQL은 외래 키가 가리키는
+            컬럼 묶음에 <strong>그 묶음 그대로의</strong> 기본 키나 유니크 제약이 있어야 외래 키를 만든다(<a
+              href="01-프론트엔드-개발자를-위한-DB-개념.html#fk-needs-unique"
+              >이유</a
+            >). 그런데 <code>unique(id, show_id)</code> 없이 <code>seat_grades</code>에 있는 제약은 이것뿐이다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>제약</th><th>컬럼 묶음</th><th>외래 키가 가리키는 (id, show_id)와 같나</th></tr></thead>
+              <tbody>
+                <tr><td>기본 키</td><td>(id)</td><td>아니다. 컬럼 하나</td></tr>
+                <tr><td>유니크</td><td>(show_id, name)</td><td>아니다. 다른 컬럼</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>그래서 이대로면 마이그레이션이 이렇게 실패한다.</p>
+          <pre><code>ERROR:  there is no unique constraint matching given keys for referenced table "seat_grades"</code></pre>
+          <p>이 오류를 없애려고 <code>unique().on(table.id, table.showId)</code>를 더했다.</p>
+          <div class="callout">
+            <p>
+              <code>id</code>가 이미 기본 키라서 <code>(id, show_id)</code>도 당연히 유일하다. <strong>의미로는 중복인 제약이다.</strong>
+              PostgreSQL이 이것을 추론해 주지 않으므로, 복합 외래 키를 걸 수 있게 하려고 형식상 두었다. 대가로 인덱스가 하나 더
+              생긴다. 등급은 공연마다 몇 개뿐이라 비용은 작다.
+            </p>
+          </div>
+        </section>
+
+        <section id="why-show-id">
+          <h2>지정 테이블에 show_id를 둔 이유</h2>
+          <p>
+            지정 테이블에서 <code>show_id</code>를 빼면 이 문제 자체가 없어 보인다. 등급이 이미 공연을 알고 있으니, 공연은 등급을
+            따라가서 알면 된다. 그래도 <code>show_id</code>를 둔 것은 이 규칙 때문이다.
+          </p>
+          <div class="callout"><p>공연마다 좌석 하나에 등급은 하나뿐이다.</p></div>
+          <p>
+            이 규칙은 기본 키 <code>(show_id, seat_id)</code>로 지킨다. 같은 공연에서 좌석 500에 VIP석과 R석을 둘 다 지정하는
+            행을 DB가 거부한다. <code>show_id</code>가 없으면 이 기본 키를 만들 수 없다. <code>(seat_grade_id, seat_id)</code>로는
+            막지 못한다. 등급 10과 11이 다른 등급이라서, 두 행의 조합이 다르기 때문이다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>지정 테이블 설계</th><th>좌석 하나에 등급 하나</th><th>지정과 등급의 공연이 같음</th></tr></thead>
+              <tbody>
+                <tr><td><code>show_id</code> 없음</td><td>DB로 못 막음</td><td>저절로 같음</td></tr>
+                <tr><td><code>show_id</code> + 단일 외래 키</td><td>기본 키로 막음</td><td>DB로 못 막음</td></tr>
+                <tr><td><code>show_id</code> + 복합 외래 키 (지금)</td><td>기본 키로 막음</td><td>복합 외래 키로 막음</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            <code>show_id</code>를 두면 공연이 등급과 지정 두 곳에 적히게 되고, 두 값이 어긋날 수 있다. 복합 외래 키는 그 두 값을
+            같게 묶어서, 두 규칙을 모두 DB 선언만으로 지킨다. 트리거나 API 검증으로도 막을 수 있지만, 그러면 시드나 직접 실행한 SQL
+            같은 다른 경로는 막지 못한다.
+          </p>
+        </section>
+
+        <section id="not-db">
+          <h2>DB로 막지 않는 규칙</h2>
+          <p>지정 테이블에서 아래 두 규칙은 DB 제약으로 막지 않는다.</p>
+          <ul>
+            <li>좌석이 그 공연의 공연장에 있는가</li>
+            <li>공연장의 모든 좌석에 등급을 지정했는가</li>
+          </ul>
+          <p>
+            첫째는 좌석에서 구역, 구역에서 공연장으로 두 단계를 따라가야 비교할 수 있어서 외래 키로 표현할 수 없다. 둘째는 "행이
+            있어야 한다"는 규칙이라 외래 키나 유니크 제약이 다루는 종류가 아니다. 지금은 시드가 지키고, 어드민에 공연 등록이 생기면 등록할 때
+            검증한다.
+          </p>
+        </section>
+
+        <section id="check">
+          <h2>스스로 확인하기</h2>
+          <div class="quiz">
+            <p class="quiz-q">1. 아래 지정 행을 넣으면 각각 어떻게 되는가?</p>
+            <p class="quiz-context"><a href="#data">예시 데이터</a>에 올바른 지정 두 행이 이미 들어 있다고 본다.</p>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th></th><th>show_id</th><th>seat_id</th><th>seat_grade_id</th></tr></thead>
+                <tbody>
+                  <tr><td>가</td><td>1</td><td>500</td><td>11</td></tr>
+                  <tr><td>나</td><td>2</td><td>501</td><td>10</td></tr>
+                  <tr><td>다</td><td>1</td><td>501</td><td>99</td></tr>
+                  <tr><td>라</td><td>2</td><td>500</td><td>10</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  가: 등급 11은 공연 1의 것이라 외래 키는 통과하지만, (1, 500) 지정이 이미 있어 기본 키에서 실패한다. 같은 공연에서
+                  좌석 하나에 등급은 하나뿐이다.
+                </p>
+                <p>나: 등급 10은 공연 1의 것이라 (10, 2)인 등급이 없다. 복합 외래 키에서 실패한다.</p>
+                <p>다: 등급 99가 없으므로 (99, 1)인 등급도 없다. 복합 외래 키에서 실패한다.</p>
+                <p>
+                  라: 등급 10이 공연 2의 것이 아니라서 외래 키도 어기지만, (2, 500) 지정이 이미 있어 기본 키에서 먼저 실패한다. 오류
+                  메시지에는 기본 키 위반만 나온다.
+                </p>
+              </div>
+            </details>
+          </div>
+          <div class="quiz">
+            <p class="quiz-q">2. 이 줄을 지우고 마이그레이션을 만들어 적용하면 어떻게 되는가?</p>
+            <p class="quiz-context"><code>seatGrades</code>의 세 번째 인자를 바꾼다.</p>
+            <pre><code class="language-diff">   unique().on(table.showId, table.name),
+-  unique().on(table.id, table.showId),</code></pre>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  지정 테이블의 복합 외래 키가 가리킬 <code>(id, show_id)</code> 유니크 제약이 없어진다. PostgreSQL이
+                  <code>there is no unique constraint matching given keys for referenced table "seat_grades"</code>로 거부하므로
+                  마이그레이션이 실패한다. <code>id</code>가 기본 키라는 사실만으로는 통과하지 않는다.
+                </p>
+              </div>
+            </details>
+          </div>
+          <div class="quiz">
+            <p class="quiz-q">3. 이 줄을 <code>unique().on(table.showId, table.id)</code>처럼 순서를 바꿔 써도 외래 키를 만들 수 있을까?</p>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  만들 수 있다. PostgreSQL은 외래 키가 가리키는 컬럼들과 유니크 제약의 컬럼들이 같은 집합인지를 본다. 컬럼 순서는
+                  인덱스 모양만 바꾼다.
+                </p>
+              </div>
+            </details>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

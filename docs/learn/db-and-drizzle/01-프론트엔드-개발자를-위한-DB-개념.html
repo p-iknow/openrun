@@ -23,6 +23,7 @@
           <li><a href="#join">JOIN: 두 테이블을 이어 붙이기</a></li>
           <li><a href="#index">인덱스: 찾아보기 목차</a></li>
           <li><a href="#unique">유니크 제약</a></li>
+          <li><a href="#composite-fk">복합 외래 키: 컬럼 여러 개를 묶어 가리키기</a></li>
           <li><a href="#sql">SQL 문장의 두 종류</a></li>
           <li><a href="#timestamptz">timestamptz</a></li>
           <li><a href="#order-limit">ORDER BY, LIMIT, OFFSET</a></li>
@@ -152,6 +153,10 @@ const venue = venues[shows[1].venueId]; // 필요할 때 id로 찾아 붙인다<
             지울 때마다 목록도 고쳐야 한다. 공연마다 <code>venue_id</code> 하나만 두면 찾기도 고치기도 행 하나로 끝나고,
             <a href="#fk">외래 키</a>로 DB가 검사할 수도 있다. "공연장 1번의 공연 목록"은 <code>venue_id = 1</code>인 공연을
             찾으면 된다.
+          </p>
+          <p>
+            양쪽 모두 "여러 개"인 관계(학생 × 수업, 회차 × 좌석)는 외래 키 하나로 표현할 수 없어 연결 테이블을 둔다.
+            <a href="13-다대다-관계와-연결-테이블.html">db-and-drizzle 13 문서</a>에 있다.
           </p>
         </section>
 
@@ -627,6 +632,52 @@ DETAIL:  Key (performance_id, seat_id)=(7, 42) already exists.</code></pre>
             <p>
               유니크 제약에서 <code>NULL</code>은 서로 같지 않다고 본다. 컬럼이 <code>NULL</code>을 허용하면 <code>(7, NULL)</code>을
               여러 번 넣을 수 있다. 막으려면 컬럼을 <code>NOT NULL</code>로 두거나 PostgreSQL 15부터 있는 <code>NULLS NOT DISTINCT</code>를 쓴다.
+            </p>
+          </div>
+        </section>
+
+        <section id="composite-fk">
+          <h2>복합 외래 키: 컬럼 여러 개를 묶어 가리키기</h2>
+          <p>
+            보통의 <a href="#fk">외래 키</a>는 컬럼 하나로 다른 테이블의 행을 가리킨다. 외래 키는 컬럼 여러 개를 묶어서 걸 수도
+            있는데, 이것을 <strong>복합 외래 키</strong>라고 한다. 이때 DB는 묶은 값들이 <strong>한 행 안에 모두 함께</strong> 있는지를
+            검사한다.
+          </p>
+          <pre><code class="language-ts">// 단일 외래 키: "id가 20인 행이 있나?"
+grades.some((g) =&gt; g.id === row.grade_id);
+
+// 복합 외래 키: "id가 20이면서 show_id가 1인 행이 있나?"
+grades.some((g) =&gt; g.id === row.grade_id &amp;&amp; g.show_id === row.show_id);</code></pre>
+          <p>
+            단일 외래 키는 "그런 행이 있는가"만 본다. 복합 외래 키는 여기에 "그 행의 다른 컬럼 값이 내 값과 같은가"까지 본다.
+            그래서 두 테이블이 같은 값(예: 같은 공연)을 들고 있어야 한다는 규칙을 DB가 지키게 할 때 쓴다.
+          </p>
+          <pre><code class="language-sql">FOREIGN KEY ("seat_grade_id", "show_id") REFERENCES "seat_grades"("id", "show_id")</code></pre>
+          <p>
+            앞 괄호의 컬럼과 뒤 괄호의 컬럼은 순서대로 짝이 된다. 위 SQL에서는 <code>seat_grade_id</code>가 <code>id</code>와,
+            <code>show_id</code>가 <code>show_id</code>와 짝이다.
+          </p>
+
+          <h3 id="fk-needs-unique">가리키는 컬럼 묶음에는 유니크 제약이 있어야 한다</h3>
+          <p>
+            PostgreSQL에서 외래 키가 가리키는 컬럼은 기본 키이거나 <a href="#unique">유니크 제약</a>(또는 조건 없는 유니크
+            인덱스)이 걸려 있어야 한다. 가리킨 값에 맞는 행이 딱 하나여야 "어느 행을 가리키는가"가 분명하기 때문이다. 단일 외래
+            키가 보통 상대의 <code>id</code>를 가리키는 것도 <code>id</code>가 기본 키라서다.
+          </p>
+          <p>
+            복합 외래 키에서는 이 규칙이 <strong>가리키는 컬럼 묶음 그대로</strong>에 적용된다. <code>("id", "show_id")</code>를
+            가리키려면 <code>("id", "show_id")</code> 묶음의 유니크 제약이 있어야 한다. <code>id</code>가 기본 키라서 묶음도
+            당연히 유일하지만, PostgreSQL은 이것을 추론해 주지 않는다. 묶음의 제약이 없으면 외래 키를 만들 때 이렇게 실패한다.
+          </p>
+          <pre><code>ERROR:  there is no unique constraint matching given keys for referenced table "seat_grades"</code></pre>
+          <p>
+            그래서 의미로는 중복인 <code>UNIQUE ("id", "show_id")</code>를 상대 테이블에 하나 더 둔다. 이 제약도
+            <a href="#unique-index">인덱스를 하나 만들기</a> 때문에 쓰기가 조금 느려지고 저장 공간이 조금 더 든다.
+          </p>
+          <div class="callout warn">
+            <p>
+              묶은 컬럼 중 하나라도 <code>NULL</code>이면 PostgreSQL은 기본 동작(<code>MATCH SIMPLE</code>)에서 그 행의 외래 키
+              검사를 건너뛴다. 복합 외래 키로 규칙을 지키려면 묶은 컬럼을 모두 <code>NOT NULL</code>로 둔다.
             </p>
           </div>
         </section>

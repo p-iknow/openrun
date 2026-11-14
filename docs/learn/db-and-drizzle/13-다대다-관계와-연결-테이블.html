@@ -1,0 +1,555 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>13 다대다 관계와 연결 테이블</title>
+    <link rel="stylesheet" href="../learn.css" />
+    <script src="../vendor/highlightjs/highlight.min.js" defer></script>
+    <script src="../learn.js" defer></script>
+  </head>
+  <body>
+    <div class="layout">
+      <nav aria-label="목차">
+        <strong>목차</strong>
+        <ol>
+          <li><a href="#one-to-many">출발점: 일대다는 외래 키 하나로 된다</a></li>
+          <li><a href="#problem">양쪽 다 여러 개면 칸 하나로 안 된다</a></li>
+          <li><a href="#join-table">해결: 관계 자체를 행으로 만든다</a></li>
+          <li><a href="#attributes">관계에 붙은 정보도 연결 행에 둔다</a></li>
+          <li><a href="#repo">이 저장소의 연결 테이블</a></li>
+          <li><a href="#key">연결 테이블의 키 고르기</a></li>
+          <li><a href="#when">언제 만드는지 판단하는 법</a></li>
+          <li><a href="#check">스스로 확인하기</a></li>
+        </ol>
+      </nav>
+
+      <main>
+        <h1>13 다대다 관계와 연결 테이블</h1>
+        <p class="lead">
+          양쪽 모두 "여러 개"인 관계(다대다)를 왜 외래 키 하나로 표현할 수 없는지, 연결 테이블이 그 문제를 어떻게 푸는지, 언제
+          만드는지를 본다. 예시는 학생과 수업으로 시작하고, 이 저장소의 회차 좌석(<code>performance_seats</code>)과 좌석 등급
+          지정(<code>seat_grade_assignments</code>)으로 이어 간다. 외래 키와 일대다 관계는
+          <a href="01-프론트엔드-개발자를-위한-DB-개념.html#fk">db-and-drizzle 01 문서</a>에 있다.
+        </p>
+
+        <section id="one-to-many">
+          <h2>출발점: 일대다는 외래 키 하나로 된다</h2>
+          <p>
+            공연장 하나에 공연이 여러 개 열리고, 공연 하나는 공연장 하나에서만 열린다. 이런
+            <a href="01-프론트엔드-개발자를-위한-DB-개념.html#one-to-many">일대다 관계</a>는 "다" 쪽 행에 상대의 id를 하나 적으면
+            된다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th colspan="3">shows (공연)</th></tr><tr><th>id</th><th>title</th><th>venue_id</th></tr></thead>
+              <tbody>
+                <tr><td>1</td><td>뮤지컬 A</td><td><strong>7</strong></td></tr>
+                <tr><td>2</td><td>콘서트 B</td><td><strong>7</strong></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>공연 행마다 공연장이 <strong>딱 하나</strong>라서 칸 하나(<code>venue_id</code>)에 들어간다.</p>
+        </section>
+
+        <section id="problem">
+          <h2>양쪽 다 여러 개면 칸 하나로 안 된다</h2>
+          <p>학생과 수업을 보자.</p>
+          <ul>
+            <li>학생 한 명은 수업을 <strong>여러 개</strong> 듣는다.</li>
+            <li>수업 하나에는 학생이 <strong>여러 명</strong> 있다.</li>
+          </ul>
+          <p>
+            양쪽 모두 "여러 개"인 관계를 <strong>다대다</strong>라고 한다. 외래 키를 어느 쪽에 두어도 칸 하나로는 표현할 수 없다.
+            철수가 수학과 영어를 둘 다 들으면 학생 행의 <code>course_id</code> 칸에 무엇을 넣어야 할까?
+          </p>
+          <p>칸에 목록을 넣으면 들어가기는 한다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th colspan="3">students (목록을 넣은 경우)</th></tr><tr><th>id</th><th>name</th><th>course_ids</th></tr></thead>
+              <tbody>
+                <tr><td>1</td><td>철수</td><td>[10, 11]</td></tr>
+                <tr><td>2</td><td>영희</td><td>[10]</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>하지만 이렇게 두면 문제가 생긴다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>하고 싶은 일</th><th>목록 칸일 때</th></tr></thead>
+              <tbody>
+                <tr><td>수학(10)을 듣는 학생 찾기</td><td>모든 학생의 목록을 하나씩 열어 봐야 한다</td></tr>
+                <tr><td>없는 수업 id 막기</td><td>목록 안의 값에는 외래 키를 걸 수 없다. 99가 들어가도 DB가 모른다</td></tr>
+                <tr><td>같은 수업 두 번 신청 막기</td><td>목록 안의 중복은 유니크 제약으로 막을 수 없다</td></tr>
+                <tr><td>수강 취소</td><td>목록을 꺼내 고치고 다시 저장해야 한다</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="join-table">
+          <h2>해결: 관계 자체를 행으로 만든다</h2>
+          <p>
+            "철수가 수학을 듣는다"는 <strong>사실 하나를 행 하나</strong>로 적는 테이블을 따로 둔다. 이 테이블을
+            <strong>연결 테이블</strong>(join table, 교차 테이블)이라고 한다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th colspan="2">students</th></tr><tr><th>id</th><th>name</th></tr></thead>
+              <tbody>
+                <tr><td>1</td><td>철수</td></tr>
+                <tr><td>2</td><td>영희</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th colspan="2">courses</th></tr><tr><th>id</th><th>name</th></tr></thead>
+              <tbody>
+                <tr><td>10</td><td>수학</td></tr>
+                <tr><td>11</td><td>영어</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th colspan="3">enrollments (연결 테이블)</th></tr><tr><th>student_id</th><th>course_id</th><th>뜻</th></tr></thead>
+              <tbody>
+                <tr><td><strong>1</strong></td><td><strong>10</strong></td><td>철수가 수학을 듣는다</td></tr>
+                <tr><td><strong>1</strong></td><td><strong>11</strong></td><td>철수가 영어를 듣는다</td></tr>
+                <tr><td><strong>2</strong></td><td><strong>10</strong></td><td>영희가 수학을 듣는다</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>연결 행은 외래 키 두 개를 들고 각각 한쪽을 가리킨다. 그러면 다대다 관계가 일대다 두 개로 쪼개진다.</p>
+          <div class="erd" style="--erd-cols: 3">
+            <div class="erd-table" data-table="students" style="grid-area: 1 / 1">
+              <div class="erd-title">students <small>학생</small></div>
+              <ul>
+                <li data-key="PK">id</li>
+                <li>name</li>
+              </ul>
+            </div>
+            <div class="erd-table" data-table="enrollments" style="grid-area: 1 / 2">
+              <div class="erd-title">enrollments <small>수강 (연결 테이블)</small></div>
+              <ul>
+                <li data-key="PK FK" data-ref="students.id">student_id</li>
+                <li data-key="PK FK" data-ref="courses.id">course_id</li>
+              </ul>
+              <p class="erd-constraints">PRIMARY KEY (student_id, course_id)</p>
+            </div>
+            <div class="erd-table" data-table="courses" style="grid-area: 1 / 3">
+              <div class="erd-title">courses <small>수업</small></div>
+              <ul>
+                <li data-key="PK">id</li>
+                <li>name</li>
+              </ul>
+            </div>
+          </div>
+          <p class="erd-note">
+            두 선 모두 까마귀 발(여러 개)이 연결 테이블 쪽에 있다. 학생 하나에 수강 행이 여러 개, 수업 하나에 수강 행이 여러 개다.
+          </p>
+          <p>앞 절의 문제가 모두 풀린다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>하고 싶은 일</th><th>연결 테이블일 때</th></tr></thead>
+              <tbody>
+                <tr><td>수학(10)을 듣는 학생 찾기</td><td><code>course_id = 10</code>인 행을 찾는다. 인덱스도 쓸 수 있다</td></tr>
+                <tr><td>없는 수업 id 막기</td><td>칸마다 값이 하나라 <code>course_id</code>에 외래 키를 건다</td></tr>
+                <tr><td>같은 수업 두 번 신청 막기</td><td><code>(student_id, course_id)</code>에 기본 키나 유니크 제약을 건다</td></tr>
+                <tr><td>수강 취소</td><td>행 하나를 지운다</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>자바스크립트로 보면, 객체 안에 배열을 품는 대신 관계를 담은 배열을 따로 두는 것과 같다.</p>
+          <pre><code class="language-ts">// 품기: 한쪽 객체 안에 목록
+const student = { id: 1, name: '철수', courseIds: [10, 11] };
+
+// 연결 테이블: 관계를 따로 나열
+const enrollments = [
+  { studentId: 1, courseId: 10 },
+  { studentId: 1, courseId: 11 },
+  { studentId: 2, courseId: 10 },
+];
+enrollments.filter((e) =&gt; e.courseId === 10); // 수학 듣는 학생
+enrollments.filter((e) =&gt; e.studentId === 1); // 철수가 듣는 수업</code></pre>
+          <p>
+            학생 쪽에서 찾든 수업 쪽에서 찾든 같은 방법이다. 한쪽 객체에 목록을 품으면 반대쪽에서 찾기가 어려워지는데, 연결
+            테이블은 양쪽이 대칭이다.
+          </p>
+        </section>
+
+        <section id="attributes">
+          <h2>관계에 붙은 정보도 연결 행에 둔다</h2>
+          <p>
+            "철수가 수학에서 받은 성적"은 어디에 둘까? 학생의 정보도 아니고 수업의 정보도 아니다. <strong>철수와 수학의
+            관계</strong>에만 붙는 정보다. 그래서 연결 행에 둔다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th colspan="3">enrollments</th></tr><tr><th>student_id</th><th>course_id</th><th>grade</th></tr></thead>
+              <tbody>
+                <tr><td><strong>1</strong></td><td><strong>10</strong></td><td>A</td></tr>
+                <tr><td><strong>1</strong></td><td><strong>11</strong></td><td>B</td></tr>
+                <tr><td><strong>2</strong></td><td><strong>10</strong></td><td>B</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>성적을 두는 곳</th><th>생기는 문제</th></tr></thead>
+              <tbody>
+                <tr><td>students</td><td>철수의 성적이 수업마다 다른데 칸은 하나다</td></tr>
+                <tr><td>courses</td><td>수학의 성적이 학생마다 다른데 칸은 하나다</td></tr>
+                <tr><td>enrollments</td><td>철수 × 수학 행에 하나씩 들어간다</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout">
+            <p>
+              어떤 정보가 "A의 것도 B의 것도 아니고 A와 B의 조합에 붙는다"면, 그 정보는 연결 행에 둔다. 이 저장소의 연결 테이블은
+              모두 이런 정보를 가진다.
+            </p>
+          </div>
+        </section>
+
+        <section id="repo">
+          <h2>이 저장소의 연결 테이블</h2>
+          <p>이 저장소에는 연결 테이블이 둘 있고, 둘 다 좌석(<code>seats</code>)을 한쪽으로 가리킨다.</p>
+          <div class="erd" style="--erd-cols: 3">
+            <div class="erd-table" data-table="performances" style="grid-area: 1 / 1">
+              <div class="erd-title">performances <small>회차</small></div>
+              <ul>
+                <li data-key="PK">id</li>
+                <li data-key="FK" data-ref="shows.id">show_id</li>
+                <li>starts_at</li>
+              </ul>
+            </div>
+            <div class="erd-table" data-table="shows" style="grid-area: 2 / 1">
+              <div class="erd-title">shows <small>공연</small></div>
+              <ul>
+                <li data-key="PK">id</li>
+                <li>title</li>
+              </ul>
+            </div>
+            <div class="erd-table" data-table="performance_seats" style="grid-area: 1 / 2">
+              <div class="erd-title">performance_seats <small>회차 좌석 (연결 테이블)</small></div>
+              <ul>
+                <li data-key="PK">id</li>
+                <li data-key="FK" data-ref="performances.id">performance_id</li>
+                <li data-key="FK" data-ref="seats.id">seat_id</li>
+                <li class="erd-mark">is_sold</li>
+              </ul>
+              <p class="erd-constraints">UNIQUE (performance_id, seat_id)</p>
+            </div>
+            <div class="erd-table" data-table="seat_grade_assignments" style="grid-area: 2 / 2">
+              <div class="erd-title">seat_grade_assignments <small>좌석 등급 지정 (연결 테이블)</small></div>
+              <ul>
+                <li data-key="PK FK" data-ref="shows.id">show_id</li>
+                <li data-key="PK FK" data-ref="seats.id">seat_id</li>
+                <li class="erd-mark" data-key="FK">seat_grade_id</li>
+              </ul>
+              <p class="erd-constraints">PRIMARY KEY (show_id, seat_id)</p>
+            </div>
+            <div class="erd-table" data-table="seats" style="grid-area: 1 / 3 / 3 / 4; align-self: center">
+              <div class="erd-title">seats <small>좌석</small></div>
+              <ul>
+                <li data-key="PK">id</li>
+                <li data-key="FK">section_id</li>
+                <li>row</li>
+                <li>number</li>
+              </ul>
+            </div>
+          </div>
+          <p class="erd-note">
+            왼쪽 빨간 줄이 표시된 칸(<code>is_sold</code>, <code>seat_grade_id</code>)이 "두 대상의 조합"에 붙는 정보다. 좌석 등급
+            테이블(<code>seat_grades</code>)과 이어지는 선은 <a href="12-좌석-등급-스키마와-복합-외래-키.html">12 문서</a>의
+            관계도에 있다.
+          </p>
+
+          <h3 id="performance-seats">회차 좌석: 회차 × 좌석 → 판매 여부</h3>
+          <ul>
+            <li>회차 하나는 좌석 <strong>여러 개</strong>를 판다(공연장의 모든 좌석).</li>
+            <li>좌석 하나는 회차 <strong>여러 개</strong>에서 팔린다(그 공연장에서 열리는 모든 회차).</li>
+          </ul>
+          <p>
+            "팔렸나"는 좌석만의 정보가 아니다. A구역 1열 1번이 11-20 회차에서는 팔렸어도 11-21 회차에서는 비어 있을 수 있다.
+            <strong>이 회차의 이 좌석</strong>에 붙는 정보라서 연결 행에 둔다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th colspan="5">performance_seats (회차 좌석)</th></tr><tr><th>id</th><th>performance_id</th><th>seat_id</th><th>is_sold</th><th>뜻</th></tr></thead>
+              <tbody>
+                <tr><td>1</td><td><strong>7</strong></td><td><strong>500</strong></td><td>true</td><td>11-20 회차의 A구역 1열 1번은 팔림</td></tr>
+                <tr><td>2</td><td><strong>8</strong></td><td><strong>500</strong></td><td>false</td><td>11-21 회차의 같은 자리는 비어 있음</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            <code>unique(performance_id, seat_id)</code>가 같은 회차에 같은 좌석이 두 번 생기는 것을 막는다. 자세한 내용은
+            <a href="07-구역-좌석-회차-좌석-스키마.html#performance-seats">07 문서</a>에 있다.
+          </p>
+
+          <h3 id="seat-grade-assignments">좌석 등급 지정: 공연 × 좌석 → 등급</h3>
+          <ul>
+            <li>공연 하나는 좌석 <strong>여러 개</strong>에 등급을 정한다.</li>
+            <li>좌석 하나는 공연 <strong>여러 개</strong>에서 등급을 받는다(같은 공연장에서 열리는 공연마다).</li>
+          </ul>
+          <p>
+            같은 A구역 1열 1번이 뮤지컬 A에서는 VIP석이고 콘서트 B에서는 스탠딩이다. 등급은 <strong>이 공연의 이 좌석</strong>에 붙는
+            정보라서 연결 행에 둔다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th colspan="4">seat_grade_assignments (좌석 등급 지정)</th></tr><tr><th>show_id</th><th>seat_id</th><th>seat_grade_id</th><th>뜻</th></tr></thead>
+              <tbody>
+                <tr><td><strong>1</strong></td><td><strong>500</strong></td><td><strong>10</strong></td><td>뮤지컬 A의 A구역 1열 1번은 VIP석</td></tr>
+                <tr><td><strong>2</strong></td><td><strong>500</strong></td><td><strong>20</strong></td><td>콘서트 B의 같은 자리는 스탠딩</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            등급을 <code>seats</code>에 두면 공연마다 다른 등급을 표현할 수 없고, <code>shows</code>에 두면 좌석 수만큼 칸이 필요하다.
+            기본 키 <code>(show_id, seat_id)</code>가 "공연마다 좌석 하나에 등급은 하나"를 지킨다. 등급이 다른 공연의 것이 되지 않게
+            막는 방법은 <a href="12-좌석-등급-스키마와-복합-외래-키.html">12 문서</a>에 있다.
+          </p>
+        </section>
+
+        <section id="key">
+          <h2>연결 테이블의 키 고르기</h2>
+          <p>
+            연결 테이블에는 "같은 조합이 두 번 들어가지 않게" 막는 장치가 거의 항상 필요하다. 같은 회차에 같은 좌석이 두 번
+            생기거나, 같은 공연의 같은 좌석에 등급이 두 번 붙으면 안 되기 때문이다. 막는 방법이 두 가지 있고, 이 저장소의 두 연결
+            테이블이 하나씩 쓴다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th></th><th>회차 좌석 <code>performance_seats</code></th><th>좌석 등급 지정 <code>seat_grade_assignments</code></th></tr></thead>
+              <tbody>
+                <tr><td>기본 키</td><td><code>id</code> (따로 둔 번호)</td><td><code>(show_id, seat_id)</code> (조합 그대로)</td></tr>
+                <tr><td>조합 중복 막기</td><td><code>UNIQUE (performance_id, seat_id)</code>를 따로 건다</td><td>기본 키가 막는다</td></tr>
+                <tr><td>생기는 인덱스</td><td>2개 (<code>id</code>, 조합)</td><td>1개 (조합)</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            중복을 막는 효과는 둘이 같다. 고르는 기준은 하나다. <strong>다른 테이블이 이 행을 가리켜야 하는가?</strong>
+          </p>
+
+          <h3 id="key-ticket">예: 티켓이 회차 좌석을 가리킬 때</h3>
+          <p>
+            예매 기능이 생기면 회차 좌석을 가리키는 테이블이 여럿 생긴다. <a href="../../../GLOSSARY.md">용어집</a>에 정해 둔 좌석
+            선점(결제 전까지 좌석을 한 사용자에게 묶어 두기), 주문(회차 좌석 최대 4석), 티켓(회차 좌석 하나당 하나)이 모두 "어느
+            회차 좌석인가"를 적어야 한다. 그중 티켓 테이블을 만든다고 생각해 보자. 회차 좌석의 기본 키 모양에 따라 티켓이 들고 있어야
+            하는 칸이 달라진다.
+          </p>
+
+          <h4>회차 좌석에 id가 있을 때 (지금 구조)</h4>
+          <div class="erd" style="--erd-cols: 2">
+            <div class="erd-table" data-table="tickets" style="grid-area: 1 / 1">
+              <div class="erd-title">tickets <small>티켓</small></div>
+              <ul>
+                <li data-key="PK">id</li>
+                <li class="erd-mark" data-key="FK" data-ref="performance_seats.id">performance_seat_id</li>
+              </ul>
+            </div>
+            <div class="erd-table" data-table="performance_seats" style="grid-area: 1 / 2">
+              <div class="erd-title">performance_seats <small>회차 좌석</small></div>
+              <ul>
+                <li data-key="PK">id</li>
+                <li data-key="FK">performance_id</li>
+                <li data-key="FK">seat_id</li>
+                <li>is_sold</li>
+              </ul>
+              <p class="erd-constraints">UNIQUE (performance_id, seat_id)</p>
+            </div>
+          </div>
+          <p class="erd-note">티켓은 칸 하나(<code>performance_seat_id</code>)로 회차 좌석을 가리킨다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th colspan="2">tickets</th></tr><tr><th>id</th><th>performance_seat_id</th></tr></thead>
+              <tbody>
+                <tr><td>1</td><td><strong>1</strong></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <pre><code class="language-ts">performanceSeatId: integer('performance_seat_id')
+  .notNull()
+  .references(() =&gt; performanceSeats.id),</code></pre>
+
+          <h4>회차 좌석의 기본 키가 조합일 때</h4>
+          <div class="erd" style="--erd-cols: 2">
+            <div class="erd-table" data-table="tickets" style="grid-area: 1 / 1">
+              <div class="erd-title">tickets <small>티켓</small></div>
+              <ul>
+                <li data-key="PK">id</li>
+                <li class="erd-mark" data-key="FK" data-ref-composite="performance_seats.performance_id">performance_id</li>
+                <li class="erd-mark" data-key="FK" data-ref-composite="performance_seats.seat_id">seat_id</li>
+              </ul>
+            </div>
+            <div class="erd-table" data-table="performance_seats" style="grid-area: 1 / 2">
+              <div class="erd-title">performance_seats <small>회차 좌석</small></div>
+              <ul>
+                <li data-key="PK FK">performance_id</li>
+                <li data-key="PK FK">seat_id</li>
+                <li>is_sold</li>
+              </ul>
+              <p class="erd-constraints">PRIMARY KEY (performance_id, seat_id)</p>
+            </div>
+          </div>
+          <p class="erd-note">티켓이 칸 두 개를 들고, 두 칸을 묶은 복합 외래 키(초록 점선)로 회차 좌석을 가리킨다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th colspan="3">tickets</th></tr><tr><th>id</th><th>performance_id</th><th>seat_id</th></tr></thead>
+              <tbody>
+                <tr><td>1</td><td><strong>7</strong></td><td><strong>500</strong></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <pre><code class="language-ts">(table) =&gt; [
+  foreignKey({
+    columns: [table.performanceId, table.seatId],
+    foreignColumns: [performanceSeats.performanceId, performanceSeats.seatId],
+  }),
+],</code></pre>
+
+          <h4>두 구조를 비교하면</h4>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>할 일</th><th>id가 있을 때</th><th>조합이 기본 키일 때</th></tr></thead>
+              <tbody>
+                <tr><td>티켓에 둘 칸</td><td>1개</td><td>2개</td></tr>
+                <tr><td>외래 키</td><td><code>.references()</code> 한 줄</td><td><a href="02-drizzle-스키마-문법.html#foreign-key">복합 외래 키</a></td></tr>
+                <tr><td>JOIN 조건</td><td><code>on performance_seats.id = tickets.performance_seat_id</code></td><td><code>on performance_seats.performance_id = tickets.performance_id and performance_seats.seat_id = tickets.seat_id</code></td></tr>
+                <tr><td>API로 주고받기</td><td>"회차 좌석 1번" 숫자 하나</td><td>"회차 7의 좌석 500" 값 두 개</td></tr>
+                <tr><td>가리키는 테이블이 셋(선점, 주문, 티켓)이면</td><td>칸 하나짜리 외래 키가 세 곳에 생긴다</td><td>칸 두 개와 복합 외래 키가 세 곳에 생긴다</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout">
+            <p>
+              다른 테이블이 자주 가리킬 행이라면, 그 행을 부를 짧은 이름 하나(<code>id</code>)를 따로 두는 편이 가리키는 쪽 모두를
+              단순하게 만든다. 조합 중복은 <code>UNIQUE</code>로 따로 막는다.
+            </p>
+          </div>
+
+          <h3 id="key-leaf">아무도 가리키지 않으면 조합이 기본 키로 충분하다</h3>
+          <p>
+            좌석 등급 지정은 다른 테이블이 가리키지 않는 끝자리 테이블이다. 읽을 때도 "이 공연의 좌석들의 등급"처럼 늘
+            <code>show_id</code>로 찾는다. 여기에 <code>id</code>를 따로 두면 얻는 것 없이 비용만 는다.
+          </p>
+          <ul>
+            <li>칸 하나와 그 칸의 인덱스가 더 생긴다. 공연 수 × 좌석 수만큼 행이 쌓이는 테이블이라 행마다 붙는 비용이 크다.</li>
+            <li>중복을 막으려면 어차피 <code>UNIQUE (show_id, seat_id)</code>를 따로 걸어야 해서 인덱스가 둘이 된다.</li>
+          </ul>
+          <p>
+            조합을 기본 키로 쓰면 인덱스 하나가 중복 막기와 <code>show_id</code>로 찾기를 모두 맡는다. 앞 컬럼이
+            <code>show_id</code>라서 <a href="01-프론트엔드-개발자를-위한-DB-개념.html#composite-index">앞 컬럼 규칙</a>대로
+            <code>show_id</code>만으로 찾을 때도 쓰인다.
+          </p>
+          <pre><code class="language-ts">// 다른 테이블이 가리킬 행: id 기본 키 + 조합 유니크
+(table) =&gt; [unique().on(table.performanceId, table.seatId)],
+
+// 아무도 가리키지 않는 행: 조합 기본 키
+(table) =&gt; [primaryKey({ columns: [table.showId, table.seatId] })],</code></pre>
+
+          <h3 id="key-rule">판단 기준</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>다른 테이블이 이 행을 가리키나?</th><th>고르는 키</th><th>이 저장소</th></tr></thead>
+              <tbody>
+                <tr><td>예, 또는 앞으로 가리킬 예정이다</td><td><code>id</code> 기본 키 + 조합 <code>UNIQUE</code></td><td><code>performance_seats</code></td></tr>
+                <tr><td>아니다</td><td>조합 기본 키</td><td><code>seat_grade_assignments</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout warn">
+            <p>
+              회차 좌석에 <code>id</code>를 둔 이유는 스키마 주석(<code>apps/api/src/db/schema/shows.ts</code>의
+              <code>performanceSeats</code>)에 적혀 있다. 다만 회차 좌석을 가리키는 좌석 선점, 주문, 티켓 테이블은 예매 기능을 만들 때
+              생기므로 아직 없다. 지금 <code>id</code>는 남은 좌석 수를 셀 때(<code>count(performance_seats.id)</code>)만 쓰인다.
+            </p>
+          </div>
+        </section>
+
+        <section id="when">
+          <h2>언제 만드는지 판단하는 법</h2>
+          <p>두 대상 A, B 사이에 관계가 있으면 두 질문을 한다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>A 하나에 B가 여러 개?</th><th>B 하나에 A가 여러 개?</th><th>관계</th><th>만드는 것</th></tr></thead>
+              <tbody>
+                <tr><td>예</td><td>아니오</td><td>일대다</td><td>B에 <code>a_id</code> 외래 키 하나</td></tr>
+                <tr><td>아니오</td><td>예</td><td>다대일</td><td>A에 <code>b_id</code> 외래 키 하나</td></tr>
+                <tr><td>예</td><td>예</td><td>다대다</td><td><strong>연결 테이블</strong></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>이런 생각이 들면 연결 테이블이 필요하다는 신호다.</p>
+          <ul>
+            <li>"이 칸에 id를 <strong>여러 개</strong> 넣고 싶다" (배열 컬럼, 쉼표로 이은 문자열)</li>
+            <li>"이 정보는 A의 것도 B의 것도 아니고 <strong>A와 B의 조합</strong>에 붙는다" (판매 여부, 등급, 성적)</li>
+          </ul>
+          <p>실제 서비스에서 흔한 예는 이렇다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>관계</th><th>연결 행에 붙는 정보</th></tr></thead>
+              <tbody>
+                <tr><td>게시글 × 태그</td><td>없음. 관계만 있다</td></tr>
+                <tr><td>사용자 × 찜한 공연</td><td>찜한 시각</td></tr>
+                <tr><td>주문 × 상품</td><td>수량, 주문할 때의 가격</td></tr>
+                <tr><td>회차 × 좌석</td><td>판매 여부</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout warn">
+            <p>
+              PostgreSQL에는 배열 컬럼(<code>integer[]</code>)이 있어서 목록을 칸 하나에 넣을 수는 있다. 하지만 배열 안의 값에는 외래
+              키를 걸 수 없으므로, 다른 테이블의 id를 담는 관계에는 연결 테이블을 쓴다.
+            </p>
+          </div>
+        </section>
+
+        <section id="check">
+          <h2>스스로 확인하기</h2>
+          <div class="quiz">
+            <p class="quiz-q">1. 아래 관계마다 외래 키 하나로 될지, 연결 테이블이 필요할지 답한다.</p>
+            <ul>
+              <li>가. 구역과 좌석</li>
+              <li>나. 공연과 출연 배우</li>
+              <li>다. 공연과 좌석 등급</li>
+            </ul>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>가: 좌석 하나는 구역 하나에만 있다. 일대다라서 <code>seats.section_id</code> 외래 키 하나로 된다.</p>
+                <p>
+                  나: 공연 하나에 배우가 여러 명이고, 배우 한 명은 공연 여러 개에 나온다. 다대다라서 연결 테이블이 필요하다. 배역 이름
+                  같은 정보는 연결 행에 둔다.
+                </p>
+                <p>다: 등급은 공연 하나에만 속한다(뮤지컬 A의 VIP석). 일대다라서 <code>seat_grades.show_id</code> 외래 키 하나로 된다.</p>
+              </div>
+            </details>
+          </div>
+          <div class="quiz">
+            <p class="quiz-q">2. 판매 여부를 좌석에 두면 어떤 일이 생기는가?</p>
+            <p class="quiz-context"><a href="#performance-seats">회차 좌석</a> 절의 <code>is_sold</code>를 옮긴다고 생각한다.</p>
+            <pre><code class="language-diff"> export const seats = pgTable('seats', {
+   id: integer().primaryKey().generatedAlwaysAsIdentity(),
++  isSold: boolean('is_sold').notNull().default(false),
+ });</code></pre>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  좌석은 회차와 상관없이 하나뿐이라, 11-20 회차에서 A구역 1열 1번을 팔면 11-21 회차를 포함한 모든 회차에서 그 자리가
+                  팔린 것으로 보인다. 판매 여부는 회차와 좌석의 조합에 붙는 정보라서 연결 행에 두어야 한다.
+                </p>
+              </div>
+            </details>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

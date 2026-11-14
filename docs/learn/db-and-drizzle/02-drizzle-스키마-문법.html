@@ -22,6 +22,7 @@
           <li><a href="#default">.default()와 .defaultNow()</a></li>
           <li><a href="#timestamp">timestamp 옵션</a></li>
           <li><a href="#references">.references()</a></li>
+          <li><a href="#foreign-key">foreignKey()</a></li>
           <li><a href="#index">index()</a></li>
           <li><a href="#unique">unique()</a></li>
           <li><a href="#pg-enum">pgEnum</a></li>
@@ -449,6 +450,68 @@ startsAt: timestamp('starts_at', { withTimezone: true, mode: 'string' }),</code>
             <p>
               PostgreSQL은 외래 키 컬럼에 인덱스를 자동으로 만들지 않는다. 그 컬럼으로 찾는 일이 있으면
               <a href="#index">index()</a>를 따로 둔다.
+            </p>
+          </div>
+        </section>
+
+        <section id="foreign-key">
+          <h2>foreignKey()</h2>
+          <pre><code class="language-ts">import { foreignKey } from 'drizzle-orm/pg-core';
+
+export const seatGradeAssignments = pgTable(
+  'seat_grade_assignments',
+  { /* ... */ showId: integer('show_id').notNull(), seatGradeId: integer('seat_grade_id').notNull() },
+  (table) =&gt; [
+    foreignKey({
+      name: 'seat_grade_assignments_seat_grade_fk',
+      columns: [table.seatGradeId, table.showId],
+      foreignColumns: [seatGrades.id, seatGrades.showId],
+    }),
+  ],
+);</code></pre>
+          <pre><code class="language-sql">ALTER TABLE "seat_grade_assignments" ADD CONSTRAINT "seat_grade_assignments_seat_grade_fk"
+  FOREIGN KEY ("seat_grade_id","show_id") REFERENCES "public"."seat_grades"("id","show_id")
+  ON DELETE no action ON UPDATE no action;</code></pre>
+          <p>
+            <a href="#pg-table">pgTable</a>의 세 번째 인자에서 외래 키를 만든다. <a href="#references">.references()</a>는 컬럼 하나에만
+            붙으므로, 컬럼 여러 개를 묶는 <a href="01-프론트엔드-개발자를-위한-DB-개념.html#composite-fk">복합 외래 키</a>는 이
+            문법으로 만든다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>옵션</th>
+                  <th>뜻</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>columns</code></td>
+                  <td>이 테이블의 외래 키 컬럼들</td>
+                </tr>
+                <tr>
+                  <td><code>foreignColumns</code></td>
+                  <td>가리킬 테이블의 컬럼들. <code>columns</code>와 같은 순서로 짝을 맞춘다</td>
+                </tr>
+                <tr>
+                  <td><code>name</code></td>
+                  <td>제약 이름. 주지 않으면 drizzle-kit이 <code>테이블_컬럼들_대상테이블_대상컬럼들_fk</code>로 짓는다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            <code>onDelete</code>, <code>onUpdate</code>는 객체 옵션이 아니라 메서드로 붙인다:
+            <code>foreignKey({ ... }).onDelete('cascade')</code>. 값의 뜻은 <a href="#on-delete">onDelete, onUpdate</a>와 같다.
+          </p>
+          <div class="callout warn">
+            <p>
+              PostgreSQL의 이름은 63바이트까지라 넘는 부분은 잘린다. 복합 외래 키는 자동 이름에 컬럼 이름이 모두 들어가 길어지기
+              쉬우므로 <code>name</code>을 직접 준다. 가리키는 컬럼 묶음에는 <a href="#unique">unique()</a>가 있어야 한다(<a
+                href="01-프론트엔드-개발자를-위한-DB-개념.html#fk-needs-unique"
+                >이유</a
+              >).
             </p>
           </div>
         </section>
