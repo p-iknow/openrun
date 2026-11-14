@@ -18,6 +18,7 @@
           <li><a href="#steps">단계</a></li>
           <li><a href="#tree">트리</a></li>
           <li><a href="#code">코드</a></li>
+          <li><a href="#erd">테이블 관계도</a></li>
           <li><a href="#table">표와 배지</a></li>
           <li><a href="#callout">강조 상자</a></li>
           <li><a href="#check">접는 질문</a></li>
@@ -118,6 +119,36 @@
             <code>language-ts</code>를 붙이면 구문이 강조된다.
           </p>
           <pre><code class="language-ts">const value = await load();</code></pre>
+        </section>
+
+        <section id="erd">
+          <h2>테이블 관계도</h2>
+          <div class="erd" style="--erd-cols: 3">
+            <div class="erd-table" data-table="students" style="grid-area: 1 / 1">
+              <div class="erd-title">students <small>학생</small></div>
+              <ul>
+                <li data-key="PK">id</li>
+                <li>name</li>
+              </ul>
+            </div>
+            <div class="erd-table" data-table="enrollments" style="grid-area: 1 / 2">
+              <div class="erd-title">enrollments <small>수강</small></div>
+              <ul>
+                <li data-key="PK FK" data-ref="students.id">student_id</li>
+                <li data-key="PK FK" data-ref="courses.id">course_id</li>
+                <li class="erd-mark">grade</li>
+              </ul>
+              <p class="erd-constraints">PRIMARY KEY (student_id, course_id)</p>
+            </div>
+            <div class="erd-table" data-table="courses" style="grid-area: 1 / 3">
+              <div class="erd-title">courses <small>수업</small></div>
+              <ul>
+                <li data-key="PK">id</li>
+                <li>name</li>
+              </ul>
+            </div>
+          </div>
+          <p class="erd-note">선과 표시를 읽는 법을 적는다. 까마귀 발(N) 쪽이 여러 개, 막대(1) 쪽이 하나다.</p>
         </section>
 
         <section id="table">

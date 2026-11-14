@@ -339,6 +339,23 @@
           "url"
         ]
       },
+      "SeatGradeDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "좌석 등급 이름. 예: VIP석"
+          },
+          "price": {
+            "type": "integer",
+            "description": "가격(원)"
+          }
+        },
+        "required": [
+          "name",
+          "price"
+        ]
+      },
       "PerformanceSalesStatus": {
         "type": "string",
         "enum": [
@@ -465,6 +482,13 @@
               "$ref": "#/components/schemas/ShowDetailImageDto"
             }
           },
+          "seatGrades": {
+            "description": "공연의 좌석 등급. 가격이 높은 순이고, 가격이 같으면 먼저 만든 등급이 앞이다.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SeatGradeDto"
+            }
+          },
           "performances": {
             "description": "시작 전 회차를 시작 일시 순으로 담는다. 시작된 회차(판매 종료)는 넣지 않는다.",
             "type": "array",
@@ -486,6 +510,7 @@
           "salesStatus",
           "salesOpenAt",
           "detailImages",
+          "seatGrades",
           "performances"
         ]
       },

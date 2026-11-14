@@ -43,6 +43,13 @@
       "when": 1794468731738,
       "tag": "0005_create_show_detail_images",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794622858392,
+      "tag": "0006_create_seat_grades",
+      "breakpoints": true
     }
   ]
 }

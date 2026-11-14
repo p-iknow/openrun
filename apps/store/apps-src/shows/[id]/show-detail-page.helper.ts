@@ -28,6 +28,13 @@ export interface PerformanceDayData {
   performances: PerformanceItemData[];
 }
 
+export interface SeatGradeData {
+  /** 예: `VIP석` */
+  name: string;
+  /** 예: `170,000원` */
+  price: string;
+}
+
 export interface ShowDetailData {
   title: string;
   genre: string;
@@ -43,6 +50,8 @@ export interface ShowDetailData {
   posterUrl: string;
   /** 공연 소개를 담은 세로로 긴 이미지들. 보여 줄 순서대로다. */
   detailImages: ShowDetail['detailImages'];
+  /** API가 가격이 높은 순으로 준다. */
+  seatGrades: SeatGradeData[];
   salesStatus: SalesStatusBadgeData;
   /** 판매 예정일 때 판매 오픈 일시. 예: `2026.03.01 14:00 판매 오픈` */
   salesOpenAt: string | null;
@@ -51,6 +60,9 @@ export interface ShowDetailData {
   /** 시작 전 회차를 한국 날짜별로 묶었다. API가 시작 일시 순으로 주므로 날짜와 회차 모두 이른 순이다. */
   performanceDays: PerformanceDayData[];
 }
+
+// 실행하는 곳의 언어 설정과 상관없이 세 자리마다 쉼표를 찍는다(170,000).
+const PRICE_FORMAT = new Intl.NumberFormat('ko-KR');
 
 // 공연 상세 응답을 화면 값으로 바꾼다.
 export function selectShowDetail(show: ShowDetail): ShowDetailData {
@@ -90,6 +102,10 @@ export function selectShowDetail(show: ShowDetail): ShowDetailData {
     description: show.description,
     posterUrl: show.posterUrl,
     detailImages: show.detailImages,
+    seatGrades: show.seatGrades.map((grade) => ({
+      name: grade.name,
+      price: `${PRICE_FORMAT.format(grade.price)}원`,
+    })),
     salesStatus: SHOW_SALES_STATUS_BADGES[show.salesStatus],
     salesOpenAt: getSalesOpenAtLabel(show.salesOpenAt),
     isSalesEnded: show.salesStatus === 'ended',

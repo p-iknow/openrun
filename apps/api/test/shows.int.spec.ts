@@ -21,6 +21,7 @@ import {
   type Genre,
   performanceSeats,
   performances,
+  seatGrades,
   showDetailImages,
   shows,
 } from '../src/db/schema/shows.js';
@@ -164,6 +165,19 @@ async function insertVenue(name: string): Promise<number> {
   return venue.id;
 }
 
+// 공연에 좌석 등급을 넣는다. 좌석 지정은 상세 응답에 나오지 않아 넣지 않는다.
+async function insertSeatGrades({
+  showId,
+  grades,
+}: {
+  showId: number;
+  grades: { name: string; price: number }[];
+}): Promise<void> {
+  await db
+    .insert(seatGrades)
+    .values(grades.map((grade) => ({ ...grade, showId })));
+}
+
 beforeAll(() => {
   vi.stubEnv('DATABASE_URL', inject('databaseUrl'));
   vi.stubEnv('SHOW_IMAGE_BASE_URL', SHOW_IMAGE_BASE_URL);
@@ -176,7 +190,7 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await db.execute(
-    'TRUNCATE show_detail_images, performance_seats, performances, shows, seats, sections, venues RESTART IDENTITY CASCADE',
+    'TRUNCATE seat_grade_assignments, seat_grades, show_detail_images, performance_seats, performances, shows, seats, sections, venues RESTART IDENTITY CASCADE',
   );
 
   now = new Date(DEFAULT_NOW);
@@ -922,6 +936,7 @@ describe('GET /shows/:id', () => {
       salesStatus: 'on_sale',
       salesOpenAt: null,
       detailImages: [],
+      seatGrades: [],
       performances: [
         {
           id: 2,
@@ -961,6 +976,34 @@ describe('GET /shows/:id', () => {
     expect(response.body.detailImages).toEqual([
       { url: 'https://images.example.com/openrun/details/show-01-1.png' },
       { url: 'https://images.example.com/openrun/details/show-01-2.png' },
+    ]);
+  });
+
+  it('좌석 등급을 가격이 높은 순으로, 가격이 같으면 먼저 만든 순으로 담는다', async () => {
+    const venueId = await insertVenue('샤롯데씨어터');
+    const showId = await insertShow({
+      venueId,
+      title: '달빛 정원',
+      performanceStarts: ['2026-03-01T05:00:00Z'],
+    });
+    // 넣는 순서와 상관없이 가격이 높은 순으로 담는다. 휠체어석은 S석과 가격이 같고 나중에 만들었다.
+    await insertSeatGrades({
+      showId,
+      grades: [
+        { name: 'R석', price: 140_000 },
+        { name: 'S석', price: 110_000 },
+        { name: 'VIP석', price: 170_000 },
+        { name: '휠체어석', price: 110_000 },
+      ],
+    });
+
+    const response = await request(app.getHttpServer()).get(`/shows/${showId}`);
+
+    expect(response.body.seatGrades).toEqual([
+      { name: 'VIP석', price: 170_000 },
+      { name: 'R석', price: 140_000 },
+      { name: 'S석', price: 110_000 },
+      { name: '휠체어석', price: 110_000 },
     ]);
   });
 

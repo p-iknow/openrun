@@ -21,6 +21,7 @@ function showOf(overrides: Partial<ShowDetail>): ShowDetail {
     salesStatus: 'on_sale',
     salesOpenAt: null,
     detailImages: [],
+    seatGrades: [],
     performances: [],
     ...overrides,
   };
@@ -63,6 +64,22 @@ describe('selectShowDetail', () => {
       salesOpenAt: null,
       isSalesEnded: false,
     });
+  });
+
+  it('좌석 등급마다 가격을 원 단위 문구로 보여 준다', () => {
+    const detail = selectShowDetail(
+      showOf({
+        seatGrades: [
+          { name: 'VIP석', price: 170_000 },
+          { name: 'A석', price: 8_000 },
+        ],
+      }),
+    );
+
+    expect(detail.seatGrades).toEqual([
+      { name: 'VIP석', price: '170,000원' },
+      { name: 'A석', price: '8,000원' },
+    ]);
   });
 
   it('관람 연령이 0이면 전체 관람가다', () => {

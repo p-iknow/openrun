@@ -136,6 +136,14 @@ export class ShowDetailImageDto {
   url: string;
 }
 
+export class SeatGradeDto {
+  @ApiProperty({ type: String, description: '좌석 등급 이름. 예: VIP석' })
+  name: string;
+
+  @ApiProperty({ type: 'integer', description: '가격(원)' })
+  price: number;
+}
+
 export class ShowDetailDto {
   @ApiProperty({ type: 'integer', description: '공연 ID' })
   id: number;
@@ -198,6 +206,13 @@ export class ShowDetailDto {
       '공연 소개를 담은 세로로 긴 이미지들. 보여 줄 순서대로 담는다.',
   })
   detailImages: ShowDetailImageDto[];
+
+  @ApiProperty({
+    type: [SeatGradeDto],
+    description:
+      '공연의 좌석 등급. 가격이 높은 순이고, 가격이 같으면 먼저 만든 등급이 앞이다.',
+  })
+  seatGrades: SeatGradeDto[];
 
   @ApiProperty({
     type: [PerformanceDto],

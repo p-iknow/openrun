@@ -17,6 +17,7 @@ import { DATABASE, type Database } from '../db/database.module.js';
 import {
   performanceSeats,
   performances,
+  seatGrades,
   showDetailImages,
   shows,
 } from '../db/schema/shows.js';
@@ -126,57 +127,66 @@ export class ShowsService {
       remainingSeats,
     });
 
-    const [[show], detailImageRows, performanceRows] = await Promise.all([
-      this.db
-        .select({
-          id: shows.id,
-          title: shows.title,
-          genre: shows.genre,
-          minAge: shows.minAge,
-          runningMinutes: shows.runningMinutes,
-          description: shows.description,
-          posterPath: shows.posterPath,
-          venueId: venues.id,
-          venueName: venues.name,
-          start: period.start,
-          end: period.end,
-          salesStatus: salesStatus.salesStatus,
-          salesOpenAt: salesStatus.salesOpenAt,
-        })
-        .from(shows)
-        .innerJoin(venues, eq(venues.id, shows.venueId))
-        // 회차가 없는 공연은 목록처럼 없는 공연으로 본다.
-        .innerJoin(period, eq(period.showId, shows.id))
-        .innerJoin(salesStatus, eq(salesStatus.showId, shows.id))
-        .where(eq(shows.id, id)),
-      this.db
-        .select({ path: showDetailImages.path })
-        .from(showDetailImages)
-        .where(eq(showDetailImages.showId, id))
-        .orderBy(asc(showDetailImages.position)),
-      this.db
-        .select({
-          id: performances.id,
-          startsAt: performances.startsAt,
-          salesStatus: performanceStatus,
-          remainingSeats,
-          totalSeats,
-          isAlmostSoldOut: buildAlmostSoldOutCondition({
+    const [[show], detailImageRows, seatGradeRows, performanceRows] =
+      await Promise.all([
+        this.db
+          .select({
+            id: shows.id,
+            title: shows.title,
+            genre: shows.genre,
+            minAge: shows.minAge,
+            runningMinutes: shows.runningMinutes,
+            description: shows.description,
+            posterPath: shows.posterPath,
+            venueId: venues.id,
+            venueName: venues.name,
+            start: period.start,
+            end: period.end,
+            salesStatus: salesStatus.salesStatus,
+            salesOpenAt: salesStatus.salesOpenAt,
+          })
+          .from(shows)
+          .innerJoin(venues, eq(venues.id, shows.venueId))
+          // 회차가 없는 공연은 목록처럼 없는 공연으로 본다.
+          .innerJoin(period, eq(period.showId, shows.id))
+          .innerJoin(salesStatus, eq(salesStatus.showId, shows.id))
+          .where(eq(shows.id, id)),
+        this.db
+          .select({ path: showDetailImages.path })
+          .from(showDetailImages)
+          .where(eq(showDetailImages.showId, id))
+          .orderBy(asc(showDetailImages.position)),
+        this.db
+          .select({ name: seatGrades.name, price: seatGrades.price })
+          .from(seatGrades)
+          .where(eq(seatGrades.showId, id))
+          // 가격이 같으면 먼저 만든 등급을 앞에 둔다.
+          .orderBy(desc(seatGrades.price), asc(seatGrades.id)),
+        this.db
+          .select({
+            id: performances.id,
+            startsAt: performances.startsAt,
             salesStatus: performanceStatus,
             remainingSeats,
             totalSeats,
-          }),
-        })
-        .from(performances)
-        .leftJoin(
-          performanceSeats,
-          eq(performanceSeats.performanceId, performances.id),
-        )
-        // 시작 전 회차만 담는다. 판매 종료 회차는 모두 시작된 회차이고, 시작된 뒤의 취소 회차도 더 고를 수 없어 뺀다.
-        .where(and(eq(performances.showId, id), gt(performances.startsAt, now)))
-        .groupBy(performances.id)
-        .orderBy(asc(performances.startsAt), asc(performances.id)),
-    ]);
+            isAlmostSoldOut: buildAlmostSoldOutCondition({
+              salesStatus: performanceStatus,
+              remainingSeats,
+              totalSeats,
+            }),
+          })
+          .from(performances)
+          .leftJoin(
+            performanceSeats,
+            eq(performanceSeats.performanceId, performances.id),
+          )
+          // 시작 전 회차만 담는다. 판매 종료 회차는 모두 시작된 회차이고, 시작된 뒤의 취소 회차도 더 고를 수 없어 뺀다.
+          .where(
+            and(eq(performances.showId, id), gt(performances.startsAt, now)),
+          )
+          .groupBy(performances.id)
+          .orderBy(asc(performances.startsAt), asc(performances.id)),
+      ]);
 
     if (!show) {
       throw createShowNotFoundException();
@@ -195,6 +205,7 @@ export class ShowsService {
       detailImages: detailImageRows.map(({ path }) => ({
         url: buildShowImageUrl({ baseUrl: this.showImageBaseUrl, path }),
       })),
+      seatGrades: seatGradeRows,
       performances: performanceRows.map(({ startsAt, ...performance }) => ({
         ...performance,
         startsAt: startsAt.toISOString(),

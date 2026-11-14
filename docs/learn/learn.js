@@ -58,6 +58,8 @@ const learnFolders = [
       { file: '09-공연-제목-검색-쿼리-읽기.html', title: '09 공연 제목 검색 쿼리 읽기', tags: ['drizzle', 'database'] },
       { file: '10-장르-판매-상태-필터-쿼리-읽기.html', title: '10 장르·판매 상태 필터 쿼리 읽기', tags: ['drizzle', 'database'] },
       { file: '11-행-단위-값과-그룹-단위-값.html', title: '11 행 단위 값과 그룹 단위 값, 함수 종속성', tags: ['database'] },
+      { file: '12-좌석-등급-스키마와-복합-외래-키.html', title: '12 좌석 등급 스키마와 복합 외래 키', tags: ['drizzle', 'database'] },
+      { file: '13-다대다-관계와-연결-테이블.html', title: '13 다대다 관계와 연결 테이블', tags: ['database'] },
     ],
   },
   {
@@ -216,9 +218,217 @@ function highlightCode() {
   document.querySelectorAll('pre code[class*="language-"]').forEach((codeElement) => {
     hljs.highlightElement(codeElement);
   });
+  document.querySelectorAll('pre code[data-lines]').forEach(markLines);
+}
+
+// code의 data-lines="3-8 10"이 가리키는 줄(1부터)에 배경색을 칠한다. 범위는 공백으로 나눈다.
+// 구문 강조가 만든 span이 여러 줄에 걸칠 수 있으므로, 줄마다 span을 새로 열고 닫아 줄 단위로 감싼다.
+function markLines(codeElement) {
+  const marked = new Set();
+  for (const range of codeElement.dataset.lines.trim().split(/\s+/)) {
+    const [start, end = start] = range.split('-').map(Number);
+    for (let line = start; line <= end; line += 1) marked.add(line);
+  }
+  const lines = [document.createElement('span')];
+  const appendText = (text, ancestors) => {
+    let parent = lines.at(-1);
+    for (const ancestor of ancestors) {
+      const copy = ancestor.cloneNode(false);
+      parent.append(copy);
+      parent = copy;
+    }
+    parent.append(text);
+  };
+  const walk = (node, ancestors) => {
+    for (const child of node.childNodes) {
+      if (child.nodeType === Node.TEXT_NODE) {
+        child.textContent.split('\n').forEach((part, index) => {
+          if (index > 0) lines.push(document.createElement('span'));
+          if (part !== '') appendText(part, ancestors);
+        });
+      } else if (child.nodeType === Node.ELEMENT_NODE) {
+        walk(child, [...ancestors, child]);
+      }
+    }
+  };
+  walk(codeElement, []);
+  if (lines.length > 1 && lines.at(-1).textContent === '') lines.pop();
+  // 줄바꿈은 줄 span 밖에 두어, 칠한 줄의 상자가 다음 줄까지 늘어나지 않게 한다.
+  codeElement.replaceChildren(
+    ...lines.flatMap((line, index) => {
+      line.className = marked.has(index + 1) ? 'code-line marked' : 'code-line';
+      return index === lines.length - 1 ? [line] : [line, '\n'];
+    }),
+  );
+}
+
+// .erd(테이블 관계도)의 외래 키 선을 그린다. 상자 배치는 CSS grid가 하고, 이 함수는 상자를 읽어 선만 얹는다.
+// 칸(li)의 data-ref="테이블.칸"이 외래 키, data-ref-composite가 복합 외래 키의 한 칸이다. 여러 개면 공백으로 나눈다.
+// 칸의 data-key="PK FK"는 칸 이름 앞의 배지가 된다.
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+function svgElement(tag, attributes) {
+  const node = document.createElementNS(SVG_NS, tag);
+  for (const [name, value] of Object.entries(attributes)) node.setAttribute(name, value);
+  return node;
+}
+
+function erdColumnName(item) {
+  return item.dataset.col ?? item.firstChild.textContent.trim();
+}
+
+function setUpErd(erd) {
+  const canvas = element('div', 'erd-canvas');
+  canvas.append(...erd.children);
+  erd.append(canvas);
+
+  const columns = new Map(); // '테이블.칸' → li
+  const tables = [...canvas.querySelectorAll('.erd-table')];
+  for (const table of tables) {
+    table.tabIndex = 0;
+    for (const item of table.querySelectorAll('li')) {
+      const name = erdColumnName(item);
+      columns.set(`${table.dataset.table}.${name}`, item);
+      const keys = (item.dataset.key ?? '').split(' ').filter(Boolean);
+      if (keys.length > 0) {
+        const badges = element('span', 'erd-keys');
+        for (const key of keys) badges.append(element('span', `erd-key ${key.toLowerCase()}`, key));
+        item.prepend(badges);
+      }
+    }
+  }
+
+  const links = [];
+  for (const table of tables) {
+    for (const item of table.querySelectorAll('li')) {
+      for (const [attribute, composite] of [
+        ['ref', false],
+        ['refComposite', true],
+      ]) {
+        for (const target of (item.dataset[attribute] ?? '').split(' ').filter(Boolean)) {
+          const targetItem = columns.get(target);
+          if (!targetItem) {
+            console.warn(`erd: ${table.dataset.table}.${erdColumnName(item)}의 대상 ${target}이 없다`);
+            continue;
+          }
+          const note = element('span', composite ? 'erd-ref composite' : 'erd-ref', `→ ${target}`);
+          item.append(note);
+          links.push({ from: table, fromItem: item, to: targetItem.closest('.erd-table'), toItem: targetItem, composite });
+        }
+      }
+    }
+  }
+
+  const svg = svgElement('svg', { class: 'erd-lines', 'aria-hidden': 'true' });
+  // CSS가 늦게 오거나 빠져도 SVG가 흐름에 끼어 캔버스를 키우고, 그 크기로 다시 그리는 고리가 생기지 않게 위치를 직접 정한다.
+  svg.style.cssText = 'position: absolute; inset: 0; overflow: visible; pointer-events: none';
+  canvas.prepend(svg);
+
+  function draw() {
+    svg.replaceChildren();
+    const base = canvas.getBoundingClientRect();
+    svg.setAttribute('width', base.width);
+    svg.setAttribute('height', base.height);
+    const box = (node) => {
+      const rect = node.getBoundingClientRect();
+      return { left: rect.left - base.left, right: rect.right - base.left, mid: rect.top - base.top + rect.height / 2 };
+    };
+    // 같은 열 안의 선은 상자 왼쪽 바깥으로 돌린다. 겹치지 않게 선마다 조금씩 더 바깥으로 민다.
+    const sameColumnCount = new Map();
+    for (const link of links) {
+      const fromBox = box(link.from);
+      const toBox = box(link.to);
+      const y1 = box(link.fromItem).mid;
+      const y2 = box(link.toItem).mid;
+      let x1, x2, s1, s2, d;
+      if (toBox.left >= fromBox.right - 1) {
+        [x1, s1, x2, s2] = [fromBox.right, 1, toBox.left, -1];
+      } else if (toBox.right <= fromBox.left + 1) {
+        [x1, s1, x2, s2] = [fromBox.left, -1, toBox.right, 1];
+      } else {
+        [x1, s1, x2, s2] = [fromBox.left, -1, toBox.left, -1];
+      }
+      // 선은 상자에서 수평으로 STUB만큼 곧게 나온 뒤 휜다. 끝 표시가 그 곧은 구간에 놓여 선과 어긋나지 않는다.
+      const STUB = 20;
+      const a1 = x1 + s1 * STUB;
+      const a2 = x2 + s2 * STUB;
+      let curve;
+      if (s1 === s2) {
+        const key = Math.round(Math.min(x1, x2));
+        const order = sameColumnCount.get(key) ?? 0;
+        sameColumnCount.set(key, order + 1);
+        const bend = Math.min(a1, a2) - 10 - order * 8;
+        curve = `C${bend} ${y1} ${bend} ${y2} ${a2} ${y2}`;
+      } else {
+        const dx = Math.max(16, Math.abs(a2 - a1) / 2);
+        curve = `C${a1 + s1 * dx} ${y1} ${a2 + s2 * dx} ${y2} ${a2} ${y2}`;
+      }
+      d = `M${x1} ${y1} L${a1} ${y1} ${curve} L${x2} ${y2}`;
+      const group = svgElement('g', { class: link.composite ? 'erd-link composite' : 'erd-link' });
+      group.append(svgElement('path', { d }));
+      // 외래 키 쪽(N, 여러 개)은 세 갈래 까마귀 발, 가리키는 쪽(1, 하나)은 세로 막대다.
+      const foot = x1 + s1 * 12;
+      group.append(svgElement('path', { class: 'erd-mark-line', d: `M${foot} ${y1} L${x1} ${y1 - 6} M${foot} ${y1} L${x1} ${y1} M${foot} ${y1} L${x1} ${y1 + 6}` }));
+      const bar = x2 + s2 * 9;
+      group.append(svgElement('path', { class: 'erd-mark-line', d: `M${bar} ${y2 - 6} L${bar} ${y2 + 6}` }));
+      const many = svgElement('text', { class: 'erd-card', x: x1 + s1 * 16, y: y1 - 5, 'text-anchor': s1 > 0 ? 'start' : 'end' });
+      many.textContent = 'N';
+      const one = svgElement('text', { class: 'erd-card', x: x2 + s2 * 13, y: y2 - 5, 'text-anchor': s2 > 0 ? 'start' : 'end' });
+      one.textContent = '1';
+      group.append(many, one);
+      link.group = group;
+      svg.append(group);
+    }
+  }
+
+  // 상자나 칸에 마우스를 올리거나 상자에 포커스가 가면, 그것과 이어진 선과 칸만 강조한다.
+  // 복합 외래 키는 칸 하나에 올려도 같은 제약의 선을 모두 강조한다.
+  function touches(link, target) {
+    return target.matches('li')
+      ? link.fromItem === target || link.toItem === target
+      : link.from === target || link.to === target;
+  }
+  function sameConstraint(a, b) {
+    return a === b || (a.composite && b.composite && a.from === b.from && a.to === b.to);
+  }
+  function focus(target) {
+    canvas.classList.toggle('is-focused', target !== null);
+    for (const item of canvas.querySelectorAll('li.is-active')) item.classList.remove('is-active');
+    for (const table of tables) table.classList.remove('is-related');
+    for (const link of links) {
+      const active = target !== null && links.some((hit) => touches(hit, target) && sameConstraint(hit, link));
+      link.group.classList.toggle('is-active', active);
+      if (!active) continue;
+      svg.append(link.group); // 강조한 선을 다른 선 위에 그린다
+      link.fromItem.classList.add('is-active');
+      link.toItem.classList.add('is-active');
+      link.from.classList.add('is-related');
+      link.to.classList.add('is-related');
+    }
+  }
+  for (const table of tables) {
+    table.addEventListener('mouseenter', () => focus(table));
+    table.addEventListener('focus', () => focus(table));
+    table.addEventListener('mouseleave', () => focus(null));
+    table.addEventListener('blur', () => focus(null));
+    for (const item of table.querySelectorAll('li')) {
+      item.addEventListener('mouseenter', () => focus(item));
+      item.addEventListener('mouseleave', () => focus(table));
+    }
+  }
+
+  draw();
+  new ResizeObserver(draw).observe(canvas);
+  // 웹 글꼴이 늦게 오면 상자 크기가 바뀌므로 한 번 더 그린다. 실패해도 이미 그린 선이 남는다.
+  void document.fonts?.ready.then(draw);
+}
+
+function renderErds() {
+  document.querySelectorAll('.erd').forEach(setUpErd);
 }
 
 renderTags();
 renderDocumentNav();
 renderDocumentIndex();
 highlightCode();
+renderErds();

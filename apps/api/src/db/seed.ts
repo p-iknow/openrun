@@ -2,14 +2,18 @@ import { fakerKO as faker } from '@faker-js/faker';
 import { createHash } from 'node:crypto';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { sql } from 'drizzle-orm';
-import { drizzle } from 'drizzle-orm/node-postgres';
+import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
+import type { PgInsertValue, PgTable } from 'drizzle-orm/pg-core';
 import { readDatabaseUrl } from '../config/env.js';
 import {
   GENRES,
   performanceSeats,
   performances,
+  seatGradeAssignments,
+  seatGrades,
   showDetailImages,
   shows,
+  type Genre,
 } from './schema/shows.js';
 import { seats, sections, venues } from './schema/venues.js';
 import { renderDetailImages } from './seed-detail-image.js';
@@ -76,8 +80,68 @@ const VENUE_LAYOUTS: { name: string; sections: SectionLayout[] }[] = [
   },
 ];
 
-// 회차 좌석을 한 번에 넣는 행 수. 한 쿼리의 파라미터는 65535개까지라 컬럼 3개 기준으로 넉넉히 나눈다.
-const PERFORMANCE_SEAT_CHUNK = 10_000;
+// 장르마다 좌석 등급과 가격(원)이다. 비싼 등급부터 적는다. 실제 예매 서비스의 등급 이름(VIP석, R석, S석, A석)과 가격대를 따랐다.
+// 등급은 공연마다 따로 만들므로, 같은 장르의 공연도 등급 행은 공연마다 있다.
+const SEAT_GRADES_BY_GENRE: Record<Genre, { name: string; price: number }[]> = {
+  musical: [
+    { name: 'VIP석', price: 170_000 },
+    { name: 'R석', price: 140_000 },
+    { name: 'S석', price: 110_000 },
+    { name: 'A석', price: 80_000 },
+  ],
+  play: [
+    { name: 'R석', price: 66_000 },
+    { name: 'S석', price: 55_000 },
+  ],
+  concert: [
+    { name: 'VIP석', price: 154_000 },
+    { name: 'R석', price: 132_000 },
+    { name: 'S석', price: 110_000 },
+  ],
+  classical_dance: [
+    { name: 'R석', price: 120_000 },
+    { name: 'S석', price: 90_000 },
+    { name: 'A석', price: 60_000 },
+  ],
+  kids_family: [
+    { name: 'R석', price: 50_000 },
+    { name: 'S석', price: 40_000 },
+  ],
+};
+
+// 좌석 하나의 등급 순번(0이 가장 비싼 등급)이다. 구역을 A구역부터 무대에서 먼 쪽으로 이어 놓은 것으로 보고,
+// 공연장 전체의 열을 앞에서부터 등급 수만큼 나눠 앞 열일수록 비싼 등급을 준다.
+// 나누는 경계가 구역 중간에 걸리면 그 구역은 앞 열과 뒤 열의 등급이 갈린다(예: 낙산 소극장의 뮤지컬은 A구역이 VIP석과 R석으로 갈린다).
+// 공연장 전체 열 수(최소 10)가 등급 수(최대 4)보다 많아 모든 등급에 좌석이 있다.
+function getSeatGradeIndex({
+  rowPosition,
+  totalRows,
+  gradeCount,
+}: {
+  rowPosition: number;
+  totalRows: number;
+  gradeCount: number;
+}): number {
+  return Math.floor((rowPosition * gradeCount) / totalRows);
+}
+
+// 회차 좌석과 좌석 등급 지정을 한 번에 넣는 행 수. 한 쿼리의 파라미터는 65535개까지라 컬럼 3개 기준으로 넉넉히 나눈다.
+const INSERT_CHUNK = 10_000;
+
+// 행이 많아 한 쿼리에 다 넣을 수 없는 테이블에 INSERT_CHUNK 행씩 나눠 넣는다.
+async function insertInChunks<T extends PgTable>({
+  db,
+  table,
+  rows,
+}: {
+  db: Pick<NodePgDatabase, 'insert'>;
+  table: T;
+  rows: PgInsertValue<T>[];
+}): Promise<void> {
+  for (let start = 0; start < rows.length; start += INSERT_CHUNK) {
+    await db.insert(table).values(rows.slice(start, start + INSERT_CHUNK));
+  }
+}
 
 // 회차 배치. 판매 상태는 저장하지 않으므로, 판매 오픈 일시와 시작 일시, 회차 취소로 각 상태가 나오게 한다.
 // 일 단위 오프셋은 오늘(KST) 0시 기준이다. 지난 회차는 어제 이전, 남은 회차는 내일 이후에 둬서
@@ -405,11 +469,15 @@ const db = drizzle(readDatabaseUrl());
 try {
   const performanceSeatCount = await db.transaction(async (tx) => {
     await tx.execute(
-      sql`TRUNCATE ${showDetailImages}, ${performanceSeats}, ${performances}, ${shows}, ${seats}, ${sections}, ${venues} RESTART IDENTITY`,
+      sql`TRUNCATE ${seatGradeAssignments}, ${seatGrades}, ${showDetailImages}, ${performanceSeats}, ${performances}, ${shows}, ${seats}, ${sections}, ${venues} RESTART IDENTITY`,
     );
 
-    // 공연장마다 좌석 id 목록. 회차 좌석은 이 목록의 좌석 수만큼 만든다.
-    const venueSeats: { venueId: number; seatIds: number[] }[] = [];
+    // 공연장마다 좌석 목록. 회차 좌석은 이 목록의 좌석 수만큼 만들고, 좌석 등급은 공연장 전체에서 몇 번째 열인지(rowPosition)로 정한다.
+    const venueSeats: {
+      venueId: number;
+      totalRows: number;
+      seats: { id: number; sectionId: number; rowPosition: number }[];
+    }[] = [];
     for (const layout of VENUE_LAYOUTS) {
       const [venue] = await tx
         .insert(venues)
@@ -418,7 +486,12 @@ try {
       if (!venue) {
         throw new Error(`공연장을 넣지 못했습니다: ${layout.name}`);
       }
-      const seatIds: number[] = [];
+      const venueSeatList: {
+        id: number;
+        sectionId: number;
+        rowPosition: number;
+      }[] = [];
+      let rowOffset = 0;
       for (const { name, rows, seatsPerRow } of layout.sections) {
         const [section] = await tx
           .insert(sections)
@@ -438,17 +511,28 @@ try {
               })),
             ).flat(),
           )
-          .returning({ id: seats.id });
-        seatIds.push(...sectionSeats.map(({ id }) => id));
+          .returning({ id: seats.id, row: seats.row });
+        venueSeatList.push(
+          ...sectionSeats.map(({ id, row }) => ({
+            id,
+            sectionId: section.id,
+            rowPosition: rowOffset + row.charCodeAt(0) - 'A'.charCodeAt(0),
+          })),
+        );
+        rowOffset += rows;
       }
-      venueSeats.push({ venueId: venue.id, seatIds });
+      venueSeats.push({
+        venueId: venue.id,
+        totalRows: rowOffset,
+        seats: venueSeatList,
+      });
     }
 
-    const performanceSeatRows: {
-      performanceId: number;
-      seatId: number;
-      isSold: boolean;
-    }[] = [];
+    const seatGradeAssignmentRows: (typeof seatGradeAssignments.$inferInsert)[] =
+      [];
+    // 구역 안에서 앞 열과 뒤 열의 등급이 갈리는 공연 수. 공연장과 등급 수에 따라 갈리지 않는 공연도 있어, 하나는 나오는지 끝에서 확인한다.
+    let mixedSectionShowCount = 0;
+    const performanceSeatRows: (typeof performanceSeats.$inferInsert)[] = [];
     for (const [
       index,
       { show, performances: showPerformances },
@@ -475,6 +559,40 @@ try {
           showId: inserted.id,
         })),
       );
+      const grades = await tx
+        .insert(seatGrades)
+        .values(
+          SEAT_GRADES_BY_GENRE[show.genre].map((grade) => ({
+            ...grade,
+            showId: inserted.id,
+          })),
+        )
+        .returning({ id: seatGrades.id });
+      // 공연장의 모든 좌석에 등급을 하나씩 지정한다.
+      const gradeIdsBySection = new Map<number, Set<number>>();
+      seatGradeAssignmentRows.push(
+        ...venue.seats.map(({ id, sectionId, rowPosition }) => {
+          const grade =
+            grades[
+              getSeatGradeIndex({
+                rowPosition,
+                totalRows: venue.totalRows,
+                gradeCount: grades.length,
+              })
+            ];
+          if (!grade) {
+            throw new Error(`좌석 등급을 고르지 못했습니다: ${show.title}`);
+          }
+          gradeIdsBySection.set(
+            sectionId,
+            (gradeIdsBySection.get(sectionId) ?? new Set()).add(grade.id),
+          );
+          return { showId: inserted.id, seatId: id, seatGradeId: grade.id };
+        }),
+      );
+      if ([...gradeIdsBySection.values()].some((ids) => ids.size > 1)) {
+        mixedSectionShowCount += 1;
+      }
       for (const { soldSeatIndexes, ...performance } of showPerformances) {
         const [insertedPerformance] = await tx
           .insert(performances)
@@ -484,7 +602,7 @@ try {
           throw new Error(`회차를 넣지 못했습니다: ${show.title}`);
         }
         performanceSeatRows.push(
-          ...venue.seatIds.map((seatId, index) => ({
+          ...venue.seats.map(({ id: seatId }, index) => ({
             performanceId: insertedPerformance.id,
             seatId,
             isSold: soldSeatIndexes.has(index),
@@ -493,17 +611,22 @@ try {
       }
     }
 
-    for (
-      let start = 0;
-      start < performanceSeatRows.length;
-      start += PERFORMANCE_SEAT_CHUNK
-    ) {
-      await tx
-        .insert(performanceSeats)
-        .values(
-          performanceSeatRows.slice(start, start + PERFORMANCE_SEAT_CHUNK),
-        );
+    if (mixedSectionShowCount === 0) {
+      throw new Error(
+        '구역 안에서 등급이 갈리는 공연이 없습니다. 공연장 배치나 장르별 등급 수를 바꿔 하나는 나오게 하세요.',
+      );
     }
+
+    await insertInChunks({
+      db: tx,
+      table: seatGradeAssignments,
+      rows: seatGradeAssignmentRows,
+    });
+    await insertInChunks({
+      db: tx,
+      table: performanceSeats,
+      rows: performanceSeatRows,
+    });
     return performanceSeatRows.length;
   });
   const performanceCount = seedShows.reduce(

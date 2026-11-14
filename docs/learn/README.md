@@ -79,6 +79,7 @@
 | 흐름도 | `flow`, `lane`, `lane-title`, `chain` | 전체 흐름을 한눈에 보여 주기 |
 | 단계 | `steps` | 번호를 매긴 순서 설명. 항목의 첫 `strong`이 단계 제목이 되고, 본문 안의 `strong`은 문장 속 강조로 남는다 |
 | 트리 | `tree`, `tree-row`, `tree-node`, `tree-note` | 연결선이 있는 계층 구조와 오른쪽 설명. 설명 열은 깊이와 상관없이 맞춰진다. 이름이 길면 `style="--tree-col: 17rem"`처럼 이름 열을 넓힌다 |
+| 테이블 관계도 | `erd`, `erd-table`, `erd-title`, `erd-constraints`, `erd-mark`, `erd-note` | 테이블을 칸 목록 상자로 그리고 외래 키를 선으로 잇는 ERD. 아래 "테이블 관계도" 참고 |
 | 표 | `table-wrap` | 좁은 화면에서 가로로 스크롤되는 표 |
 | 배지 | `badge` | 표나 문장 안의 짧은 분류 |
 | 강조 상자 | `callout`, `callout warn` | 핵심 정의, 주의할 점 |
@@ -88,6 +89,18 @@
 `lane`, `steps`, `badge`에는 색을 정하는 클래스를 함께 붙인다. `blue`와 `green`이 있다.
 
 코드 블록에 `<pre><code class="language-ts">`처럼 언어를 지정하면 highlight.js가 구문을 강조한다. 오류 메시지처럼 코드가 아닌 블록에는 붙이지 않는다. 코드 블록의 긴 줄은 가로 스크롤 없이 줄바꿈되므로, 읽기 좋게 하려고 일부러 짧게 자르지 않아도 된다.
+
+쿼리를 한 단계씩 쌓아 설명할 때처럼 블록 안에서 지금 보는 줄을 표시하려면 `<code class="language-ts" data-lines="2-8 10">`처럼 줄 번호(1부터)를 적는다. 범위는 `-`로, 여러 범위는 공백으로 나눈다. 그 줄에 파란 배경과 왼쪽 선이 칠해진다.
+
+테이블 관계도(`erd`)는 상자 배치만 HTML로 정하고 선은 `learn.js`가 그린다.
+
+- `.erd`에 `style="--erd-cols: 3"`으로 열 수를 정하고, 상자(`.erd-table`)마다 `style="grid-area: 행 / 열"`로 자리를 정한다. 여러 행에 걸치려면 `grid-area: 2 / 3 / 4 / 4`처럼 쓴다.
+- 상자에 `data-table="테이블 이름"`을 단다. 칸(`li`)의 첫 글자가 칸 이름이다.
+- 칸의 `data-key="PK FK"`는 칸 이름 앞의 배지가 된다.
+- 외래 키는 칸에 `data-ref="테이블.칸"`, 복합 외래 키의 칸은 `data-ref-composite="테이블.칸"`을 단다. 하나의 칸이 여러 곳을 가리키면 공백으로 나눈다. 외래 키 쪽에는 까마귀 발과 `N`, 가리키는 쪽에는 막대와 `1`이 그려진다. 복합 외래 키는 초록 점선이다.
+- 여러 칸에 걸친 제약(`PRIMARY KEY (a, b)`, `UNIQUE (a, b)`)은 상자 안 `p.erd-constraints`에 적는다. 강조할 칸이나 제약에는 `erd-mark`를 붙인다.
+- 관계도 바로 아래의 `p.erd-note`에 선과 표시를 읽는 법을 적는다.
+- 상자가 본문 폭(760px)을 넘으면 가로로 스크롤된다. 넘지 않게 열 수와 배치를 고른다.
 
 자가 점검 문제는 `quiz`로 쓴다. `quiz-q`에 질문을, `quiz-context`에 어느 절의 무엇을 묻는지를 적고, 바꾸는 코드는 `language-diff` 코드 블록으로, 필요한 데이터는 표로 질문 아래에 둔다. 답만 `<details class="quiz-answer">` 안의 `fold-body`에 접는다. 질문 한 줄만으로 무엇을 묻는지 분명할 때만 클래스 없는 `<details>`를 쓴다. 그 밖에 문단만 접어 둘 때도 클래스 없이 `<details>`를 쓴다. 코드나 표가 든 선택 읽기 내용을 접을 때는 `<details class="fold">` 안에 `<div class="fold-body">`를 두고, 접어도 흐름이 이어지도록 결론은 접기 밖에 적는다.
 
