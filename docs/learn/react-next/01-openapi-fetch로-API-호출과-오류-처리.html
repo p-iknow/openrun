@@ -95,7 +95,7 @@
         <section id="layers">
           <h2>fetch는 어디에 숨어 있나</h2>
           <p>
-            <code>apps/store/app/page.tsx</code>는 <code>fetch</code>를 직접 부르지 않는다. 실제 호출은
+            <code>apps/store/apps-src/_index/index-page.tsx</code>는 <code>fetch</code>를 직접 부르지 않는다. 실제 호출은
             세 단계 아래에 있다.
           </p>
           <ul class="tree" style="--tree-col: 17rem">
@@ -142,7 +142,7 @@
               </ul>
             </li>
           </ul>
-          <pre><code class="language-ts">// apps/store/src/api/shows.ts
+          <pre><code class="language-ts">// apps/store/apps-src/@shared/api/shows.ts
 export async function fetchShows(client: ApiClient): Promise&lt;Show[]&gt; {
   const { data, response } = await client.GET('/shows');
   if (data === undefined) {

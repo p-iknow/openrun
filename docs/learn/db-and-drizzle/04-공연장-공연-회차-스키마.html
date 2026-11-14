@@ -163,7 +163,7 @@ export const performances = pgTable(
             판매 상태는 "회차 시작 일시가 지금보다 지났는가", "판매 오픈 일시 전인가"로 계산한다. 시간대 없는
             <code>timestamp</code>로 저장하면 <code>19:30</code>이 서울 시각인지 UTC인지 DB가 모르므로, 서버나 DB 접속의
             시간대에 따라 이 비교가 9시간 어긋날 수 있다. 절대 시점으로 저장하면 어디서 비교해도 결과가 같다. 화면에
-            보여 줄 때만 스토어가 <code>Asia/Seoul</code>로 바꾼다(<code>apps/store/src/shows/select-show-cards.ts</code>).
+            보여 줄 때만 스토어가 <code>Asia/Seoul</code>로 바꾼다(<code>apps/store/apps-src/_index/index-page.helper.ts</code>).
           </p>
           <p>
             <code>mode</code>는 기본값 <code>'date'</code>로 두었다(<a href="02-drizzle-스키마-문법.html#timestamp">db-and-drizzle 02 문서</a
