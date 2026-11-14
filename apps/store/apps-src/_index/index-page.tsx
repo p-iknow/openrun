@@ -22,7 +22,8 @@ export async function IndexPage({
 }: {
   searchParams: SearchParams;
 }) {
-  // 이 페이지는 빌드 때 미리 그리지 않고 요청마다 렌더링한다. 그래서 빌드에 API와 DB가 필요 없다.
+  // 이 페이지는 요청마다 렌더링한다. 지금은 searchParams를 읽어 이미 그렇지만, searchParams를 쓰지 않게 바뀌어도
+  // 빌드 때 API를 불러 목록을 HTML로 굳히지 않도록 connection()으로 한 번 더 못 박는다.
   await connection();
   // 잘못 고친 주소는 오류 화면 대신 정리된 주소로 보낸다. API를 부르기 전에 정리해 400 응답을 받지 않는다.
   const { query, redirectTo } = normalizeShowListQuery(searchParams);
