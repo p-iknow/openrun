@@ -36,7 +36,7 @@ function escapeMarkup(text: string): string {
 
 // 글자 크기(px)를 고정해 이미지마다 같은 크기로 그린다. 폭을 넘으면 공백에서 줄을 바꾼다.
 // 돌려주는 info.height로 다음 글자를 놓을 자리를 정한다.
-export async function textImage(
+export async function renderTextImage(
   text: string,
   {
     font,

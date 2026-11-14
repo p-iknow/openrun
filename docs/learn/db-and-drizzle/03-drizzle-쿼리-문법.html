@@ -58,8 +58,8 @@ const rows = await query; // 이때 SQL을 만들어 보내고 결과를 받는�
             이어 붙이는 동안에는 SQL 문장을 조립하기만 한다.
           </p>
           <p>
-            그래서 쿼리 일부를 변수에 담아 다른 쿼리의 재료로 쓸 수 있다. <code>ShowsService</code>의 <code>period</code>가
-            그 예다. <code>period</code>는 혼자 실행되지 않고, 바깥 쿼리의 SQL 안에 끼워 넣어진다(<a href="#subquery"
+            그래서 쿼리 일부를 변수에 담아 다른 쿼리의 재료로 쓸 수 있다. <code>ShowsService</code>의 <code>periodSubquery</code>가
+            그 예다. <code>periodSubquery</code>는 혼자 실행되지 않고, 바깥 쿼리의 SQL 안에 끼워 넣어진다(<a href="#subquery"
               >서브쿼리</a
             >).
           </p>
@@ -198,10 +198,10 @@ eq(shows.id, 3); // "shows"."id" = $1, params: [3]</code></pre>
           <h2>ne와 조건 재사용</h2>
           <pre><code class="language-ts">import { ne } from 'drizzle-orm';
 
-const isListed = ne(salesStatus.salesStatus, 'ended'); // "sales_status" &lt;&gt; $1, params: ['ended']
+const listCondition = ne(salesStatusSubquery.salesStatus, 'ended'); // "sales_status" &lt;&gt; $1, params: ['ended']
 
-this.db.select({ ... }).from(shows).innerJoin(salesStatus, ...).where(isListed); // 목록
-this.db.select({ count: count() }).from(shows).innerJoin(salesStatus, ...).where(isListed); // 개수</code></pre>
+this.db.select({ ... }).from(shows).innerJoin(salesStatusSubquery, ...).where(listCondition); // 목록
+this.db.select({ count: count() }).from(shows).innerJoin(salesStatusSubquery, ...).where(listCondition); // 개수</code></pre>
           <p>
             <code>ne</code>는 not equal, "두 값이 다르다"는 조건이다. SQL로는 <code>&lt;&gt;</code>다. 쓰는 법은
             <a href="#eq"><code>eq</code></a>와 같다. 같은 줄의 비교 함수로 <code>gt</code>(&gt;), <code>gte</code>(&gt;=),
@@ -284,7 +284,7 @@ notInArray(shows.genre, ['musical']); // "shows"."genre" not in ($1), params: ['
           <pre><code class="language-ts">import { and, ilike, ne } from 'drizzle-orm';
 
 const listCondition = and(
-  ne(salesStatus.salesStatus, 'ended'),
+  ne(salesStatusSubquery.salesStatus, 'ended'),
   q ? ilike(shows.title, `%${q}%`) : undefined,
 );</code></pre>
           <div class="table-wrap">
@@ -317,11 +317,11 @@ const listCondition = and(
           <h2>orderBy, asc, desc</h2>
           <pre><code class="language-ts">import { asc } from 'drizzle-orm';
 
-.orderBy(asc(period.start), asc(shows.id))</code></pre>
+.orderBy(asc(periodSubquery.start), asc(shows.id))</code></pre>
           <pre><code class="language-sql">order by "start" asc, "shows"."id" asc</code></pre>
           <p>
             정렬 기준을 앞에서부터 차례로 적는다(<a href="01-프론트엔드-개발자를-위한-DB-개념.html#order-limit">ORDER BY</a>).
-            <code>asc</code>는 오름차순, <code>desc</code>는 내림차순이다. 서브쿼리의 별칭 컬럼(<code>period.start</code>)도
+            <code>asc</code>는 오름차순, <code>desc</code>는 내림차순이다. 서브쿼리의 별칭 컬럼(<code>periodSubquery.start</code>)도
             기준으로 쓸 수 있다.
           </p>
           <p>
@@ -333,7 +333,7 @@ const listCondition = and(
           <pre><code class="language-ts">.orderBy(
   ...(sort === 'newest'
     ? [desc(shows.createdAt), desc(shows.id)] // 최근 등록 순
-    : [asc(period.start), asc(shows.id)]),    // 공연 시작일 순
+    : [asc(periodSubquery.start), asc(shows.id)]),    // 공연 시작일 순
 )</code></pre>
         </section>
 
@@ -449,7 +449,7 @@ hasCancelled: sql&lt;boolean&gt;`bool_or(${performances.isCancelled})`.as('has_c
 
         <section id="subquery">
           <h2>서브쿼리와 .as()</h2>
-          <pre><code class="language-ts">const period = this.db
+          <pre><code class="language-ts">const periodSubquery = this.db
   .select({
     showId: performances.showId,
     start: min(performances.startsAt).as('start'), // ② 계산한 값에 별칭
@@ -460,9 +460,9 @@ hasCancelled: sql&lt;boolean&gt;`bool_or(${performances.isCancelled})`.as('has_c
   .as('period'); // ① 쿼리 전체에 이름
 
 await this.db
-  .select({ title: shows.title, start: period.start }) // ③ 테이블처럼 쓴다
+  .select({ title: shows.title, start: periodSubquery.start }) // ③ 테이블처럼 쓴다
   .from(shows)
-  .innerJoin(period, eq(period.showId, shows.id));</code></pre>
+  .innerJoin(periodSubquery, eq(periodSubquery.showId, shows.id));</code></pre>
           <pre><code class="language-sql">select "shows"."title", "start" from "shows"
 inner join (
   select "show_id", min("starts_at") as "start", max("starts_at") as "end"
@@ -477,12 +477,12 @@ inner join (
             <li>
               <strong>계산한 값의 <code>.as('start')</code></strong>
               <code>min(...)</code> 같은 계산 결과에는 컬럼 이름이 없으므로 별칭을 붙인다. 붙이지 않고 바깥에서
-              <code>period.start</code>를 쓰면 Drizzle이 오류를 던진다: "You tried to reference "start" field from a subquery,
+              <code>periodSubquery.start</code>를 쓰면 Drizzle이 오류를 던진다: "You tried to reference "start" field from a subquery,
               which is a raw SQL field, but it doesn't have an alias declared."
             </li>
             <li>
               <strong>테이블처럼 쓰기</strong>
-              <code>period.showId</code>, <code>period.start</code>처럼 <code>select</code> 객체의 키로 컬럼을 꺼내
+              <code>periodSubquery.showId</code>, <code>periodSubquery.start</code>처럼 <code>select</code> 객체의 키로 컬럼을 꺼내
               <code>from</code>, <code>innerJoin</code>, <code>orderBy</code>, <code>select</code>에 쓴다. 타입도 그대로
               따라온다.
             </li>
@@ -493,7 +493,7 @@ inner join (
           </p>
           <h3>서브쿼리를 돌려주는 함수</h3>
           <pre><code class="language-ts">// apps/api/src/shows/show-sales-status.ts
-export function showSalesStatusSubquery({ db, now }: { db: Database; now: Date }) {
+export function buildShowSalesStatusSubquery({ db, now }: { db: Database; now: Date }) {
   return db
     .select({ showId: performances.showId, salesStatus: /* ... */, salesOpenAt: /* ... */ })
     .from(performances)
@@ -502,8 +502,8 @@ export function showSalesStatusSubquery({ db, now }: { db: Database; now: Date }
 }
 
 // 쓰는 곳
-const salesStatus = showSalesStatusSubquery({ db: this.db, now: this.clock.now() });
-this.db.select({ status: salesStatus.salesStatus }).from(shows).innerJoin(salesStatus, eq(salesStatus.showId, shows.id));</code></pre>
+const salesStatusSubquery = buildShowSalesStatusSubquery({ db: this.db, now: this.clock.now() });
+this.db.select({ status: salesStatusSubquery.salesStatus }).from(shows).innerJoin(salesStatusSubquery, eq(salesStatusSubquery.showId, shows.id));</code></pre>
           <p>
             서브쿼리도 실행 전의 객체라서 함수가 만들어 돌려줄 수 있다. 여러 쿼리가 같은 계산을 JOIN해야 할 때(예: 공연 목록과
             공연 상세가 같은 공연 판매 상태를 써야 할 때) 계산을 한 곳에 둘 수 있다. 계산에 필요한 값(<code>now</code>)은
@@ -516,7 +516,7 @@ this.db.select({ status: salesStatus.salesStatus }).from(shows).innerJoin(salesS
           <h2>쿼리 두 개를 함께 보내기</h2>
           <pre><code class="language-ts">const [rows, [total]] = await Promise.all([
   this.db.select({ ... }).from(shows) /* ... */.limit(20),
-  this.db.select({ count: count() }).from(shows).innerJoin(salesStatus, eq(salesStatus.showId, shows.id)).where(isListed),
+  this.db.select({ count: count() }).from(shows).innerJoin(salesStatusSubquery, eq(salesStatusSubquery.showId, shows.id)).where(listCondition),
 ]);</code></pre>
           <p>
             쿼리 빌더는 <code>await</code>할 수 있는 객체라 <code>Promise.all</code>에 그대로 넣을 수 있다. 두 쿼리가 서로를
@@ -640,15 +640,15 @@ await tx.execute(
           <pre><code class="language-ts">import { type SQL, sql } from 'drizzle-orm';
 
 // 조각을 돌려주는 함수 (실제 코드에서 when 갈래를 줄였다)
-function performancePriority({ now }: { now: Date }): SQL&lt;number&gt; {
+function buildPerformancePrioritySql({ now }: { now: Date }): SQL&lt;number&gt; {
   return sql&lt;number&gt;`case
     when ${performances.isCancelled} or ${performances.startsAt} &lt;= ${now} then 2
     else 0
   end`;
 }
 
-const priority = performancePriority({ now });
-const showPriority = sql`min(${priority})`; // 조각 안에 조각을 넣는다</code></pre>
+const prioritySql = buildPerformancePrioritySql({ now });
+const showPrioritySql = sql`min(${prioritySql})`; // 조각 안에 조각을 넣는다</code></pre>
           <pre><code class="language-sql">min(case
     when "performances"."is_cancelled" or "performances"."starts_at" &lt;= '2026-11-10 12:00+09' then 2
     -- '2026-11-10 12:00+09'은 now(한국 시각). 실제로는 빈칸 $1로 따로 간다
@@ -673,7 +673,7 @@ const showPriority = sql`min(${priority})`; // 조각 안에 조각을 넣는다
           </p>
           <h3><code>select</code>에 넣을 때는 <code>.as()</code></h3>
           <pre><code class="language-ts">.select({
-  salesStatus: sql&lt;ShowSalesStatus&gt;`case ${showPriority} ${toStatus} end`.as('sales_status'),
+  salesStatus: sql&lt;ShowSalesStatus&gt;`case ${showPrioritySql} ${statusCasesSql} end`.as('sales_status'),
 })</code></pre>
           <p>
             조각을 <a href="#subquery">서브쿼리</a>의 결과로 내보낼 때는 컬럼 이름이 없으므로 <code>.as('이름')</code>으로
@@ -681,13 +681,13 @@ const showPriority = sql`min(${priority})`; // 조각 안에 조각을 넣는다
           </p>
           <div class="callout warn">
             <p>
-              <strong>조각은 넣는 곳마다 펼쳐진다.</strong> 자바스크립트 변수 <code>priority</code>는 하나지만, SQL에는 넣은
+              <strong>조각은 넣는 곳마다 펼쳐진다.</strong> 자바스크립트 변수 <code>prioritySql</code>는 하나지만, SQL에는 넣은
               횟수만큼 같은 식이 복사되고 파라미터도 그만큼 늘어난다. JS 변수가 SQL 변수가 되지는 않는다. 아래 코드는 같은
               <code>CASE</code>를 SQL에 세 번 쓰고 <code>now</code>를 파라미터 세 개(<code>$1</code>~<code>$3</code>)로 보낸다.
             </p>
-            <pre><code class="language-ts">sql`min(${priority})`;
-sql`min(${priority}) = 1`;
-sql`filter (where ${priority} = 1)`;</code></pre>
+            <pre><code class="language-ts">sql`min(${prioritySql})`;
+sql`min(${prioritySql}) = 1`;
+sql`filter (where ${prioritySql} = 1)`;</code></pre>
             <p>
               결과는 맞지만 SQL이 길어지고 DB가 같은 계산을 여러 번 한다. 한 번만 계산하려면 그 식을 안쪽 서브쿼리의 컬럼으로
               먼저 만들고 바깥 쿼리에서 이름으로 부른다.
@@ -733,10 +733,10 @@ SELECT pg_typeof(CASE WHEN true THEN 2 ELSE 0 END); -- integer</code></pre>
             보인다. 반대로 <code>now</code>처럼 실행할 때마다 달라지는 값은 파라미터로 보낸다.
           </p>
           <pre><code class="language-ts">// apps/api/src/shows/show-sales-status.ts
-function toPriority(status: ShowSalesStatus): SQL {
+function toPrioritySql(status: ShowSalesStatus): SQL {
   return sql.raw(String(SHOW_SALES_STATUSES.indexOf(status))); // 'ended' → 2
 }
-function toLiteral(status: ShowSalesStatus): SQL {
+function toLiteralSql(status: ShowSalesStatus): SQL {
   return sql.raw(`'${status}'`); // 'on_sale' → 'on_sale'(작은따옴표 포함)
 }</code></pre>
           <p>
@@ -747,8 +747,8 @@ function toLiteral(status: ShowSalesStatus): SQL {
 
         <section id="sql-join">
           <h2>sql.join: 조각 배열을 하나로 잇기</h2>
-          <pre><code class="language-ts">const toStatus = sql.join(
-  SHOW_SALES_STATUSES.map((status) =&gt; sql`when ${toPriority(status)} then ${toLiteral(status)}`),
+          <pre><code class="language-ts">const statusCasesSql = sql.join(
+  SHOW_SALES_STATUSES.map((status) =&gt; sql`when ${toPrioritySql(status)} then ${toLiteralSql(status)}`),
   sql` `, // 조각 사이에 넣을 구분자
 );</code></pre>
           <pre><code class="language-sql">when 0 then 'on_sale' when 1 then 'upcoming' when 2 then 'ended'</code></pre>

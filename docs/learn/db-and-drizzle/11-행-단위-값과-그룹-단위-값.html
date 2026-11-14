@@ -1084,7 +1084,7 @@ GROUP BY p.id;
 
           <h3>공연 판매 상태: 공연으로 묶음</h3>
           <p>
-            <code>apps/api/src/shows/show-sales-status.ts</code>의 <code>showSalesStatusSubquery</code>는
+            <code>apps/api/src/shows/show-sales-status.ts</code>의 <code>buildShowSalesStatusSubquery</code>는
             <code>.groupBy(performances.showId)</code>로 묶는다. 한 묶음은 공연 하나와 그 회차들이다. 이번에는
             <code>performances</code>의 기본 키로 묶지 않았으니, 회차 컬럼은 모두 행 단위다.
           </p>
@@ -1099,24 +1099,24 @@ GROUP BY p.id;
               </thead>
               <tbody>
                 <tr>
-                  <td><code>performancePriority</code>의 <code>case</code></td>
+                  <td><code>buildPerformancePrioritySql</code>의 <code>case</code></td>
                   <td><span class="badge blue">행</span></td>
                   <td>입력인 <code>startsAt</code>, <code>salesOpenAt</code>이 회차마다 다르다</td>
                 </tr>
                 <tr>
-                  <td><code>min(${priority})</code> (<code>showPriority</code>)</td>
+                  <td><code>min(${prioritySql})</code> (<code>showPrioritySql</code>)</td>
                   <td><span class="badge green">그룹</span></td>
                   <td>행 단위 순번을 집계로 줄였다</td>
                 </tr>
                 <tr>
-                  <td><code>case ${showPriority} when 0 then 'on_sale' ...</code></td>
+                  <td><code>case ${showPrioritySql} when 0 then 'on_sale' ...</code></td>
                   <td><span class="badge green">그룹</span></td>
                   <td>그룹 단위 값으로 만든 <code>case</code></td>
                 </tr>
                 <tr>
-                  <td><code>min(salesOpenAt) filter (where ${priority} = 1)</code></td>
+                  <td><code>min(salesOpenAt) filter (where ${prioritySql} = 1)</code></td>
                   <td><span class="badge green">그룹</span></td>
-                  <td>집계. <code>filter</code> 안의 <code>priority</code>는 행 단위라도 된다</td>
+                  <td>집계. <code>filter</code> 안의 <code>prioritySql</code>는 행 단위라도 된다</td>
                 </tr>
               </tbody>
             </table>

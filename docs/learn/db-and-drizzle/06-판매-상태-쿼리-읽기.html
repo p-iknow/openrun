@@ -57,37 +57,37 @@
 export const SHOW_SALES_STATUSES = ['on_sale', 'upcoming', 'ended'] as const;
 export type ShowSalesStatus = (typeof SHOW_SALES_STATUSES)[number];
 
-function toPriority(status: ShowSalesStatus): SQL {
+function toPrioritySql(status: ShowSalesStatus): SQL {
   return sql.raw(String(SHOW_SALES_STATUSES.indexOf(status)));
 }
-function toLiteral(status: ShowSalesStatus): SQL {
+function toLiteralSql(status: ShowSalesStatus): SQL {
   return sql.raw(`'${status}'`);
 }
 
 // ① 회차 하나를 공연 판매 상태의 순번으로
-function performancePriority({ now }: { now: Date }): SQL&lt;number&gt; {
+function buildPerformancePrioritySql({ now }: { now: Date }): SQL&lt;number&gt; {
   return sql&lt;number&gt;`case
-    when ${performances.isCancelled} or ${performances.startsAt} &lt;= ${now} then ${toPriority('ended')}
-    when ${now} &lt; ${performances.salesOpenAt} then ${toPriority('upcoming')}
-    else ${toPriority('on_sale')}
+    when ${performances.isCancelled} or ${performances.startsAt} &lt;= ${now} then ${toPrioritySql('ended')}
+    when ${now} &lt; ${performances.salesOpenAt} then ${toPrioritySql('upcoming')}
+    else ${toPrioritySql('on_sale')}
   end`;
 }
 
-export function showSalesStatusSubquery({ db, now }: { db: Database; now: Date }) {
-  const priority = performancePriority({ now });
-  const showPriority = sql`min(${priority})`;                         // ② 공연별 가장 작은 순번
-  const toStatus = sql.join(                                          // ③ 순번 → 이름
-    SHOW_SALES_STATUSES.map((status) =&gt; sql`when ${toPriority(status)} then ${toLiteral(status)}`),
+export function buildShowSalesStatusSubquery({ db, now }: { db: Database; now: Date }) {
+  const prioritySql = buildPerformancePrioritySql({ now });
+  const showPrioritySql = sql`min(${prioritySql})`;                         // ② 공연별 가장 작은 순번
+  const statusCasesSql = sql.join(                                          // ③ 순번 → 이름
+    SHOW_SALES_STATUSES.map((status) =&gt; sql`when ${toPrioritySql(status)} then ${toLiteralSql(status)}`),
     sql` `,
   );
 
   return db
     .select({
       showId: performances.showId,
-      salesStatus: sql&lt;ShowSalesStatus&gt;`case ${showPriority} ${toStatus} end`.as('sales_status'),
+      salesStatus: sql&lt;ShowSalesStatus&gt;`case ${showPrioritySql} ${statusCasesSql} end`.as('sales_status'),
       salesOpenAt: sql&lt;Date | null&gt;`case                              // ④ 판매 예정일 때만
-        when ${showPriority} = ${toPriority('upcoming')}
-        then min(${performances.salesOpenAt}) filter (where ${priority} = ${toPriority('upcoming')})
+        when ${showPrioritySql} = ${toPrioritySql('upcoming')}
+        then min(${performances.salesOpenAt}) filter (where ${prioritySql} = ${toPrioritySql('upcoming')})
       end`
         .mapWith(performances.salesOpenAt)
         .as('sales_open_at'),
@@ -279,22 +279,22 @@ export function showSalesStatusSubquery({ db, now }: { db: Database; now: Date }
 
         <section id="performance">
           <h2>회차 하나의 순번</h2>
-          <pre><code class="language-ts">function performancePriority({ now }: { now: Date }): SQL&lt;number&gt; {
+          <pre><code class="language-ts">function buildPerformancePrioritySql({ now }: { now: Date }): SQL&lt;number&gt; {
   return sql&lt;number&gt;`case
-    when ${performances.isCancelled} or ${performances.startsAt} &lt;= ${now} then ${toPriority('ended')} -- 2
-    when ${now} &lt; ${performances.salesOpenAt} then ${toPriority('upcoming')} -- 1
-    else ${toPriority('on_sale')} -- 0
+    when ${performances.isCancelled} or ${performances.startsAt} &lt;= ${now} then ${toPrioritySql('ended')} -- 2
+    when ${now} &lt; ${performances.salesOpenAt} then ${toPrioritySql('upcoming')} -- 1
+    else ${toPrioritySql('on_sale')} -- 0
   end`;
 }
 
-// 쓰는 곳 (showSalesStatusSubquery 안): 이 CASE 조각이 priority가 된다
-const priority = performancePriority({ now });</code></pre>
+// 쓰는 곳 (buildShowSalesStatusSubquery 안): 이 CASE 조각이 priority가 된다
+const prioritySql = buildPerformancePrioritySql({ now });</code></pre>
           <p>
-            <code>priority</code>는 행도 숫자도 아니고 <strong>식</strong>(SQL로 쓴 계산식)이다. JS에서
-            <code>performancePriority({ now })</code>를 부르면 계산은 일어나지 않고 <code>case when ... end</code>라는 SQL
+            <code>prioritySql</code>는 행도 숫자도 아니고 <strong>식</strong>(SQL로 쓴 계산식)이다. JS에서
+            <code>buildPerformancePrioritySql({ now })</code>를 부르면 계산은 일어나지 않고 <code>case when ... end</code>라는 SQL
             글자만 만들어진다. 엑셀에서 열 맨 위에 수식을 한 번 써 두면 행마다 값이 채워지듯, DB가 쿼리를 실행할 때 이 식을
             회차 테이블의 <strong>행마다</strong> 계산해 행 하나에 순번 하나를 만든다. 이 순번들은 JS로 돌아오지 않고
-            <code>min(${priority})</code> 안에서만 쓰인다.
+            <code>min(${prioritySql})</code> 안에서만 쓰인다.
           </p>
           <p>
             규칙 1번을 <a href="01-프론트엔드-개발자를-위한-DB-개념.html#case"><code>CASE</code></a>로 그대로 옮겼다.
@@ -465,7 +465,7 @@ const priority = performancePriority({ now });</code></pre>
           <p>
             상태를 하나 더할 때는 배열의 알맞은 자리에 넣으면 뒤쪽 순번이 하나씩 밀리고, 아래에서 볼 SQL의 숫자와 이름 매핑도
             배열에서 다시 만들어진다. 기존 순번을 손으로 다시 매길 필요는 없다. 다만 새 상태로 세는 조건은
-            <code>performancePriority</code>의 <code>CASE</code>에 <code>when</code> 갈래로 더해야 한다.
+            <code>buildPerformancePrioritySql</code>의 <code>CASE</code>에 <code>when</code> 갈래로 더해야 한다.
           </p>
         </section>
 
@@ -475,14 +475,14 @@ const priority = performancePriority({ now });</code></pre>
             지금까지는 회차 한 줄마다 순번을 구했다. 이제 같은 공연의 회차들을 한데 모아 순번 하나로 줄인다. 이 일은 쿼리
             맨 아래의 <code>.groupBy()</code>와 <code>select</code> 안의 <code>min()</code>이 함께 한다.
           </p>
-          <pre><code class="language-ts">const priority = performancePriority({ now });  // 회차 한 줄의 순번 (앞 절의 CASE)
-const showPriority = sql`min(${priority})`;      // 그 순번들 중 가장 작은 값
-const toStatus = sql.join(/* ... */);            // 순번 → 이름 (아래 "순번을 이름으로 바꾸기")
+          <pre><code class="language-ts">const prioritySql = buildPerformancePrioritySql({ now });  // 회차 한 줄의 순번 (앞 절의 CASE)
+const showPrioritySql = sql`min(${prioritySql})`;      // 그 순번들 중 가장 작은 값
+const statusCasesSql = sql.join(/* ... */);            // 순번 → 이름 (아래 "순번을 이름으로 바꾸기")
 
 return db
   .select({
     showId: performances.showId,
-    salesStatus: sql`case ${showPriority} ${toStatus} end`.as('sales_status'),
+    salesStatus: sql`case ${showPrioritySql} ${statusCasesSql} end`.as('sales_status'),
     salesOpenAt: /* ... */,                      // 판매 예정일 때 판매 오픈 일시 (다음 절)
   })
   .from(performances)           // 회차 테이블의 모든 줄(회차 10개)에서
@@ -568,8 +568,8 @@ return db
             </table>
           </div>
           <p>
-            회차 순번(<code>priority</code>)을 <code>select</code>에 그대로 넣지 않고 꼭 <code>min( )</code>으로 감싼 이유도
-            이것이다. <code>priority</code>는 회차마다 값이 다른 식이라, 그대로 넣으면 공연 1 묶음에서 2, 0, 2 중 무엇을 줄지
+            회차 순번(<code>prioritySql</code>)을 <code>select</code>에 그대로 넣지 않고 꼭 <code>min( )</code>으로 감싼 이유도
+            이것이다. <code>prioritySql</code>는 회차마다 값이 다른 식이라, 그대로 넣으면 공연 1 묶음에서 2, 0, 2 중 무엇을 줄지
             정할 수 없어 PostgreSQL이 에러를 낸다.
           </p>
           <pre><code class="language-ts">// 이렇게 쓰면 에러
@@ -587,27 +587,27 @@ return db
           </p>
           <h3>min이 묶음마다 가장 작은 순번을 고른다</h3>
           <p>
-            <code>showPriority</code>는 회차 순번 식(<code>priority</code>)을 <code>min()</code>으로 감싼 것이다. 테이블 전체가
+            <code>showPrioritySql</code>는 회차 순번 식(<code>prioritySql</code>)을 <code>min()</code>으로 감싼 것이다. 테이블 전체가
             아니라 묶음 안에서 가장 작은 순번을 고른다.
           </p>
-          <pre><code class="language-ts">function performancePriority({ now }) {
+          <pre><code class="language-ts">function buildPerformancePrioritySql({ now }) {
   return sql`case
-    when ${performances.isCancelled} or ${performances.startsAt} &lt;= ${now} then ${toPriority('ended')}
-    when ${now} &lt; ${performances.salesOpenAt} then ${toPriority('upcoming')}
-    else ${toPriority('on_sale')}
+    when ${performances.isCancelled} or ${performances.startsAt} &lt;= ${now} then ${toPrioritySql('ended')}
+    when ${now} &lt; ${performances.salesOpenAt} then ${toPrioritySql('upcoming')}
+    else ${toPrioritySql('on_sale')}
   end`;
 }
 
-const priority = performancePriority({ now }); // CASE 식
-const showPriority = sql`min(${priority})`;</code></pre>
-          <p><code>${priority}</code> 자리에는 앞 절의 <code>CASE</code> 글자가 통째로 들어간다. DB가 받는 SQL은 이렇다. 읽기 쉽게 컬럼 이름의 따옴표와 테이블 이름을 빼고, 파라미터(<code>$1</code>)는 값으로 바꿔 적고, 나머지 컬럼은 생략했다.</p>
+const prioritySql = buildPerformancePrioritySql({ now }); // CASE 식
+const showPrioritySql = sql`min(${prioritySql})`;</code></pre>
+          <p><code>${prioritySql}</code> 자리에는 앞 절의 <code>CASE</code> 글자가 통째로 들어간다. DB가 받는 SQL은 이렇다. 읽기 쉽게 컬럼 이름의 따옴표와 테이블 이름을 빼고, 파라미터(<code>$1</code>)는 값으로 바꿔 적고, 나머지 컬럼은 생략했다.</p>
           <pre><code class="language-sql">select show_id,
-       min(        -- showPriority: sql`min(${priority})`의 min(
-         case      -- ${priority} 자리에 들어간 CASE 식 시작
+       min(        -- showPrioritySql: sql`min(${prioritySql})`의 min(
+         case      -- ${prioritySql} 자리에 들어간 CASE 식 시작
            when is_cancelled or starts_at &lt;= '2026-11-10 12:00+09' then 2
            when '2026-11-10 12:00+09' &lt; sales_open_at then 1
            else 0
-         end       -- ${priority} 끝
+         end       -- ${prioritySql} 끝
        )           -- min( 의 닫는 괄호
 from performances
 group by show_id</code></pre>
@@ -622,11 +622,11 @@ for (const [showId, rows] of Object.entries(groups)) {
     if (now &lt; row.salesOpenAt) return 1;
     return 0;
   });
-  // min(...): 그 순번들 중 가장 작은 값               ← showPriority
-  const showPriority = Math.min(...priorities);
+  // min(...): 그 순번들 중 가장 작은 값               ← showPrioritySql
+  const showPrioritySql = Math.min(...priorities);
 }</code></pre>
           <p>
-            <code>priority</code>는 <code>rows.map</code> 안쪽 함수이고, <code>min(${priority})</code>는
+            <code>prioritySql</code>는 <code>rows.map</code> 안쪽 함수이고, <code>min(${prioritySql})</code>는
             <code>Math.min(...rows.map(그 함수))</code>다.
           </p>
           <div class="table-wrap">
@@ -673,29 +673,29 @@ for (const [showId, rows] of Object.entries(groups)) {
             다시 살 수 있다.
           </p>
           <h3>순번을 이름으로 바꾸기</h3>
-          <pre><code class="language-ts">function performancePriority({ now }) {
+          <pre><code class="language-ts">function buildPerformancePrioritySql({ now }) {
   return sql`case
-    when ${performances.isCancelled} or ${performances.startsAt} &lt;= ${now} then ${toPriority('ended')}
-    when ${now} &lt; ${performances.salesOpenAt} then ${toPriority('upcoming')}
-    else ${toPriority('on_sale')}
+    when ${performances.isCancelled} or ${performances.startsAt} &lt;= ${now} then ${toPrioritySql('ended')}
+    when ${now} &lt; ${performances.salesOpenAt} then ${toPrioritySql('upcoming')}
+    else ${toPrioritySql('on_sale')}
   end`;
 }
 
-const priority = performancePriority({ now }); // 회차 한 줄의 순번 (행마다)
-const showPriority = sql`min(${priority})`; // 공연의 가장 작은 순번 (묶음마다)
+const prioritySql = buildPerformancePrioritySql({ now }); // 회차 한 줄의 순번 (행마다)
+const showPrioritySql = sql`min(${prioritySql})`; // 공연의 가장 작은 순번 (묶음마다)
 
-const toStatus = sql.join(
+const statusCasesSql = sql.join(
   SHOW_SALES_STATUSES.map(
-    (status) =&gt; sql`when ${toPriority(status)} then ${toLiteral(status)}`,
+    (status) =&gt; sql`when ${toPrioritySql(status)} then ${toLiteralSql(status)}`,
   ),
   sql` `,
 );
 
-salesStatus: sql&lt;ShowSalesStatus&gt;`case ${showPriority} ${toStatus} end`.as('sales_status'),</code></pre>
+salesStatus: sql&lt;ShowSalesStatus&gt;`case ${showPrioritySql} ${statusCasesSql} end`.as('sales_status'),</code></pre>
           <p>
             <a href="03-drizzle-쿼리-문법.html#sql-join"><code>sql.join</code></a>이 배열에서
             <code>when 0 then 'on_sale' when 1 then 'upcoming' ...</code>을 만든다. 이것을
-            <code>case ${showPriority} ... end</code>에 넣으면 <a href="01-프론트엔드-개발자를-위한-DB-개념.html#case"
+            <code>case ${showPrioritySql} ... end</code>에 넣으면 <a href="01-프론트엔드-개발자를-위한-DB-개념.html#case"
               ><code>switch</code>처럼 쓰는 <code>CASE</code></a
             >가 된다.
           </p>
@@ -712,8 +712,8 @@ end as "sales_status"</code></pre>
           </p>
           <p>
             이름으로 바꾸는 일을 JS가 아니라 SQL에서 하는 이유는 <strong>필터</strong> 때문이다. 결과 컬럼이 이름이면 바깥
-            쿼리가 <code>ne(salesStatus.salesStatus, 'ended')</code>처럼 이름으로 거를 수 있다. 다음 티켓의 판매 상태 필터도
-            <code>inArray(salesStatus.salesStatus, ['on_sale', 'upcoming'])</code>처럼 쓸 수 있다.
+            쿼리가 <code>ne(salesStatusSubquery.salesStatus, 'ended')</code>처럼 이름으로 거를 수 있다. 다음 티켓의 판매 상태 필터도
+            <code>inArray(salesStatusSubquery.salesStatus, ['on_sale', 'upcoming'])</code>처럼 쓸 수 있다.
           </p>
           <p>
             <code>sql&lt;ShowSalesStatus&gt;</code>는 결과 타입을 알려 주는 <a href="03-drizzle-쿼리-문법.html#sql-fragment"
@@ -727,26 +727,26 @@ end as "sales_status"</code></pre>
 
         <section id="sales-open-at">
           <h2>판매 오픈 일시</h2>
-          <pre><code class="language-ts">function performancePriority({ now }) {
+          <pre><code class="language-ts">function buildPerformancePrioritySql({ now }) {
   return sql`case
-    when ${performances.isCancelled} or ${performances.startsAt} &lt;= ${now} then ${toPriority('ended')}
-    when ${now} &lt; ${performances.salesOpenAt} then ${toPriority('upcoming')}
-    else ${toPriority('on_sale')}
+    when ${performances.isCancelled} or ${performances.startsAt} &lt;= ${now} then ${toPrioritySql('ended')}
+    when ${now} &lt; ${performances.salesOpenAt} then ${toPrioritySql('upcoming')}
+    else ${toPrioritySql('on_sale')}
   end`;
 }
 
-const priority = performancePriority({ now }); // 회차 한 줄의 순번 (행마다)
-const showPriority = sql`min(${priority})`; // 공연의 가장 작은 순번 (묶음마다)
+const prioritySql = buildPerformancePrioritySql({ now }); // 회차 한 줄의 순번 (행마다)
+const showPrioritySql = sql`min(${prioritySql})`; // 공연의 가장 작은 순번 (묶음마다)
 
 salesOpenAt: sql&lt;Date | null&gt;`case
-  when ${showPriority} = ${toPriority('upcoming')}
+  when ${showPrioritySql} = ${toPrioritySql('upcoming')}
   then min(${performances.salesOpenAt})
-       filter (where ${priority} = ${toPriority('upcoming')})
+       filter (where ${prioritySql} = ${toPrioritySql('upcoming')})
 end`
   .mapWith(performances.salesOpenAt)
   .as('sales_open_at'),</code></pre>
           <p>
-            같은 회차 순번 식 <code>priority</code>가 두 번 쓰인다. 한 번은 <code>min( )</code>으로 감싸 공연 단위 판단에
+            같은 회차 순번 식 <code>prioritySql</code>가 두 번 쓰인다. 한 번은 <code>min( )</code>으로 감싸 공연 단위 판단에
             (<code>when</code>), 한 번은 <code>filter</code> 안에서 회차 단위 조건에(<code>then</code>) 쓰인다. 안쪽부터 읽는다.
           </p>
           <ol class="steps blue">
@@ -817,7 +817,7 @@ import { performances, shows } from '../db/schema/shows.js'; // 공연, 회차 �
 import { venues } from '../db/schema/venues.js';             // 공연장 테이블
 
 // 공연 기간: 회차를 공연별로 묶어 첫 회차와 마지막 회차 일시를 구한다 (#39, 05 문서)
-const period = this.db
+const periodSubquery = this.db
   .select({
     showId: performances.showId,
     start: min(performances.startsAt).as('start'),
@@ -828,10 +828,10 @@ const period = this.db
   .as('period');
 
 // 공연 판매 상태, 판매 오픈 일시: 이 문서에서 본 서브쿼리
-const salesStatus = showSalesStatusSubquery({ db: this.db, now: this.clock.now() });
+const salesStatusSubquery = buildShowSalesStatusSubquery({ db: this.db, now: this.clock.now() });
 
 // 판매 종료 공연은 목록에서 뺀다. 목록과 전체 개수가 같은 조건을 써야 페이지 수가 맞는다.
-const isListed = ne(salesStatus.salesStatus, 'ended');
+const listCondition = ne(salesStatusSubquery.salesStatus, 'ended');
 
 const [rows, [total]] = await Promise.all([
   this.db
@@ -840,41 +840,41 @@ const [rows, [total]] = await Promise.all([
       title: shows.title,
       genre: shows.genre,
       venueName: venues.name,                // 공연장 테이블에서
-      start: period.start,                   // period 서브쿼리에서
-      end: period.end,
-      salesStatus: salesStatus.salesStatus,  // salesStatus 서브쿼리에서
-      salesOpenAt: salesStatus.salesOpenAt,
+      start: periodSubquery.start,                   // periodSubquery 서브쿼리에서
+      end: periodSubquery.end,
+      salesStatus: salesStatusSubquery.salesStatus,  // salesStatusSubquery 서브쿼리에서
+      salesOpenAt: salesStatusSubquery.salesOpenAt,
     })
     .from(shows)
     .innerJoin(venues, eq(venues.id, shows.venueId))
-    .innerJoin(period, eq(period.showId, shows.id))
-    .innerJoin(salesStatus, eq(salesStatus.showId, shows.id))
-    .where(isListed)
-    .orderBy(asc(period.start), asc(shows.id))
+    .innerJoin(periodSubquery, eq(periodSubquery.showId, shows.id))
+    .innerJoin(salesStatusSubquery, eq(salesStatusSubquery.showId, shows.id))
+    .where(listCondition)
+    .orderBy(asc(periodSubquery.start), asc(shows.id))
     .limit(PAGE_SIZE)
     .offset((PAGE - 1) * PAGE_SIZE),
   this.db
     .select({ count: count() })
     .from(shows)
-    .innerJoin(salesStatus, eq(salesStatus.showId, shows.id))
-    .where(isListed),
+    .innerJoin(salesStatusSubquery, eq(salesStatusSubquery.showId, shows.id))
+    .where(listCondition),
 ]);</code></pre>
           <ul>
             <li>
-              <strong>서브쿼리를 테이블처럼 JOIN한다.</strong> <code>salesStatus.salesStatus</code>,
-              <code>salesStatus.salesOpenAt</code>은 서브쿼리에서 <code>.as()</code>로 이름 붙인 값이다. 타입도
+              <strong>서브쿼리를 테이블처럼 JOIN한다.</strong> <code>salesStatusSubquery.salesStatus</code>,
+              <code>salesStatusSubquery.salesOpenAt</code>은 서브쿼리에서 <code>.as()</code>로 이름 붙인 값이다. 타입도
               <code>ShowSalesStatus</code>, <code>Date | null</code>로 따라온다.
             </li>
             <li>
-              <strong>조건을 변수 하나로 두 쿼리에 쓴다.</strong> <code>isListed</code>는
+              <strong>조건을 변수 하나로 두 쿼리에 쓴다.</strong> <code>listCondition</code>는
               <a href="03-drizzle-쿼리-문법.html#ne"><code>ne</code></a>가 만든 조건 객체다. 목록에만 걸고 개수에 빠뜨리면 예시에서
               목록은 3개인데 <code>totalCount</code>는 4가 된다. <a href="05-공연-목록-쿼리-읽기.html#count">05 문서의 개수 절</a
               >에서 본 문제다.
             </li>
             <li>
-              <strong>개수 쿼리는 <code>salesStatus</code>만 JOIN한다.</strong> 판매 종료를 거르려면 <code>salesStatus</code>가
+              <strong>개수 쿼리는 <code>salesStatusSubquery</code>만 JOIN한다.</strong> 판매 종료를 거르려면 <code>salesStatusSubquery</code>가
               필요하다. 두 서브쿼리 모두 회차가 있는 공연만 줄이 있어서, 이 JOIN이 회차 없는 공연도 함께 빼므로
-              <code>period</code>는 붙이지 않는다.
+              <code>periodSubquery</code>는 붙이지 않는다.
             </li>
           </ul>
           <h3>toSQL로 뽑은 SQL</h3>
@@ -892,13 +892,13 @@ select "shows"."id", "shows"."title", "shows"."genre", "venues"."name",
 from "shows"
 -- .innerJoin(venues, ...)
 inner join "venues" on "venues"."id" = "shows"."venue_id"
--- .innerJoin(period, ...)
+-- .innerJoin(periodSubquery, ...)
 inner join (
     select "show_id", min("starts_at") as "start", max("starts_at") as "end"
     from "performances"
     group by "performances"."show_id"
   ) "period" on "period"."show_id" = "shows"."id"
--- .innerJoin(salesStatus, ...)
+-- .innerJoin(salesStatusSubquery, ...)
 inner join (
     select "show_id",
       case min(case
@@ -925,7 +925,7 @@ inner join (
     from "performances"
     group by "performances"."show_id"
   ) "show_sales_status" on "show_sales_status"."show_id" = "shows"."id"
--- .where(isListed)
+-- .where(listCondition)
 where "sales_status" &lt;&gt; 'ended'
 -- .orderBy(...)
 order by "start" asc, "shows"."id" asc
@@ -936,7 +936,7 @@ limit 20</code></pre>
 select count(*)
 -- .from(shows)
 from "shows"
--- .innerJoin(salesStatus, ...)
+-- .innerJoin(salesStatusSubquery, ...)
 inner join (
     select "show_id",
       case min(case
@@ -963,16 +963,16 @@ inner join (
     from "performances"
     group by "performances"."show_id"
   ) "show_sales_status" on "show_sales_status"."show_id" = "shows"."id"
--- .where(isListed)
+-- .where(listCondition)
 where "sales_status" &lt;&gt; 'ended'</code></pre>
           <ul>
             <li>
               <strong>서브쿼리가 <code>inner join ( ... ) "show_sales_status"</code>로 그 자리에 통째로 들어간다.</strong>
-              <code>salesStatus</code> 변수는 하나지만 두 쿼리에 같은 SQL이 각각 펼쳐진다. 두 쿼리는 따로 실행되므로 DB는
+              <code>salesStatusSubquery</code> 변수는 하나지만 두 쿼리에 같은 SQL이 각각 펼쳐진다. 두 쿼리는 따로 실행되므로 DB는
               공연 판매 상태를 두 번 계산한다.
             </li>
             <li>
-              <strong><code>isListed</code>는 <code>"sales_status" &lt;&gt; 'ended'</code>이 된다.</strong> <code>ne</code>가
+              <strong><code>listCondition</code>는 <code>"sales_status" &lt;&gt; 'ended'</code>이 된다.</strong> <code>ne</code>가
               <code>&lt;&gt;</code>(같지 않다)다. <code>'ended'</code>는 값이라 실제로는 빈칸 <code>$7</code>로 간다.
               <code>"sales_status"</code>는 서브쿼리 안에서 <code>.as('sales_status')</code>로 붙인 이름이다.
             </li>
@@ -988,7 +988,7 @@ where "sales_status" &lt;&gt; 'ended'</code></pre>
           <div class="callout warn">
             <p>
               <strong>회차 순번 <code>CASE</code>가 서브쿼리 안에 세 번 들어간다.</strong> 자바스크립트 변수
-              <code>priority</code>는 하나지만, SQL 조각은 넣는 곳마다 펼쳐진다(<a
+              <code>prioritySql</code>는 하나지만, SQL 조각은 넣는 곳마다 펼쳐진다(<a
                 href="03-drizzle-쿼리-문법.html#sql-fragment"
                 >조각은 넣는 곳마다 펼쳐진다</a
               >). 공연 판매 상태에 한 번, 판매 오픈 일시에 두 번
@@ -1032,8 +1032,8 @@ where "sales_status" &lt;&gt; 'ended'</code></pre>
         <section id="subquery">
           <h2>서브쿼리를 함수로 둔 이유</h2>
           <p>
-            공연 기간 서브쿼리(<code>period</code>)는 <code>findPage()</code> 안에 바로 썼다. 판매 상태 서브쿼리는
-            <code>showSalesStatusSubquery(&#123; db, now &#125;)</code>라는 함수로 따로 뺐다(<a
+            공연 기간 서브쿼리(<code>periodSubquery</code>)는 <code>findPage()</code> 안에 바로 썼다. 판매 상태 서브쿼리는
+            <code>buildShowSalesStatusSubquery(&#123; db, now &#125;)</code>라는 함수로 따로 뺐다(<a
               href="03-drizzle-쿼리-문법.html#subquery"
               >서브쿼리를 돌려주는 함수</a
             >).
@@ -1068,7 +1068,7 @@ export class SystemClock extends Clock {
 
 // ShowsService
 constructor(@Inject(DATABASE) private readonly db: Database, private readonly clock: Clock) {}
-showSalesStatusSubquery({ db: this.db, now: this.clock.now() });</code></pre>
+buildShowSalesStatusSubquery({ db: this.db, now: this.clock.now() });</code></pre>
           <p>
             SQL에는 DB가 현재 시각을 돌려주는 <code>now()</code> 함수가 있다. 그것을 쓰지 않고 앱이 정한 시각을
             <a href="01-프론트엔드-개발자를-위한-DB-개념.html#parameter">파라미터</a>로 넘긴다.
@@ -1230,7 +1230,7 @@ min('10', '9')  → '10'   -- 순번이 10을 넘으면 틀린다</code></pre>
           </p>
 
           <h3>방법 2. sql.raw로 넣기: SQL 글자가 된다</h3>
-          <pre><code class="language-ts">// 실제로 만들어지는 모양 (toPriority가 sql.raw를 돌려준다)
+          <pre><code class="language-ts">// 실제로 만들어지는 모양 (toPrioritySql가 sql.raw를 돌려준다)
 sql`case
   when ${performances.isCancelled} or ${performances.startsAt} &lt;= ${now} then ${sql.raw('2')}
   when ${now} &lt; ${performances.salesOpenAt} then ${sql.raw('1')}
@@ -1249,26 +1249,26 @@ end</code></pre>
           </p>
 
           <h3>'2'를 직접 쓰지 않고 함수로 만든 이유</h3>
-          <pre><code class="language-ts">// toPriority('ended') → sql.raw('2')
-function toPriority(status: ShowSalesStatus): SQL {
+          <pre><code class="language-ts">// toPrioritySql('ended') → sql.raw('2')
+function toPrioritySql(status: ShowSalesStatus): SQL {
   return sql.raw(String(SHOW_SALES_STATUSES.indexOf(status)));
 }
-// toLiteral('on_sale') → sql.raw(&quot;'on_sale'&quot;)
-function toLiteral(status: ShowSalesStatus): SQL {
+// toLiteralSql('on_sale') → sql.raw(&quot;'on_sale'&quot;)
+function toLiteralSql(status: ShowSalesStatus): SQL {
   return sql.raw(`'${status}'`);
 }
 
 // 쓰는 곳
-when ${performances.isCancelled} or ${performances.startsAt} &lt;= ${now} then ${toPriority('ended')}</code></pre>
+when ${performances.isCancelled} or ${performances.startsAt} &lt;= ${now} then ${toPrioritySql('ended')}</code></pre>
           <ul>
             <li>
-              <strong>숫자를 배열에서 꺼낸다.</strong> <code>toPriority('ended')</code>는 배열에서
+              <strong>숫자를 배열에서 꺼낸다.</strong> <code>toPrioritySql('ended')</code>는 배열에서
               <code>'ended'</code>의 위치(2)를 찾아 <code>sql.raw('2')</code>를 만든다. 상태를 배열에 끼워 넣으면 숫자가
               저절로 밀리므로 기존 <code>when</code> 갈래의 숫자를 다시 매길 필요가 없다. 새 상태로 세는 조건만
               <code>when</code> 갈래로 더하면 된다. 코드도 숫자 대신 상태 이름으로 읽힌다.
             </li>
             <li>
-              <strong><code>toLiteral</code>는 이름을 넣는다.</strong> 순번을 이름으로 바꾸는 단계(<a href="#show">공연 판매 상태로 모으기</a>)의
+              <strong><code>toLiteralSql</code>는 이름을 넣는다.</strong> 순번을 이름으로 바꾸는 단계(<a href="#show">공연 판매 상태로 모으기</a>)의
               <code>when 0 then 'on_sale'</code>에서 <code>'on_sale'</code> 부분을 만든다. 이름은 원래 글자라
               <code>text</code>가 되어도 문제가 없지만, 순번과 같은 방식으로 넣어 SQL을 읽을 때 값이 바로 보이게 했다.
             </li>
@@ -1293,13 +1293,13 @@ when ${performances.isCancelled} or ${performances.startsAt} &lt;= ${now} then $
           <p>문제마다 바꾸는 코드와 생각할 데이터를 함께 두었다. 먼저 답해 본 뒤 "답 보기"를 눌러 확인한다.</p>
           <div class="quiz">
             <p class="quiz-q">1. 취소 조건을 첫 줄에서 떼어 <code>CASE</code> 맨 아래(<code>else</code> 바로 위)에 따로 두면, 회차 15의 순번과 겨울 기차의 판매 오픈 일시는 어떻게 되는가?</p>
-            <p class="quiz-context"><a href="#performance">회차 하나의 순번</a>의 <code>performancePriority</code>를 이렇게 바꾼다. 현재 시각은 11-10 12:00이다.</p>
+            <p class="quiz-context"><a href="#performance">회차 하나의 순번</a>의 <code>buildPerformancePrioritySql</code>를 이렇게 바꾼다. 현재 시각은 11-10 12:00이다.</p>
             <pre><code class="language-diff"> case
--  when ${performances.isCancelled} or ${performances.startsAt} &lt;= ${now} then ${toPriority('ended')}
-+  when ${performances.startsAt} &lt;= ${now} then ${toPriority('ended')}
-   when ${now} &lt; ${performances.salesOpenAt} then ${toPriority('upcoming')}
-+  when ${performances.isCancelled} then ${toPriority('ended')}
-   else ${toPriority('on_sale')}
+-  when ${performances.isCancelled} or ${performances.startsAt} &lt;= ${now} then ${toPrioritySql('ended')}
++  when ${performances.startsAt} &lt;= ${now} then ${toPrioritySql('ended')}
+   when ${now} &lt; ${performances.salesOpenAt} then ${toPrioritySql('upcoming')}
++  when ${performances.isCancelled} then ${toPrioritySql('ended')}
+   else ${toPrioritySql('on_sale')}
  end</code></pre>
             <div class="table-wrap"><table><thead><tr><th>회차 (겨울 기차)</th><th>starts_at</th><th>sales_open_at</th><th>is_cancelled</th></tr></thead><tbody><tr><td>13</td><td>11-25 19:30</td><td>11-13 14:00</td><td>false</td></tr><tr><td>14</td><td>11-26 19:30</td><td>11-12 14:00</td><td>false</td></tr><tr><td>15</td><td>11-27 19:30</td><td>11-11 14:00</td><td>true</td></tr></tbody></table></div>
             <details class="quiz-answer">
@@ -1331,9 +1331,9 @@ when ${performances.isCancelled} or ${performances.startsAt} &lt;= ${now} then $
             </details>
           </div>
           <div class="quiz">
-            <p class="quiz-q">3. <code>toPriority</code>가 <code>sql.raw</code> 대신 숫자를 그냥 <code>${...}</code>로 넣으면, 지금 예시의 결과는 바뀌는가? 상태가 늘어 순번이 10을 넘으면?</p>
-            <p class="quiz-context"><a href="#constants">순번과 이름을 SQL에 넣기</a>의 <code>toPriority</code>를 이렇게 바꾼다.</p>
-            <pre><code class="language-diff"> function toPriority(status: ShowSalesStatus): SQL {
+            <p class="quiz-q">3. <code>toPrioritySql</code>가 <code>sql.raw</code> 대신 숫자를 그냥 <code>${...}</code>로 넣으면, 지금 예시의 결과는 바뀌는가? 상태가 늘어 순번이 10을 넘으면?</p>
+            <p class="quiz-context"><a href="#constants">순번과 이름을 SQL에 넣기</a>의 <code>toPrioritySql</code>를 이렇게 바꾼다.</p>
+            <pre><code class="language-diff"> function toPrioritySql(status: ShowSalesStatus): SQL {
 -  return sql.raw(String(SHOW_SALES_STATUSES.indexOf(status)));
 +  return sql`${SHOW_SALES_STATUSES.indexOf(status)}`;
  }</code></pre>
@@ -1351,9 +1351,9 @@ when ${performances.isCancelled} or ${performances.startsAt} &lt;= ${now} then $
             <p class="quiz-q">4. <code>filter (where ...)</code>를 지우면 겨울 기차의 <code>sales_open_at</code>은?</p>
             <p class="quiz-context"><a href="#sales-open-at">판매 오픈 일시</a>의 <code>salesOpenAt</code>을 이렇게 바꾼다. 겨울 기차는 판매 예정 공연이다.</p>
             <pre><code class="language-diff"> case
-   when ${showPriority} = ${toPriority('upcoming')}
+   when ${showPrioritySql} = ${toPrioritySql('upcoming')}
    then min(${performances.salesOpenAt})
--       filter (where ${priority} = ${toPriority('upcoming')})
+-       filter (where ${prioritySql} = ${toPrioritySql('upcoming')})
  end</code></pre>
             <div class="table-wrap"><table><thead><tr><th>회차 (겨울 기차)</th><th>회차 순번</th><th>sales_open_at</th></tr></thead><tbody><tr><td>13</td><td>1 (판매 예정)</td><td>11-13 14:00</td></tr><tr><td>14</td><td>1 (판매 예정)</td><td>11-12 14:00</td></tr><tr><td>15</td><td>2 (판매 종료, 취소됨)</td><td>11-11 14:00</td></tr></tbody></table></div>
             <details class="quiz-answer">
@@ -1368,10 +1368,10 @@ when ${performances.isCancelled} or ${performances.startsAt} &lt;= ${now} then $
             <p class="quiz-q">5. 바깥 <code>CASE</code>를 지우고 <code>min(...) filter (...)</code>만 남기면 달빛 정원의 <code>sales_open_at</code>은? 달빛 정원에 판매 예정 회차가 하나 더 있다면?</p>
             <p class="quiz-context"><a href="#sales-open-at">판매 오픈 일시</a>의 <code>salesOpenAt</code>을 이렇게 바꾼다. 달빛 정원은 판매 중 공연이다.</p>
             <pre><code class="language-diff">-case
--  when ${showPriority} = ${toPriority('upcoming')}
+-  when ${showPrioritySql} = ${toPrioritySql('upcoming')}
 -  then min(${performances.salesOpenAt})
 +min(${performances.salesOpenAt})
-        filter (where ${priority} = ${toPriority('upcoming')})
+        filter (where ${prioritySql} = ${toPrioritySql('upcoming')})
 -end</code></pre>
             <details class="quiz-answer">
               <summary>답 보기</summary>
@@ -1398,13 +1398,13 @@ when ${performances.isCancelled} or ${performances.startsAt} &lt;= ${now} then $
             </details>
           </div>
           <div class="quiz">
-            <p class="quiz-q">7. 개수 쿼리의 <code>.where(isListed)</code>를 지우면, 예시의 응답에서 <code>items</code> 개수와 <code>totalCount</code>는?</p>
+            <p class="quiz-q">7. 개수 쿼리의 <code>.where(listCondition)</code>를 지우면, 예시의 응답에서 <code>items</code> 개수와 <code>totalCount</code>는?</p>
             <p class="quiz-context"><a href="#service">목록과 개수에 붙이기</a>의 개수 쿼리를 이렇게 바꾼다. 목록 쿼리는 그대로 둔다. 예시의 공연 판매 상태는 아래와 같다.</p>
             <pre><code class="language-diff"> this.db
    .select({ count: count() })
    .from(shows)
-   .innerJoin(salesStatus, eq(salesStatus.showId, shows.id))
--  .where(isListed),</code></pre>
+   .innerJoin(salesStatusSubquery, eq(salesStatusSubquery.showId, shows.id))
+-  .where(listCondition),</code></pre>
             <div class="table-wrap"><table><thead><tr><th>공연</th><th>공연 판매 상태</th></tr></thead><tbody><tr><td>달빛 정원</td><td>on_sale</td></tr><tr><td>겨울 기차</td><td>upcoming</td></tr><tr><td>붉은 숲</td><td>ended</td></tr><tr><td>푸른 등대</td><td>on_sale</td></tr></tbody></table></div>
             <details class="quiz-answer">
               <summary>답 보기</summary>

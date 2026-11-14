@@ -4,7 +4,7 @@ import { TextField } from './text-field.js';
 
 // 서버 렌더링 결과 HTML만 본다. 입력과 포커스 같은 브라우저 동작은 Base UI가 맡고, Storybook에서 확인한다.
 
-function attr({ tag, attribute }: { tag: string; attribute: string }) {
+function getAttr({ tag, attribute }: { tag: string; attribute: string }) {
   return new RegExp(`\\s${attribute}="([^"]*)"`).exec(tag)?.[1];
 }
 
@@ -20,9 +20,9 @@ describe('TextField', () => {
 
     const label = findTag({ html, tag: 'label' });
     const input = findTag({ html, tag: 'input' });
-    expect(attr({ tag: input, attribute: 'id' })).toBeTruthy();
-    expect(attr({ tag: label, attribute: 'for' })).toBe(
-      attr({ tag: input, attribute: 'id' }),
+    expect(getAttr({ tag: input, attribute: 'id' })).toBeTruthy();
+    expect(getAttr({ tag: label, attribute: 'for' })).toBe(
+      getAttr({ tag: input, attribute: 'id' }),
     );
     expect(html).toContain('>공연 제목</label>');
   });
@@ -39,12 +39,12 @@ describe('TextField', () => {
     );
 
     const input = findTag({ html, tag: 'input' });
-    expect(attr({ tag: input, attribute: 'name' })).toBe('q');
-    expect(attr({ tag: input, attribute: 'type' })).toBe('search');
-    expect(attr({ tag: input, attribute: 'placeholder' })).toBe(
+    expect(getAttr({ tag: input, attribute: 'name' })).toBe('q');
+    expect(getAttr({ tag: input, attribute: 'type' })).toBe('search');
+    expect(getAttr({ tag: input, attribute: 'placeholder' })).toBe(
       '제목으로 찾기',
     );
-    expect(attr({ tag: input, attribute: 'value' })).toBe('햄릿');
+    expect(getAttr({ tag: input, attribute: 'value' })).toBe('햄릿');
   });
 
   it('비활성이면 입력 칸이 disabled다', () => {

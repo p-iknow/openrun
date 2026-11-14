@@ -211,7 +211,7 @@ const FIXED_SCENARIOS: Scenario[] = [
   },
 ];
 
-function randomScenario(): Scenario {
+function pickRandomScenario(): Scenario {
   if (faker.datatype.boolean({ probability: 0.7 })) {
     return {
       salesOpenDay: -faker.number.int({ min: 3, max: 20 }),
@@ -233,10 +233,17 @@ function randomScenario(): Scenario {
   };
 }
 
-function kstAt(
-  today: number,
-  { day, hour, minute }: { day: number; hour: number; minute: number },
-): Date {
+function buildKstDate({
+  today,
+  day,
+  hour,
+  minute,
+}: {
+  today: number;
+  day: number;
+  hour: number;
+  minute: number;
+}): Date {
   return new Date(today + day * DAY_MS + (hour * 60 + minute) * MINUTE_MS);
 }
 
@@ -253,7 +260,8 @@ function buildPerformances({
   const pastCount =
     scenario.pastCount === 'all' ? count : Math.min(scenario.pastCount, count);
   const futureCount = count - pastCount;
-  const salesOpenAt = kstAt(today, {
+  const salesOpenAt = buildKstDate({
+    today,
     day: scenario.salesOpenDay,
     hour: 14,
     minute: 0,
@@ -278,7 +286,7 @@ function buildPerformances({
     ]);
     const isFuture = index >= pastCount;
     return {
-      startsAt: kstAt(today, { day, ...time }),
+      startsAt: buildKstDate({ today, day, ...time }),
       salesOpenAt,
       isCancelled:
         index === futureIndexToCancel ||
@@ -306,7 +314,7 @@ function buildSoldCounts({
   seatCount: number;
   now: number;
 }): number[] {
-  const some = () =>
+  const pickSomeSoldCount = () =>
     Math.floor(seatCount * faker.number.float({ min: 0, max: 0.7 }));
   let almostSoldOutLeft = sales === 'one-almost-sold-out';
 
@@ -315,7 +323,7 @@ function buildSoldCounts({
       return 0;
     }
     if (startsAt.getTime() <= now) {
-      return some();
+      return pickSomeSoldCount();
     }
     if (sales === 'sold-out') {
       return seatCount;
@@ -328,13 +336,13 @@ function buildSoldCounts({
         faker.number.int({ min: 1, max: Math.floor(seatCount / 10) })
       );
     }
-    return some();
+    return pickSomeSoldCount();
   });
 }
 
 function buildShows(today: number) {
   return SEED_SHOW_CONTENTS.map((content, index) => {
-    const scenario = FIXED_SCENARIOS[index] ?? randomScenario();
+    const scenario = FIXED_SCENARIOS[index] ?? pickRandomScenario();
     const performanceCount = faker.number.int({ min: 3, max: 15 });
     return {
       content,
@@ -348,7 +356,8 @@ function buildShows(today: number) {
         minAge: content.minAge,
         runningMinutes: content.runningMinutes,
         description: buildShowDescription(content),
-        createdAt: kstAt(today, {
+        createdAt: buildKstDate({
+          today,
           day: -faker.number.int({ min: 1, max: 60 }),
           hour: 10,
           minute: 0,
@@ -404,13 +413,13 @@ const seedShows = buildSeedShows(Date.now());
 // 포스터에 적을 공연 기간. 카드와 같이 첫 회차부터 마지막 회차까지의 한국 날짜다.
 function formatPosterPeriod(list: { startsAt: Date }[]): string {
   const times = list.map(({ startsAt }) => startsAt.getTime());
-  const kstDate = (time: number) =>
+  const formatKstDate = (time: number) =>
     new Date(time + KST_OFFSET_MS)
       .toISOString()
       .slice(0, 10)
       .replaceAll('-', '.');
-  const start = kstDate(Math.min(...times));
-  const end = kstDate(Math.max(...times));
+  const start = formatKstDate(Math.min(...times));
+  const end = formatKstDate(Math.max(...times));
   return start === end ? start : `${start} – ${end}`;
 }
 

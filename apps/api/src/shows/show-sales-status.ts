@@ -9,22 +9,22 @@ export const SHOW_SALES_STATUSES = ['on_sale', 'upcoming', 'ended'] as const;
 export type ShowSalesStatus = (typeof SHOW_SALES_STATUSES)[number];
 
 // 상수만 SQL에 그대로 넣는다. 사용자 입력이 아니므로 파라미터로 넘기지 않아도 안전하다.
-function toPriority(status: ShowSalesStatus): SQL {
+function toPrioritySql(status: ShowSalesStatus): SQL {
   return sql.raw(String(SHOW_SALES_STATUSES.indexOf(status)));
 }
 
-function toLiteral(status: ShowSalesStatus): SQL {
+function toLiteralSql(status: ShowSalesStatus): SQL {
   return sql.raw(`'${status}'`);
 }
 
 // 회차 하나를 공연 판매 상태의 순번으로 계산한다. 위에서부터 먼저 맞는 것을 고른다.
 // 취소된 회차는 더 팔 수 없으니 판매 종료로 센다.
 // 남은 좌석은 보지 않는다. 매진인 회차도 판매 기간 안이면 취소표가 나올 수 있어 판매 중이다.
-function performancePriority({ now }: { now: Date }): SQL<number> {
+function buildPerformancePrioritySql({ now }: { now: Date }): SQL<number> {
   return sql<number>`case
-    when ${performances.isCancelled} or ${performances.startsAt} <= ${now} then ${toPriority('ended')}
-    when ${now} < ${performances.salesOpenAt} then ${toPriority('upcoming')}
-    else ${toPriority('on_sale')}
+    when ${performances.isCancelled} or ${performances.startsAt} <= ${now} then ${toPrioritySql('ended')}
+    when ${now} < ${performances.salesOpenAt} then ${toPrioritySql('upcoming')}
+    else ${toPrioritySql('on_sale')}
   end`;
 }
 
@@ -33,18 +33,19 @@ function performancePriority({ now }: { now: Date }): SQL<number> {
  * 판매 상태는 저장하지 않으므로, 목록 쿼리와 개수 쿼리가 이 서브쿼리를 JOIN해 거르기와 개수를 같은 기준으로 맞춘다.
  * 회차가 없는 공연은 행이 없다.
  */
-export function showSalesStatusSubquery({
+export function buildShowSalesStatusSubquery({
   db,
   now,
 }: {
   db: Database;
   now: Date;
 }) {
-  const priority = performancePriority({ now });
-  const showPriority = sql`min(${priority})`;
-  const toStatus = sql.join(
+  const prioritySql = buildPerformancePrioritySql({ now });
+  const showPrioritySql = sql`min(${prioritySql})`;
+  const statusCasesSql = sql.join(
     SHOW_SALES_STATUSES.map(
-      (status) => sql`when ${toPriority(status)} then ${toLiteral(status)}`,
+      (status) =>
+        sql`when ${toPrioritySql(status)} then ${toLiteralSql(status)}`,
     ),
     sql` `,
   );
@@ -53,13 +54,13 @@ export function showSalesStatusSubquery({
     .select({
       showId: performances.showId,
       salesStatus:
-        sql<ShowSalesStatus>`case ${showPriority} ${toStatus} end`.as(
+        sql<ShowSalesStatus>`case ${showPrioritySql} ${statusCasesSql} end`.as(
           'sales_status',
         ),
       // 판매 예정 공연은 판매 중인 회차가 없으므로, 판매 예정 회차 중 가장 이른 판매 오픈 일시가 다음 오픈이다.
       salesOpenAt: sql<Date | null>`case
-        when ${showPriority} = ${toPriority('upcoming')}
-        then min(${performances.salesOpenAt}) filter (where ${priority} = ${toPriority('upcoming')})
+        when ${showPrioritySql} = ${toPrioritySql('upcoming')}
+        then min(${performances.salesOpenAt}) filter (where ${prioritySql} = ${toPrioritySql('upcoming')})
       end`
         .mapWith(performances.salesOpenAt)
         .as('sales_open_at'),

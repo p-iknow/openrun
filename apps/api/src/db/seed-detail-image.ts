@@ -1,7 +1,7 @@
 import sharp, { type OverlayOptions } from 'sharp';
 import { getShowPalette, type Palette } from './seed-poster.js';
 import { buildShowNotices, type SeedShowContent } from './seed-shows.js';
-import { textImage } from './seed-text.js';
+import { renderTextImage } from './seed-text.js';
 
 // 시드가 공연마다 만드는 가상의 상세 이미지다. 실제 예매 서비스의 상품 상세처럼 소개를 세로로 긴 이미지에 그린다.
 // 1장: 포스터와 같은 색의 머리말(장르, 제목, 한 줄 소개)과 줄거리(또는 공연 소개)
@@ -17,10 +17,10 @@ const TEXT_WIDTH = WIDTH - PADDING * 2;
 const TEXT_COLOR = '#1b1c1f';
 const SECONDARY_COLOR = '#4e5968';
 
-type TextImage = Awaited<ReturnType<typeof textImage>>;
+type TextImage = Awaited<ReturnType<typeof renderTextImage>>;
 
 // 글자 이미지를 위에서부터 쌓을 자리를 정한다. 각 항목 앞에 gap만큼 띄운다.
-function stack({
+function stackTextImages({
   items,
   top,
 }: {
@@ -41,7 +41,7 @@ function stack({
 
 // 제목 앞 굵은 색 막대와 제목. 모든 장이 같은 모양의 제목을 쓴다.
 async function renderSectionHeading(text: string) {
-  return textImage(text, {
+  return renderTextImage(text, {
     font: 'bold',
     size: 44,
     width: TEXT_WIDTH - 24,
@@ -49,7 +49,13 @@ async function renderSectionHeading(text: string) {
   });
 }
 
-function headingBarSvg({ top, palette }: { top: number; palette: Palette }) {
+function buildHeadingBarSvg({
+  top,
+  palette,
+}: {
+  top: number;
+  palette: Palette;
+}) {
   return `<rect x="${PADDING}" y="${top + 10}" width="10" height="40" rx="5" fill="${palette.bottom}"/>`;
 }
 
@@ -64,7 +70,7 @@ async function renderStoryImage({
 }): Promise<Buffer> {
   const [labelText, titleText, taglineText, heading, ...paragraphs] =
     await Promise.all([
-      textImage(label, {
+      renderTextImage(label, {
         font: 'medium',
         size: 22,
         width: TEXT_WIDTH,
@@ -72,8 +78,12 @@ async function renderStoryImage({
         // 글자 사이의 WORD JOINER에도 자간이 붙어 실제 간격은 이 값의 두 배다(seed-text.ts).
         letterSpacing: 2,
       }),
-      textImage(content.title, { font: 'bold', size: 76, width: TEXT_WIDTH }),
-      textImage(content.tagline, {
+      renderTextImage(content.title, {
+        font: 'bold',
+        size: 76,
+        width: TEXT_WIDTH,
+      }),
+      renderTextImage(content.tagline, {
         font: 'medium',
         size: 36,
         width: TEXT_WIDTH,
@@ -82,7 +92,7 @@ async function renderStoryImage({
       }),
       renderSectionHeading(content.storyHeading),
       ...content.story.map((paragraph) =>
-        textImage(paragraph, {
+        renderTextImage(paragraph, {
           font: 'medium',
           size: 34,
           width: TEXT_WIDTH,
@@ -92,7 +102,7 @@ async function renderStoryImage({
       ),
     ]);
 
-  const header = stack({
+  const header = stackTextImages({
     items: [
       { image: labelText, gap: 0 },
       { image: titleText, gap: 28 },
@@ -103,7 +113,7 @@ async function renderStoryImage({
   const headerHeight = header.bottom + 88;
   // 제목과 한 줄 소개 사이의 짧은 강조선
   const taglineRuleY = (header.tops[2] ?? 0) - 12;
-  const body = stack({
+  const body = stackTextImages({
     items: [
       { image: heading, gap: 0, left: PADDING + 24 },
       ...paragraphs.map((image) => ({ image, gap: 32 })),
@@ -124,7 +134,7 @@ async function renderStoryImage({
   <circle cx="${WIDTH - 120}" cy="120" r="64" fill="${palette.accent}" opacity="0.9"/>
   <circle cx="${WIDTH - 120}" cy="120" r="80" fill="none" stroke="#fff" stroke-opacity="0.6" stroke-width="2"/>
   <line x1="${PADDING}" y1="${taglineRuleY}" x2="${PADDING + 64}" y2="${taglineRuleY}" stroke="${palette.accent}" stroke-width="4"/>
-  ${headingBarSvg({ top: body.tops[0] ?? 0, palette })}
+  ${buildHeadingBarSvg({ top: body.tops[0] ?? 0, palette })}
 </svg>`;
 
   return sharp(Buffer.from(svg))
@@ -144,14 +154,14 @@ async function renderHighlightsImage({
   const ITEM_LEFT = PADDING + NUMBER_SIZE + 20;
   const [heading, footer, ...items] = await Promise.all([
     renderSectionHeading('관람 포인트'),
-    textImage(content.title, {
+    renderTextImage(content.title, {
       font: 'medium',
       size: 26,
       width: TEXT_WIDTH,
       color: SECONDARY_COLOR,
     }),
     ...content.highlights.map((item) =>
-      textImage(item, {
+      renderTextImage(item, {
         font: 'medium',
         size: 34,
         width: WIDTH - ITEM_LEFT - PADDING,
@@ -162,7 +172,7 @@ async function renderHighlightsImage({
   ]);
   const numbers = await Promise.all(
     items.map((_, index) =>
-      textImage(String(index + 1), {
+      renderTextImage(String(index + 1), {
         font: 'bold',
         size: 28,
         width: NUMBER_SIZE,
@@ -170,7 +180,7 @@ async function renderHighlightsImage({
     ),
   );
 
-  const body = stack({
+  const body = stackTextImages({
     items: [
       { image: heading, gap: 0, left: PADDING + 24 },
       ...items.map((image) => ({ image, gap: 36, left: ITEM_LEFT })),
@@ -190,7 +200,7 @@ async function renderHighlightsImage({
     .join('');
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${height}">
   <rect width="100%" height="100%" fill="#ffffff"/>
-  ${headingBarSvg({ top: body.tops[0] ?? 0, palette })}
+  ${buildHeadingBarSvg({ top: body.tops[0] ?? 0, palette })}
   ${circles}
   <line x1="${PADDING}" y1="${footerTop - 32}" x2="${WIDTH - PADDING}" y2="${footerTop - 32}" stroke="#e5e8eb" stroke-width="2"/>
 </svg>`;
@@ -225,7 +235,7 @@ async function renderNoticeImage({
       heading: await renderSectionHeading(heading),
       items: await Promise.all(
         items.map((item) =>
-          textImage(item, {
+          renderTextImage(item, {
             font: 'medium',
             size: 30,
             width: WIDTH - ITEM_LEFT - PADDING,
@@ -241,7 +251,7 @@ async function renderNoticeImage({
   const shapes: string[] = [];
   let top = 96;
   sections.forEach(({ heading, items }, sectionIndex) => {
-    const body = stack({
+    const body = stackTextImages({
       items: [
         {
           image: heading,
@@ -257,7 +267,7 @@ async function renderNoticeImage({
       top,
     });
     placements.push(...body.placements);
-    shapes.push(headingBarSvg({ top: body.tops[0] ?? 0, palette }));
+    shapes.push(buildHeadingBarSvg({ top: body.tops[0] ?? 0, palette }));
     // 점은 항목 첫 줄의 가운데(위에서 19px)에 맞춘다.
     for (const itemTop of body.tops.slice(1)) {
       shapes.push(

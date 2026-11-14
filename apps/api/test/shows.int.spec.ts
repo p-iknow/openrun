@@ -689,7 +689,7 @@ describe('GET /shows', () => {
     const salesOpenAt = '2026-03-01T05:00:00.000Z';
     const startsAt = '2026-03-10T10:00:00.000Z';
 
-    function msBefore({ iso, ms }: { iso: string; ms: number }): Date {
+    function subtractMs({ iso, ms }: { iso: string; ms: number }): Date {
       return new Date(new Date(iso).getTime() - ms);
     }
 
@@ -701,7 +701,7 @@ describe('GET /shows', () => {
     it.each([
       {
         moment: '판매 오픈 직전',
-        at: msBefore({ iso: salesOpenAt, ms: 1 }),
+        at: subtractMs({ iso: salesOpenAt, ms: 1 }),
         expected: 'upcoming',
       },
       {
@@ -725,7 +725,7 @@ describe('GET /shows', () => {
     it.each([
       {
         moment: '회차 시작 직전',
-        at: msBefore({ iso: startsAt, ms: 1 }),
+        at: subtractMs({ iso: startsAt, ms: 1 }),
         expected: 'on_sale',
       },
       {
@@ -758,7 +758,7 @@ describe('GET /shows', () => {
         title: '달빛 정원',
         performances: [{ startsAt, salesOpenAt, isCancelled: true }],
       });
-      now = msBefore({ iso: salesOpenAt, ms: 1 });
+      now = subtractMs({ iso: salesOpenAt, ms: 1 });
 
       expect(await fetchSalesStatus()).toBeUndefined();
     });
@@ -782,7 +782,7 @@ describe('GET /shows', () => {
         title: '달빛 정원',
         performances: [{ startsAt, salesOpenAt, soldSeats: VENUE_SEAT_COUNT }],
       });
-      now = msBefore({ iso: salesOpenAt, ms: 1 });
+      now = subtractMs({ iso: salesOpenAt, ms: 1 });
 
       expect(await fetchSalesStatus()).toBe('upcoming');
     });

@@ -4,7 +4,7 @@ import { SearchField } from './search-field.js';
 
 // 서버 렌더링 결과 HTML만 본다. 입력과 제출 같은 브라우저 동작은 Storybook에서 확인한다.
 
-function attr({ tag, attribute }: { tag: string; attribute: string }) {
+function getAttr({ tag, attribute }: { tag: string; attribute: string }) {
   return new RegExp(`\\s${attribute}="([^"]*)"`).exec(tag)?.[1];
 }
 
@@ -20,10 +20,10 @@ describe('SearchField', () => {
 
     const label = findTag({ html, tag: 'label' });
     const input = findTag({ html, tag: 'input' });
-    expect(attr({ tag: label, attribute: 'for' })).toBe(
-      attr({ tag: input, attribute: 'id' }),
+    expect(getAttr({ tag: label, attribute: 'for' })).toBe(
+      getAttr({ tag: input, attribute: 'id' }),
     );
-    expect(attr({ tag: label, attribute: 'class' })).toContain('sr-only');
+    expect(getAttr({ tag: label, attribute: 'class' })).toContain('sr-only');
     expect(html).toContain('>공연 제목 검색</label>');
   });
 
@@ -39,20 +39,20 @@ describe('SearchField', () => {
     );
 
     const input = findTag({ html, tag: 'input' });
-    expect(attr({ tag: input, attribute: 'type' })).toBe('search');
-    expect(attr({ tag: input, attribute: 'name' })).toBe('q');
-    expect(attr({ tag: input, attribute: 'placeholder' })).toBe(
+    expect(getAttr({ tag: input, attribute: 'type' })).toBe('search');
+    expect(getAttr({ tag: input, attribute: 'name' })).toBe('q');
+    expect(getAttr({ tag: input, attribute: 'placeholder' })).toBe(
       '공연 제목으로 찾기',
     );
-    expect(attr({ tag: input, attribute: 'value' })).toBe('햄릿');
-    expect(attr({ tag: input, attribute: 'maxLength' })).toBe('50');
+    expect(getAttr({ tag: input, attribute: 'value' })).toBe('햄릿');
+    expect(getAttr({ tag: input, attribute: 'maxLength' })).toBe('50');
   });
 
   it('폼을 제출하는 버튼을 두고, 글자 없는 아이콘 버튼이라 이름을 aria-label로 준다', () => {
     const html = renderToStaticMarkup(<SearchField label="공연 제목 검색" />);
 
     const button = findTag({ html, tag: 'button' });
-    expect(attr({ tag: button, attribute: 'type' })).toBe('submit');
-    expect(attr({ tag: button, attribute: 'aria-label' })).toBe('검색');
+    expect(getAttr({ tag: button, attribute: 'type' })).toBe('submit');
+    expect(getAttr({ tag: button, attribute: 'aria-label' })).toBe('검색');
   });
 });

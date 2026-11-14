@@ -366,11 +366,11 @@ genre?: ("musical" | "play" | "concert" | "classical_dance" | "kids_family")[];<
           </p>
           <pre><code class="language-ts">// apps/api/src/shows/shows.service.ts
 const listCondition = and(
-  ne(salesStatus.salesStatus, 'ended'),
+  ne(salesStatusSubquery.salesStatus, 'ended'),
   q ? ilike(shows.title, `%${escapeLikePattern(q)}%`) : undefined,
   // 고른 값이 없으면 거르지 않는다. 같은 이름 안의 값은 OR(IN), 다른 조건과는 AND다.
   genre.length &gt; 0 ? inArray(shows.genre, genre) : undefined,
-  status.length &gt; 0 ? inArray(salesStatus.salesStatus, status) : undefined,
+  status.length &gt; 0 ? inArray(salesStatusSubquery.salesStatus, status) : undefined,
 );</code></pre>
           <pre><code class="language-sql">-- ?genre=musical&amp;genre=concert&amp;status=upcoming
 WHERE sales_status &lt;&gt; 'ended'

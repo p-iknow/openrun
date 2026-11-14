@@ -53,7 +53,7 @@ const PAGE_SIZE = 20;
 
 async findPage(): Promise&lt;ShowPageDto&gt; {
   // ① 공연마다 첫 회차와 마지막 회차를 구하는 서브쿼리
-  const period = this.db
+  const periodSubquery = this.db
     .select({
       showId: performances.showId,
       start: min(performances.startsAt).as('start'),
@@ -63,12 +63,12 @@ async findPage(): Promise&lt;ShowPageDto&gt; {
     .groupBy(performances.showId)
     .as('period');
   // ② 공연마다 공연 판매 상태와 판매 오픈 일시를 구하는 서브쿼리 (06 문서)
-  const salesStatus = showSalesStatusSubquery({
+  const salesStatusSubquery = buildShowSalesStatusSubquery({
     db: this.db,
     now: this.clock.now(),
   });
   // 판매 종료 공연은 목록에서 뺀다. 목록과 전체 개수가 같은 조건을 써야 페이지 수가 맞는다.
-  const isListed = ne(salesStatus.salesStatus, 'ended');
+  const listCondition = ne(salesStatusSubquery.salesStatus, 'ended');
 
   const [rows, [total]] = await Promise.all([
     // ③ 목록 쿼리
@@ -78,25 +78,25 @@ async findPage(): Promise&lt;ShowPageDto&gt; {
         title: shows.title,
         genre: shows.genre,
         venueName: venues.name,
-        start: period.start,
-        end: period.end,
-        salesStatus: salesStatus.salesStatus,
-        salesOpenAt: salesStatus.salesOpenAt,
+        start: periodSubquery.start,
+        end: periodSubquery.end,
+        salesStatus: salesStatusSubquery.salesStatus,
+        salesOpenAt: salesStatusSubquery.salesOpenAt,
       })
       .from(shows)
       .innerJoin(venues, eq(venues.id, shows.venueId))
-      .innerJoin(period, eq(period.showId, shows.id))
-      .innerJoin(salesStatus, eq(salesStatus.showId, shows.id))
-      .where(isListed)
-      .orderBy(asc(period.start), asc(shows.id))
+      .innerJoin(periodSubquery, eq(periodSubquery.showId, shows.id))
+      .innerJoin(salesStatusSubquery, eq(salesStatusSubquery.showId, shows.id))
+      .where(listCondition)
+      .orderBy(asc(periodSubquery.start), asc(shows.id))
       .limit(PAGE_SIZE)
       .offset((PAGE - 1) * PAGE_SIZE),
     // ④ 개수 쿼리
     this.db
       .select({ count: count() })
       .from(shows)
-      .innerJoin(salesStatus, eq(salesStatus.showId, shows.id))
-      .where(isListed),
+      .innerJoin(salesStatusSubquery, eq(salesStatusSubquery.showId, shows.id))
+      .where(listCondition),
   ]);
   // ⑤ 응답으로 바꾸기
   ...
@@ -105,9 +105,9 @@ async findPage(): Promise&lt;ShowPageDto&gt; {
             <div class="lane blue">
               <div class="lane-title">목록 쿼리가 표를 바꾸는 순서</div>
               <ol class="chain">
-                <li><span>회차를 공연당 한 줄로 줄인다 (<code>period</code>, <code>salesStatus</code>)</span></li>
+                <li><span>회차를 공연당 한 줄로 줄인다 (<code>periodSubquery</code>, <code>salesStatusSubquery</code>)</span></li>
                 <li><span>공연에 공연장을 붙인다</span></li>
-                <li><span>공연에 <code>period</code>와 <code>salesStatus</code>를 붙이고, 짝 없는 공연은 버린다</span></li>
+                <li><span>공연에 <code>periodSubquery</code>와 <code>salesStatusSubquery</code>를 붙이고, 짝 없는 공연은 버린다</span></li>
                 <li><span>판매 종료 공연을 뺀다</span></li>
                 <li><span>첫 회차 순으로 줄 세운다</span></li>
                 <li><span>20개만 자른다</span></li>
@@ -115,7 +115,7 @@ async findPage(): Promise&lt;ShowPageDto&gt; {
             </div>
           </div>
           <p>
-            <code>period</code>와 <code>salesStatus</code>는 따로 실행되지 않는다. ③과 ④ 안에 끼워 들어가므로 DB에 가는
+            <code>periodSubquery</code>와 <code>salesStatusSubquery</code>는 따로 실행되지 않는다. ③과 ④ 안에 끼워 들어가므로 DB에 가는
             SQL은 두 개다. ③의 SQL은 다음과 같다. 판매 상태 서브쿼리 안쪽은 <code>(...)</code>로 줄였다(전체는
             <a href="06-판매-상태-쿼리-읽기.html#service">db-and-drizzle 06 문서</a>).
           </p>
@@ -226,7 +226,7 @@ limit $8                         -- $8은 20</code></pre>
 
         <section id="period">
           <h2>공연 기간 서브쿼리</h2>
-          <pre><code class="language-ts">const period = this.db
+          <pre><code class="language-ts">const periodSubquery = this.db
   .select({
     showId: performances.showId,
     start: min(performances.startsAt).as('start'),
@@ -334,7 +334,7 @@ const period = Object.values(Object.groupBy(performances, (p) =&gt; p.showId)).m
                   <td>계산한 값</td>
                   <td><code>min("starts_at") as "start"</code></td>
                   <td>
-                    <code>min(...)</code>은 즉석에서 계산한 값이라 이름이 없다. 바깥 쿼리가 <code>period.start</code>로
+                    <code>min(...)</code>은 즉석에서 계산한 값이라 이름이 없다. 바깥 쿼리가 <code>periodSubquery.start</code>로
                     가리키려면 SQL 안에 이름이 있어야 한다
                   </td>
                 </tr>
@@ -352,9 +352,9 @@ const period = Object.values(Object.groupBy(performances, (p) =&gt; p.showId)).m
           <h2>세 번의 innerJoin과 where</h2>
           <pre><code class="language-ts">.from(shows)
 .innerJoin(venues, eq(venues.id, shows.venueId))
-.innerJoin(period, eq(period.showId, shows.id))
-.innerJoin(salesStatus, eq(salesStatus.showId, shows.id))
-.where(isListed)</code></pre>
+.innerJoin(periodSubquery, eq(periodSubquery.showId, shows.id))
+.innerJoin(salesStatusSubquery, eq(salesStatusSubquery.showId, shows.id))
+.where(listCondition)</code></pre>
           <p>
             <a href="01-프론트엔드-개발자를-위한-DB-개념.html#join">JOIN</a>은 공연 표의 줄마다 조건에 맞는 짝을 찾아
             옆으로 이어 붙인다. 짝이 없을 때 어떻게 하느냐가 JOIN 종류의 차이다.
@@ -367,7 +367,7 @@ const period = Object.values(Object.groupBy(performances, (p) =&gt; p.showId)).m
               >db-and-drizzle 04 문서</a
             >) 반드시 공연장이 있다. 그래서 이 JOIN으로 빠지는 공연은 없다.
           </p>
-          <h3>period 붙이기</h3>
+          <h3>periodSubquery 붙이기</h3>
           <div class="table-wrap">
             <table>
               <thead>
@@ -396,11 +396,11 @@ const period = Object.values(Object.groupBy(performances, (p) =&gt; p.showId)).m
               </tbody>
             </table>
           </div>
-          <h3>salesStatus 붙이고 판매 종료 빼기</h3>
+          <h3>salesStatusSubquery 붙이고 판매 종료 빼기</h3>
           <p>
-            <code>salesStatus</code>도 회차를 공연별로 묶은 서브쿼리라 <code>period</code>처럼 공연당 한 줄이고, 회차가 없는
+            <code>salesStatusSubquery</code>도 회차를 공연별로 묶은 서브쿼리라 <code>periodSubquery</code>처럼 공연당 한 줄이고, 회차가 없는
             붉은 숲은 줄이 없다. 그래서 이 JOIN으로 더 빠지는 공연은 없고, 남은 두 공연에 <code>sales_status</code>와
-            <code>sales_open_at</code>이 붙는다. 그다음 <code>where(isListed)</code>가 <code>sales_status</code>가
+            <code>sales_open_at</code>이 붙는다. 그다음 <code>where(listCondition)</code>가 <code>sales_status</code>가
             <code>'ended'</code>인 줄을 뺀다. 예시의 두 공연은 판매 중이라 둘 다 남는다.
           </p>
           <p>
@@ -410,7 +410,7 @@ const period = Object.values(Object.groupBy(performances, (p) =&gt; p.showId)).m
           </p>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>shows.id</th><th>shows.title</th><th>shows.venue_id</th><th>venues.id</th><th>venues.name</th><th>period.show_id</th><th>period.start</th><th>period.end</th><th>show_sales_status.show_id</th><th>sales_status</th><th>sales_open_at</th></tr></thead>
+              <thead><tr><th>shows.id</th><th>shows.title</th><th>shows.venue_id</th><th>venues.id</th><th>venues.name</th><th>period.show_id</th><th>periodSubquery.start</th><th>periodSubquery.end</th><th>show_sales_status.show_id</th><th>sales_status</th><th>sales_open_at</th></tr></thead>
               <tbody>
                 <tr><td>1</td><td>달빛 정원</td><td>1</td><td>1</td><td>낙산 소극장</td><td>1</td><td>12-01 19:30</td><td>12-05 19:30</td><td>1</td><td>on_sale</td><td>null</td></tr>
                 <tr><td>2</td><td>겨울 기차</td><td>2</td><td>2</td><td>한강 아트홀</td><td>2</td><td>12-03 15:00</td><td>12-03 15:00</td><td>2</td><td>on_sale</td><td>null</td></tr>
@@ -463,8 +463,8 @@ const period = Object.values(Object.groupBy(performances, (p) =&gt; p.showId)).m
             <a href="01-프론트엔드-개발자를-위한-DB-개념.html#inner-join">INNER JOIN</a>이 맞다.
           </p>
           <p>
-            <code>period</code>만 <a href="01-프론트엔드-개발자를-위한-DB-개념.html#left-join">LEFT JOIN</a>으로 바꿔도
-            결과는 같다. <code>salesStatus</code>에도 붉은 숲의 줄이 없어서 그 INNER JOIN에서 빠지기 때문이다. 두 서브쿼리를
+            <code>periodSubquery</code>만 <a href="01-프론트엔드-개발자를-위한-DB-개념.html#left-join">LEFT JOIN</a>으로 바꿔도
+            결과는 같다. <code>salesStatusSubquery</code>에도 붉은 숲의 줄이 없어서 그 INNER JOIN에서 빠지기 때문이다. 두 서브쿼리를
             모두 LEFT JOIN으로 바꿔야 붉은 숲이 남고, 그때는 <code>start</code>, <code>end</code>, <code>sales_status</code>가
             <code>null</code>이 된다. <code>null &lt;&gt; 'ended'</code>는 참이 아니므로(<a
               href="01-프론트엔드-개발자를-위한-DB-개념.html#null"
@@ -485,7 +485,7 @@ const period = Object.values(Object.groupBy(performances, (p) =&gt; p.showId)).m
         <section id="why-subquery">
           <h2>회차를 바로 JOIN하지 않는 이유</h2>
           <p>
-            <code>period</code>를 만들지 않고 회차 표를 바로 JOIN하면 공연마다 짝이 되는 회차를 <strong>전부</strong> 붙인다.
+            <code>periodSubquery</code>를 만들지 않고 회차 표를 바로 JOIN하면 공연마다 짝이 되는 회차를 <strong>전부</strong> 붙인다.
             달빛 정원은 짝이 둘이라 두 줄이 된다(<a href="01-프론트엔드-개발자를-위한-DB-개념.html#join-rows"
               >일대다 JOIN은 행을 늘린다</a
             >).
@@ -535,7 +535,7 @@ this.db.select().from(shows).innerJoin(performances, eq(performances.showId, sho
             </li>
           </ul>
           <p>
-            그래서 회차를 먼저 공연당 한 줄로 줄인 <code>period</code>를 만들고, 그것을 붙였다. 공연 하나에 짝이 하나뿐이라
+            그래서 회차를 먼저 공연당 한 줄로 줄인 <code>periodSubquery</code>를 만들고, 그것을 붙였다. 공연 하나에 짝이 하나뿐이라
             줄이 불어나지 않는다.
           </p>
           <div class="flow">
@@ -543,7 +543,7 @@ this.db.select().from(shows).innerJoin(performances, eq(performances.showId, sho
               <div class="lane-title">줄 수의 변화</div>
               <ol class="chain">
                 <li><span>회차 3줄</span></li>
-                <li><span>공연별로 묶어 <code>period</code> 2줄</span></li>
+                <li><span>공연별로 묶어 <code>periodSubquery</code> 2줄</span></li>
                 <li><span>공연 3줄에 붙이면 결과 2줄 (붉은 숲은 빠짐)</span></li>
               </ol>
             </div>
@@ -552,7 +552,7 @@ this.db.select().from(shows).innerJoin(performances, eq(performances.showId, sho
 
         <section id="order">
           <h2>정렬 기준을 두 개 둔 이유</h2>
-          <pre><code class="language-ts">.orderBy(asc(period.start), asc(shows.id))</code></pre>
+          <pre><code class="language-ts">.orderBy(asc(periodSubquery.start), asc(shows.id))</code></pre>
           <p>
             첫 회차가 이른 공연이 먼저 나온다. 문제는 첫 회차 일시가 <strong>같은</strong> 공연들이다. 이들끼리의 순서는
             정해지지 않아서, DB는 요청마다 다른 순서로 돌려줄 수 있다.
@@ -663,8 +663,8 @@ this.db.select().from(shows).innerJoin(performances, eq(performances.showId, sho
           <pre><code class="language-ts">this.db
   .select({ count: count() })
   .from(shows)
-  .innerJoin(salesStatus, eq(salesStatus.showId, shows.id))
-  .where(isListed)</code></pre>
+  .innerJoin(salesStatusSubquery, eq(salesStatusSubquery.showId, shows.id))
+  .where(listCondition)</code></pre>
           <p>
             <code>totalCount</code>는 화면 아래의 "전체 몇 개, 몇 페이지"를 계산하는 데 쓴다. 이 숫자는 목록에 실제로 나올
             공연 수와 같아야 한다. 그래서 목록 쿼리에서 공연을 빼는 조건을 모두 같이 건다.
@@ -685,17 +685,17 @@ this.db.select().from(shows).innerJoin(performances, eq(performances.showId, sho
                   <td>뺐다</td>
                 </tr>
                 <tr>
-                  <td><code>innerJoin(period)</code></td>
+                  <td><code>innerJoin(periodSubquery)</code></td>
                   <td>회차 없는 공연을 뺀다</td>
-                  <td>뺐다. <code>salesStatus</code>가 같은 공연을 뺀다</td>
+                  <td>뺐다. <code>salesStatusSubquery</code>가 같은 공연을 뺀다</td>
                 </tr>
                 <tr>
-                  <td><code>innerJoin(salesStatus)</code></td>
+                  <td><code>innerJoin(salesStatusSubquery)</code></td>
                   <td>회차 없는 공연을 뺀다</td>
                   <td>넣었다</td>
                 </tr>
                 <tr>
-                  <td><code>where(isListed)</code></td>
+                  <td><code>where(listCondition)</code></td>
                   <td>판매 종료 공연을 뺀다</td>
                   <td>넣었다</td>
                 </tr>
@@ -708,14 +708,14 @@ this.db.select().from(shows).innerJoin(performances, eq(performances.showId, sho
             </table>
           </div>
           <p>
-            <code>where(isListed)</code>는 <code>salesStatus</code>의 컬럼을 보므로, 개수 쿼리도 <code>salesStatus</code>를
-            JOIN해야 한다. 이 JOIN이 회차 없는 공연도 함께 빼니 <code>period</code>는 붙이지 않아도 개수가 같다. 예시에서는
+            <code>where(listCondition)</code>는 <code>salesStatusSubquery</code>의 컬럼을 보므로, 개수 쿼리도 <code>salesStatusSubquery</code>를
+            JOIN해야 한다. 이 JOIN이 회차 없는 공연도 함께 빼니 <code>periodSubquery</code>는 붙이지 않아도 개수가 같다. 예시에서는
             달빛 정원, 겨울 기차 두 개를 세어 <code>totalCount</code>가 2다.
           </p>
           <p>
             개수가 틀리면 페이지 수가 틀린다. 공연이 21개이고 그중 하나가 판매 종료라면 목록에 나올 공연은 20개라 한 페이지로
-            끝난다. 그런데 개수 쿼리에서 <code>where(isListed)</code>를 빼고 21로 세면 <code>totalPages</code>가 2가 되고,
-            2페이지를 눌러 보면 빈 화면이 나온다. 그래서 조건을 <code>isListed</code> 한 변수에 담아 두 쿼리가 함께 쓴다. 뒤
+            끝난다. 그런데 개수 쿼리에서 <code>where(listCondition)</code>를 빼고 21로 세면 <code>totalPages</code>가 2가 되고,
+            2페이지를 눌러 보면 빈 화면이 나온다. 그래서 조건을 <code>listCondition</code> 한 변수에 담아 두 쿼리가 함께 쓴다. 뒤
             티켓에서 장르 필터나 제목 검색이 들어올 때도 같은 조건을 양쪽에 넣어야 한다.
           </p>
         </section>
@@ -748,7 +748,7 @@ return {
               <code>[{ count: 2 }]</code>로 온다. 첫 원소를 꺼낸다.
             </li>
             <li>
-              <strong><code>period</code> 객체로 묶기:</strong> DB 결과는 <code>start</code>, <code>end</code>가 펼쳐진 한
+              <strong><code>periodSubquery</code> 객체로 묶기:</strong> DB 결과는 <code>start</code>, <code>end</code>가 펼쳐진 한
               줄이다. 응답 모양(<code>ShowSummaryDto</code>)에 맞게 <code>period: &#123; start, end &#125;</code>로 묶고,
               <code>Date</code>를 ISO 문자열로 바꾼다.
             </li>
@@ -768,21 +768,21 @@ return {
           <details>
             <summary>1. 회차가 없는 공연이 목록에서 빠지는 것은 코드의 어느 부분 때문인가?</summary>
             <p>
-              <code>.innerJoin(period, ...)</code>와 <code>.innerJoin(salesStatus, ...)</code> 둘 다다. 두 서브쿼리 모두 회차를
-              공연별로 묶어 만들어서 회차 없는 공연은 줄이 없고, INNER JOIN은 짝 없는 줄을 버린다. <code>where(isListed)</code>는
+              <code>.innerJoin(periodSubquery, ...)</code>와 <code>.innerJoin(salesStatusSubquery, ...)</code> 둘 다다. 두 서브쿼리 모두 회차를
+              공연별로 묶어 만들어서 회차 없는 공연은 줄이 없고, INNER JOIN은 짝 없는 줄을 버린다. <code>where(listCondition)</code>는
               판매 종료 공연을 빼는 조건이라 이 일과 상관없다.
             </p>
           </details>
           <details>
-            <summary>2. 목록 쿼리의 <code>.innerJoin(period, ...)</code>만 <code>.leftJoin(period, ...)</code>로 바꾸면 무엇이 달라지는가?</summary>
+            <summary>2. 목록 쿼리의 <code>.innerJoin(periodSubquery, ...)</code>만 <code>.leftJoin(periodSubquery, ...)</code>로 바꾸면 무엇이 달라지는가?</summary>
             <p>
-              결과는 같다. 회차 없는 공연은 <code>salesStatus</code>에도 줄이 없어서 <code>.innerJoin(salesStatus, ...)</code>에서
-              빠진다. 남는 공연은 모두 <code>period</code>에 짝이 있으니 <code>start</code>, <code>end</code>도 <code>null</code>이
+              결과는 같다. 회차 없는 공연은 <code>salesStatusSubquery</code>에도 줄이 없어서 <code>.innerJoin(salesStatusSubquery, ...)</code>에서
+              빠진다. 남는 공연은 모두 <code>periodSubquery</code>에 짝이 있으니 <code>start</code>, <code>end</code>도 <code>null</code>이
               되지 않는다.
             </p>
           </details>
           <details>
-            <summary>3. <code>period</code> 없이 <code>performances</code>를 바로 JOIN하고 <code>limit(20)</code>을 걸면?</summary>
+            <summary>3. <code>periodSubquery</code> 없이 <code>performances</code>를 바로 JOIN하고 <code>limit(20)</code>을 걸면?</summary>
             <p>
               공연이 회차 수만큼 여러 줄로 불어나서, 20줄이 공연 20개가 아니게 된다. 같은 공연이 여러 번 나오고 한 페이지의
               공연 수가 줄어든다.
@@ -791,7 +791,7 @@ return {
           <details>
             <summary>4. <code>min(performances.startsAt)</code>에서 <code>.as('start')</code>를 지우면?</summary>
             <p>
-              바깥 쿼리에서 <code>period.start</code>를 가리킬 SQL 이름이 없어, Drizzle이 실행할 때 alias가 없다는 오류를
+              바깥 쿼리에서 <code>periodSubquery.start</code>를 가리킬 SQL 이름이 없어, Drizzle이 실행할 때 alias가 없다는 오류를
               던진다.
             </p>
           </details>
@@ -803,10 +803,10 @@ return {
             </p>
           </details>
           <details>
-            <summary>6. 개수 쿼리에서 <code>.where(isListed)</code>를 지우면?</summary>
+            <summary>6. 개수 쿼리에서 <code>.where(listCondition)</code>를 지우면?</summary>
             <p>
               판매 종료 공연까지 세어 <code>totalCount</code>가 실제 목록보다 커진다. <code>totalPages</code>가 늘어 빈 페이지가
-              생길 수 있다. 회차 없는 공연은 여전히 <code>innerJoin(salesStatus, ...)</code>에서 빠진다.
+              생길 수 있다. 회차 없는 공연은 여전히 <code>innerJoin(salesStatusSubquery, ...)</code>에서 빠진다.
             </p>
           </details>
           <details>
