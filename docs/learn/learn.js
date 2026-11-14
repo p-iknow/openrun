@@ -57,6 +57,7 @@ const learnFolders = [
       { file: '08-마이그레이션.html', title: '08 마이그레이션', tags: ['drizzle', 'database'] },
       { file: '09-공연-제목-검색-쿼리-읽기.html', title: '09 공연 제목 검색 쿼리 읽기', tags: ['drizzle', 'database'] },
       { file: '10-장르-판매-상태-필터-쿼리-읽기.html', title: '10 장르·판매 상태 필터 쿼리 읽기', tags: ['drizzle', 'database'] },
+      { file: '11-행-단위-값과-그룹-단위-값.html', title: '11 행 단위 값과 그룹 단위 값, 함수 종속성', tags: ['database'] },
     ],
   },
   {
