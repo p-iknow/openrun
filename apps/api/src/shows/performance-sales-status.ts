@@ -69,6 +69,6 @@ export function buildAlmostSoldOutCondition({
   remainingSeats: SQL<number>;
   totalSeats: SQL<number>;
 }): SQL<boolean> {
-  // 정수 나눗셈을 피하려고 양쪽에 10을 곱해 비교한다.
+  // 남은 좌석 / 전체 좌석이 0.1 이하인지 보려 했지만, PostgreSQL에서는 정수 나눗셈이 소수점을 버리므로 대신 남은 좌석 × 10이 전체 좌석 이하인지 본다.
   return sql<boolean>`(${salesStatus} = ${buildStatusLiteral('on_sale')} and ${remainingSeats} * 10 <= ${totalSeats})`;
 }
