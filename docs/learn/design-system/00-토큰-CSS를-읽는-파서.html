@@ -20,9 +20,9 @@
         </ol>
         <strong>함수 따라가기</strong>
         <ol>
-          <li><a href="#block-after">blockAfter: 블록 잘라 내기</a></li>
-          <li><a href="#declarations">declarations: 이름과 값 뽑기</a></li>
-          <li><a href="#theme-values">themeValues: 종류별로 고르기</a></li>
+          <li><a href="#block-after">getTopLevelBlock: 블록 잘라 내기</a></li>
+          <li><a href="#declarations">parseDeclarations: 이름과 값 뽑기</a></li>
+          <li><a href="#theme-values">filterThemeValues: 종류별로 고르기</a></li>
           <li><a href="#link">의미 토큰을 팔레트에 잇기</a></li>
           <li><a href="#output">출력</a></li>
         </ol>
@@ -159,12 +159,12 @@ const tokens = readTokens(tokensCss);</code></pre>
         </section>
 
         <section id="block-after">
-          <h2>blockAfter: 블록 잘라 내기</h2>
+          <h2>getTopLevelBlock: 블록 잘라 내기</h2>
           <pre><code class="language-ts">/**
  * `selector` 블록의 최상위 내용만 돌려준다. 중괄호 깊이를 세어 짝이 맞는 `}`까지 읽고,
  * `@keyframes` 같은 중첩 블록 안의 내용은 뺀다. 주석이나 문자열 안의 중괄호는 없다고 가정한다.
  */
-function blockAfter(css: string, { selector }: { selector: string }): string {
+function getTopLevelBlock({ css, selector }: { css: string; selector: string }): string {
   const start = css.indexOf(`${selector} {`);
   if (start === -1) throw new Error(`tokens.css에 ${selector} 블록이 없다.`);
   let depth = 0;
@@ -215,10 +215,10 @@ function blockAfter(css: string, { selector }: { selector: string }): string {
         </section>
 
         <section id="declarations">
-          <h2>declarations: 이름과 값 뽑기</h2>
+          <h2>parseDeclarations: 이름과 값 뽑기</h2>
           <pre><code class="language-ts">const declaration = /--([\w-]+):\s*([^;]+);/g;
 
-function declarations(block: string): [string, string][] {
+function parseDeclarations(block: string): [string, string][] {
   return [...block.matchAll(declaration)].map((m) =&gt; [m[1]!, m[2]!.trim()]);
 }</code></pre>
           <p>정규식을 조각내 <code>--blue-500: #3182f6;</code>에 대 보면 이렇다.</p>
@@ -264,7 +264,7 @@ function declarations(block: string): [string, string][] {
             <code>g</code> 플래그를 붙인 정규식을 <code>matchAll</code>에 넘기면 블록 안의 모든 일치를 차례로
             돌려준다. 각 일치에서 캡처 두 개(<code>m[1]</code>, <code>m[2]</code>)만 꺼내 쌍으로 만든다.
           </p>
-          <pre><code class="language-ts">declarations(':root { --grey-50: #f9fafb; --blue-500: #3182f6; }');
+          <pre><code class="language-ts">parseDeclarations(':root { --grey-50: #f9fafb; --blue-500: #3182f6; }');
 // → [['grey-50', '#f9fafb'], ['blue-500', '#3182f6']]</code></pre>
           <div class="callout">
             <p>
@@ -275,21 +275,24 @@ function declarations(block: string): [string, string][] {
         </section>
 
         <section id="theme-values">
-          <h2>themeValues: 종류별로 고르기</h2>
+          <h2>filterThemeValues: 종류별로 고르기</h2>
           <p>
             <code>@theme</code>의 선언에는 색, 글자 크기, 간격, 모서리가 섞여 있다. 접두어로 한 종류만 고르고
             이름을 다듬는다.
           </p>
-          <pre><code class="language-ts">function themeValues(
-  theme: [string, string][],
-  { prefix }: { prefix: string },
-): ThemeValue[] {
+          <pre><code class="language-ts">function filterThemeValues({
+  theme,
+  prefix,
+}: {
+  theme: [string, string][];
+  prefix: string;
+}): ThemeValue[] {
   return theme
     .filter(([name, value]) =&gt; name.startsWith(prefix) &amp;&amp; value !== 'initial') // ① 고르기
     .map(([name, value]) =&gt; ({ name: name.slice(prefix.length), value }))     // ② 접두어 떼기
     .filter(({ name }) =&gt; !name.includes('--'));                              // ③ 딸린 설정 빼기
 }</code></pre>
-          <p><code>{ prefix: 'text-' }</code>로 따라가 보면 이렇다.</p>
+          <p><code>prefix: 'text-'</code>로 따라가 보면 이렇다.</p>
           <div class="table-wrap">
             <table>
               <thead>
@@ -350,16 +353,16 @@ function declarations(block: string): [string, string][] {
             <code>readTokens</code>는 먼저 팔레트로 "이름 → hex" 사전을 만들고, 의미 색의 값이
             <code>var(--무엇)</code> 꼴이면 그 <code>무엇</code>을 사전에서 찾는다.
           </p>
-          <pre><code class="language-ts">const palette = declarations(blockAfter(css, { selector: ':root' })).map(([name, hex]) =&gt; ({
+          <pre><code class="language-ts">const palette = parseDeclarations(getTopLevelBlock({ css, selector: ':root' })).map(([name, hex]) =&gt; ({
   name,
   hex,
 }));
-const hexOf = new Map(palette.map((p) =&gt; [p.name, p.hex])); // hexOf.get('blue-500') === '#3182f6'
-const theme = declarations(blockAfter(css, { selector: '@theme' }));
+const hexByName = new Map(palette.map((p) =&gt; [p.name, p.hex])); // hexByName.get('blue-500') === '#3182f6'
+const theme = parseDeclarations(getTopLevelBlock({ css, selector: '@theme' }));
 
-const colors = themeValues(theme, { prefix: 'color-' }).map(({ name, value }) =&gt; {
+const colors = filterThemeValues({ theme, prefix: 'color-' }).map(({ name, value }) =&gt; {
   const ref = /^var\(--([\w-]+)\)$/.exec(value)?.[1] ?? null;
-  return { name, palette: ref, hex: ref ? (hexOf.get(ref) ?? value) : value };
+  return { name, palette: ref, hex: ref ? (hexByName.get(ref) ?? value) : value };
 });</code></pre>
           <div class="table-wrap">
             <table>
@@ -394,7 +397,7 @@ const colors = themeValues(theme, { prefix: 'color-' }).map(({ name, value }) =&
               <code>color-mix(...)</code>는 연결이 없는 값으로 본다.
             </li>
             <li>
-              <code>hexOf.get(ref) ?? value</code>는 팔레트에 없는 이름을 가리킬 때(오타 등) 값 문자열이라도
+              <code>hexByName.get(ref) ?? value</code>는 팔레트에 없는 이름을 가리킬 때(오타 등) 값 문자열이라도
               보여 주는 대비책이다.
             </li>
           </ul>
@@ -503,7 +506,7 @@ const colors = themeValues(theme, { prefix: 'color-' }).map(({ name, value }) =&
           <details>
             <summary>2. @theme 블록 맨 위에 "/* 닫는 괄호 } 주의 */" 주석을 넣으면 토큰 화면은 어떻게 되나?</summary>
             <p>
-              <code>blockAfter</code>가 주석 속 <code>}</code>에서 깊이가 0이 되어 블록을 끝낸다. 그 뒤의 모든 의미
+              <code>getTopLevelBlock</code>가 주석 속 <code>}</code>에서 깊이가 0이 되어 블록을 끝낸다. 그 뒤의 모든 의미
               토큰이 빠져 색, 글자 크기, 간격, 모서리 표가 비거나 줄어든다. 에러는 나지 않는다. 블록 시작을 찾았고
               닫는 괄호도 만났기 때문이다. <code>cn.spec.ts</code>도 돌 토큰이 없어 해당 테스트가 사라진다.
               <code>/* 예: { a: b } */</code>처럼 짝이 맞는 괄호는 깊이 2로 들어갔다 나오므로 괜찮다.
@@ -512,7 +515,7 @@ const colors = themeValues(theme, { prefix: 'color-' }).map(({ name, value }) =&
           <details>
             <summary>3. --text-caption--line-height가 글자 크기 표에 나오지 않는 것은 어느 줄 덕분인가?</summary>
             <p>
-              <code>themeValues</code>의 마지막 <code>filter(({ name }) =&gt; !name.includes('--'))</code>다.
+              <code>filterThemeValues</code>의 마지막 <code>filter(({ name }) =&gt; !name.includes('--'))</code>다.
               접두어 <code>text-</code>를 떼고 남은 <code>caption--line-height</code>에 <code>--</code>가 있어
               빠진다.
             </p>
@@ -521,7 +524,7 @@ const colors = themeValues(theme, { prefix: 'color-' }).map(({ name, value }) =&
             <summary>4. 의미 색을 --color-primary: var(--blue-50O); 처럼 오타(숫자 0 대신 영문 O)로 적으면?</summary>
             <p>
               정규식은 <code>blue-50O</code>를 <code>ref</code>로 뽑지만 사전에 없다. 그래서
-              <code>hexOf.get(ref) ?? value</code>가 값 문자열 <code>var(--blue-50O)</code>를 hex 자리에 보여
+              <code>hexByName.get(ref) ?? value</code>가 값 문자열 <code>var(--blue-50O)</code>를 hex 자리에 보여
               준다. 스와치 색은 브라우저가 해석하지 못해 투명해지므로 화면에서 바로 눈에 띈다.
             </p>
           </details>

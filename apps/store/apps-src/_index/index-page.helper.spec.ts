@@ -4,12 +4,12 @@ import { selectShowCards } from './index-page.helper';
 
 type ShowSummary = ShowPage['items'][number];
 
-function pageOf(items: ShowPage['items']): ShowPage {
+function createPage(items: ShowPage['items']): ShowPage {
   return { items, page: 1, size: 20, totalCount: items.length, totalPages: 1 };
 }
 
 // 판매 상태 테스트에서 바꾸지 않는 값은 고정한다.
-function summaryOf(overrides: Partial<ShowSummary>): ShowSummary {
+function createSummary(overrides: Partial<ShowSummary>): ShowSummary {
   return {
     id: 1,
     title: '달빛 정원',
@@ -29,7 +29,7 @@ function summaryOf(overrides: Partial<ShowSummary>): ShowSummary {
 describe('selectShowCards', () => {
   it('공연 기간을 한국 날짜로 바꿔 시작일 ~ 종료일로 보여 준다', () => {
     const cards = selectShowCards(
-      pageOf([
+      createPage([
         {
           id: 7,
           title: '달빛 정원',
@@ -62,7 +62,7 @@ describe('selectShowCards', () => {
 
   it('첫 회차와 마지막 회차가 한국 날짜로 같은 날이면 날짜 하나만 보여 준다', () => {
     const [card] = selectShowCards(
-      pageOf([
+      createPage([
         {
           id: 1,
           title: '하루 공연',
@@ -92,7 +92,9 @@ describe('selectShowCards', () => {
   ] as const)(
     '판매 상태 $salesStatus: 배지 문구와 톤으로 바꾼다',
     ({ salesStatus, expected }) => {
-      const [card] = selectShowCards(pageOf([summaryOf({ salesStatus })]));
+      const [card] = selectShowCards(
+        createPage([createSummary({ salesStatus })]),
+      );
 
       expect(card?.salesStatus).toEqual(expected);
     },
@@ -100,8 +102,8 @@ describe('selectShowCards', () => {
 
   it('판매 오픈 일시를 한국 날짜와 시각으로 보여 준다', () => {
     const [card] = selectShowCards(
-      pageOf([
-        summaryOf({
+      createPage([
+        createSummary({
           salesStatus: 'upcoming',
           // UTC로는 2월 14일 오후지만 한국 시간으로는 2월 15일 오전 2시다.
           salesOpenAt: '2026-02-14T17:00:00.000Z',

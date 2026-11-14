@@ -442,10 +442,10 @@ SELECT count(*) FROM "shows" WHERE "venue_id" IS NULL;  -- 0이어야 한다</co
             <a href="05-공연-목록-쿼리-읽기.html">db-and-drizzle 05 문서</a>에 있다.
           </p>
           <pre><code class="language-ts">this.db
-  .select({ id: shows.id, venueName: venues.name, start: period.start, end: period.end })
+  .select({ id: shows.id, venueName: venues.name, start: periodSubquery.start, end: periodSubquery.end })
   .from(shows)                                          // 공연에
   .innerJoin(venues, eq(venues.id, shows.venueId))      // venueId가 같은 공연장을 붙이고
-  .innerJoin(period, eq(period.showId, shows.id));      // 공연별 첫·마지막 회차를 붙인다</code></pre>
+  .innerJoin(periodSubquery, eq(periodSubquery.showId, shows.id));      // 공연별 첫·마지막 회차를 붙인다</code></pre>
           <ul>
             <li>
               <strong>집계가 많다.</strong> 공연 기간과 판매 상태처럼 SQL 안에서 회차를 공연별로 묶어 계산하고 거르는 쿼리가

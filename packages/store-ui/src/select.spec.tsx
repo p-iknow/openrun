@@ -11,11 +11,11 @@ const sortItems = [
   { value: 'closing', label: '마감 임박순' },
 ];
 
-function attr(tag: string, { attribute }: { attribute: string }) {
+function getAttr({ tag, attribute }: { tag: string; attribute: string }) {
   return new RegExp(`\\s${attribute}="([^"]*)"`).exec(tag)?.[1];
 }
 
-function trigger(html: string) {
+function findTrigger(html: string) {
   const found = /<button\b[^>]*>(.*?)<\/button>/.exec(html);
   if (!found) throw new Error(`트리거 버튼이 없다:\n${html}`);
   return {
@@ -33,7 +33,7 @@ describe('Select', () => {
       <Select label="정렬" items={sortItems} defaultValue="popular" />,
     );
 
-    expect(trigger(html).text).toBe('인기순');
+    expect(findTrigger(html).text).toBe('인기순');
   });
 
   it('고른 값이 없으면 트리거에 placeholder를 보인다', () => {
@@ -41,7 +41,7 @@ describe('Select', () => {
       <Select label="정렬" items={sortItems} placeholder="정렬 기준" />,
     );
 
-    expect(trigger(html).text).toBe('정렬 기준');
+    expect(findTrigger(html).text).toBe('정렬 기준');
   });
 
   it('폼으로 제출할 수 있도록 name과 고른 값을 숨은 입력에 둔다', () => {
@@ -55,8 +55,8 @@ describe('Select', () => {
     );
 
     const input = /<input\b[^>]*>/.exec(html)?.[0] ?? '';
-    expect(attr(input, { attribute: 'name' })).toBe('sort');
-    expect(attr(input, { attribute: 'value' })).toBe('closing');
+    expect(getAttr({ tag: input, attribute: 'name' })).toBe('sort');
+    expect(getAttr({ tag: input, attribute: 'value' })).toBe('closing');
   });
 
   it('inline이면 라벨을 화면에서 숨기고 트리거에는 고른 값만 보인다', () => {
@@ -70,8 +70,8 @@ describe('Select', () => {
     );
 
     const label = /<[a-z]+\b[^>]*>정렬<\/[a-z]+>/.exec(html)?.[0] ?? '';
-    expect(attr(label, { attribute: 'class' })).toContain('sr-only');
-    expect(trigger(html).text).toBe('인기순');
+    expect(getAttr({ tag: label, attribute: 'class' })).toContain('sr-only');
+    expect(findTrigger(html).text).toBe('인기순');
   });
 
   it('비활성이면 트리거를 누를 수 없다', () => {
@@ -79,6 +79,6 @@ describe('Select', () => {
       <Select label="정렬" items={sortItems} disabled />,
     );
 
-    expect(trigger(html).tag).toMatch(/\sdisabled=""/);
+    expect(findTrigger(html).tag).toMatch(/\sdisabled=""/);
   });
 });

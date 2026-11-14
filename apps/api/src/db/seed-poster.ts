@@ -1,6 +1,6 @@
 import sharp from 'sharp';
 import type { Genre } from './schema/shows.js';
-import { textImage } from './seed-text.js';
+import { renderTextImage } from './seed-text.js';
 
 // 시드가 공연마다 만드는 가상의 포스터다. 실제 공연 포스터는 쓰지 않는다.
 // 실제 공연 포스터처럼 위쪽에 큰 그림(키 비주얼)을 두고, 아래쪽에 제목과 공연 기간, 공연장을 적는다.
@@ -30,7 +30,7 @@ interface GenreStyle {
 }
 
 // 무대 조명 세 줄기와 바닥에 맺힌 조명
-function spotlights(accent: string): string {
+function buildSpotlightsSvg(accent: string): string {
   return `
   <defs>
     <linearGradient id="beam" x1="0" y1="0" x2="0" y2="1">
@@ -48,7 +48,7 @@ function spotlights(accent: string): string {
   <ellipse cx="300" cy="470" rx="200" ry="44" fill="url(#pool)"/>
   <circle cx="300" cy="300" r="70" fill="none" stroke="#fff" stroke-opacity="0.85" stroke-width="3"/>
   <circle cx="300" cy="300" r="58" fill="${accent}" opacity="0.9"/>
-  ${stars([
+  ${buildStarsSvg([
     [70, 120, 3],
     [520, 90, 4],
     [460, 220, 2],
@@ -58,7 +58,7 @@ function spotlights(accent: string): string {
 }
 
 // 반쯤 열린 문과 그 앞으로 길게 드리운 빛
-function door(accent: string): string {
+function buildDoorSvg(accent: string): string {
   return `
   <polygon points="250,140 350,140 560,520 40,520" fill="${accent}" opacity="0.18"/>
   <rect x="250" y="140" width="100" height="200" fill="${accent}" opacity="0.95"/>
@@ -70,7 +70,7 @@ function door(accent: string): string {
 }
 
 // 퍼져 나가는 소리 고리와 이퀄라이저 막대
-function soundRings(accent: string): string {
+function buildSoundRingsSvg(accent: string): string {
   const rings = [60, 110, 160, 210, 260]
     .map(
       (r, i) =>
@@ -87,7 +87,7 @@ function soundRings(accent: string): string {
 }
 
 // 큰 달과 흐르는 비단 띠
-function moonAndRibbons(accent: string): string {
+function buildMoonAndRibbonsSvg(accent: string): string {
   const ribbons = [0, 1, 2, 3]
     .map(
       (i) =>
@@ -99,7 +99,7 @@ function moonAndRibbons(accent: string): string {
   <circle cx="390" cy="200" r="120" fill="${accent}" opacity="0.92"/>
   <circle cx="440" cy="170" r="120" fill="#000" opacity="0.25" clip-path="url(#moon)"/>
   ${ribbons}
-  ${stars([
+  ${buildStarsSvg([
     [90, 110, 3],
     [180, 60, 2],
     [140, 230, 2],
@@ -107,7 +107,7 @@ function moonAndRibbons(accent: string): string {
 }
 
 // 햇살과 언덕, 별
-function sunAndHills(accent: string): string {
+function buildSunAndHillsSvg(accent: string): string {
   const rays = Array.from({ length: 12 }, (_, i) => {
     const angle = (i * Math.PI) / 6;
     const x1 = 300 + Math.cos(angle) * 120;
@@ -121,14 +121,14 @@ function sunAndHills(accent: string): string {
   <circle cx="300" cy="240" r="96" fill="${accent}"/>
   <path d="M-10 520 Q 150 400 310 500 T 620 470 V 800 H -10 Z" fill="#fff" opacity="0.25"/>
   <path d="M-10 540 Q 200 450 400 530 T 620 520 V 800 H -10 Z" fill="${accent}" opacity="0.55"/>
-  ${stars([
+  ${buildStarsSvg([
     [80, 90, 5],
     [520, 120, 4],
     [500, 380, 3],
   ])}`;
 }
 
-function stars(points: [x: number, y: number, r: number][]): string {
+function buildStarsSvg(points: [x: number, y: number, r: number][]): string {
   return points
     .map(
       ([x, y, r]) =>
@@ -144,7 +144,7 @@ const GENRE_STYLES = {
       { top: '#2a0a1a', bottom: '#7a1838', accent: '#ffcf5c' },
       { top: '#120b2e', bottom: '#5b1a5e', accent: '#ff9ec7' },
     ],
-    keyVisual: spotlights,
+    keyVisual: buildSpotlightsSvg,
   },
   play: {
     label: 'PLAY',
@@ -152,7 +152,7 @@ const GENRE_STYLES = {
       { top: '#0d1f26', bottom: '#1f5160', accent: '#f4e3b5' },
       { top: '#1c1712', bottom: '#4a3b2a', accent: '#f6c177' },
     ],
-    keyVisual: door,
+    keyVisual: buildDoorSvg,
   },
   concert: {
     label: 'CONCERT',
@@ -160,7 +160,7 @@ const GENRE_STYLES = {
       { top: '#0b0620', bottom: '#3d2275', accent: '#5ce1e6' },
       { top: '#06141f', bottom: '#0f4c5c', accent: '#ff6b9a' },
     ],
-    keyVisual: soundRings,
+    keyVisual: buildSoundRingsSvg,
   },
   classical_dance: {
     label: 'CLASSIC & DANCE',
@@ -168,7 +168,7 @@ const GENRE_STYLES = {
       { top: '#070d24', bottom: '#1d2d5c', accent: '#f1e4c3' },
       { top: '#1a0f1f', bottom: '#4b2c4f', accent: '#e8c4d8' },
     ],
-    keyVisual: moonAndRibbons,
+    keyVisual: buildMoonAndRibbonsSvg,
   },
   kids_family: {
     label: 'KIDS & FAMILY',
@@ -176,11 +176,11 @@ const GENRE_STYLES = {
       { top: '#ff9a3c', bottom: '#d4561a', accent: '#ffe066' },
       { top: '#4cb8c4', bottom: '#2a7f9e', accent: '#ffd23f' },
     ],
-    keyVisual: sunAndHills,
+    keyVisual: buildSunAndHillsSvg,
   },
 } satisfies Record<Genre, GenreStyle>;
 
-function backgroundSvg({
+function buildBackgroundSvg({
   style,
   palette,
   mirrored,
@@ -245,7 +245,7 @@ export async function renderPoster({
   const { palette } = getShowPalette({ genre, variant });
 
   const [label, heading, periodText, venueText] = await Promise.all([
-    textImage(style.label, {
+    renderTextImage(style.label, {
       font: 'medium',
       size: 15,
       width: TEXT_WIDTH,
@@ -253,14 +253,14 @@ export async function renderPoster({
       // 글자 사이의 WORD JOINER에도 자간이 붙어 실제 간격은 이 값의 두 배다(seed-text.ts).
       letterSpacing: 2,
     }),
-    textImage(title, { font: 'bold', size: 52, width: TEXT_WIDTH }),
-    textImage(period, {
+    renderTextImage(title, { font: 'bold', size: 52, width: TEXT_WIDTH }),
+    renderTextImage(period, {
       font: 'medium',
       size: 20,
       width: TEXT_WIDTH,
       opacity: 90,
     }),
-    textImage(venueName, {
+    renderTextImage(venueName, {
       font: 'medium',
       size: 20,
       width: TEXT_WIDTH,
@@ -274,7 +274,9 @@ export async function renderPoster({
   const headingTop = 672 - 20 - heading.info.height;
 
   return sharp(
-    Buffer.from(backgroundSvg({ style, palette, mirrored: variant % 2 === 1 })),
+    Buffer.from(
+      buildBackgroundSvg({ style, palette, mirrored: variant % 2 === 1 }),
+    ),
   )
     .composite([
       { input: label.data, left: PADDING, top: PADDING },

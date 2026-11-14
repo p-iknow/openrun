@@ -26,12 +26,12 @@ import type { ShowListQuery } from './show-list-query.js';
 import type { ShowDetailDto, ShowPageDto } from './show.dto.js';
 import {
   buildAlmostSoldOutCondition,
-  buildPerformanceSalesStatus,
-  buildSeatCounts,
+  buildPerformanceSalesStatusSql,
+  buildSeatCountsSql,
 } from './performance-sales-status.js';
 import { SHOW_IMAGE_BASE_URL, buildShowImageUrl } from './show-image-url.js';
 import { createShowNotFoundException } from './show-not-found.js';
-import { showSalesStatusSubquery } from './show-sales-status.js';
+import { buildShowSalesStatusSubquery } from './show-sales-status.js';
 
 @Injectable()
 export class ShowsService {
@@ -50,17 +50,20 @@ export class ShowsService {
     status,
   }: ShowListQuery): Promise<ShowPageDto> {
     // 회차가 없는 공연은 기간 서브쿼리에 행이 없어 목록에 나오지 않는다.
-    const period = buildShowPeriodSubquery(this.db);
-    const salesStatus = showSalesStatusSubquery(this.db, {
+    const periodSubquery = buildShowPeriodSubquery(this.db);
+    const salesStatusSubquery = buildShowSalesStatusSubquery({
+      db: this.db,
       now: this.clock.now(),
     });
     // 목록과 전체 개수가 같은 조건을 써야 페이지 수가 맞는다. 판매 종료 공연은 목록에서 뺀다.
     const listCondition = and(
-      ne(salesStatus.salesStatus, 'ended'),
+      ne(salesStatusSubquery.salesStatus, 'ended'),
       q ? ilike(shows.title, `%${escapeLikePattern(q)}%`) : undefined,
       // 고른 값이 없으면 거르지 않는다. 같은 이름 안의 값은 OR(IN), 다른 조건과는 AND다.
       genre.length > 0 ? inArray(shows.genre, genre) : undefined,
-      status.length > 0 ? inArray(salesStatus.salesStatus, status) : undefined,
+      status.length > 0
+        ? inArray(salesStatusSubquery.salesStatus, status)
+        : undefined,
     );
 
     const [rows, [total]] = await Promise.all([
@@ -70,23 +73,26 @@ export class ShowsService {
           title: shows.title,
           genre: shows.genre,
           venueName: venues.name,
-          start: period.start,
-          end: period.end,
-          salesStatus: salesStatus.salesStatus,
-          salesOpenAt: salesStatus.salesOpenAt,
+          start: periodSubquery.start,
+          end: periodSubquery.end,
+          salesStatus: salesStatusSubquery.salesStatus,
+          salesOpenAt: salesStatusSubquery.salesOpenAt,
           posterPath: shows.posterPath,
         })
         .from(shows)
         .innerJoin(venues, eq(venues.id, shows.venueId))
-        .innerJoin(period, eq(period.showId, shows.id))
-        .innerJoin(salesStatus, eq(salesStatus.showId, shows.id))
+        .innerJoin(periodSubquery, eq(periodSubquery.showId, shows.id))
+        .innerJoin(
+          salesStatusSubquery,
+          eq(salesStatusSubquery.showId, shows.id),
+        )
         .where(listCondition)
         // 정렬값이 같으면 id로 순서를 고정해 페이지 사이에서 항목이 겹치거나 빠지지 않게 한다.
         // 최근 등록 순은 id도 큰 것(나중에 넣은 것)을 먼저 둔다.
         .orderBy(
           ...(sort === 'newest'
             ? [desc(shows.createdAt), desc(shows.id)]
-            : [asc(period.start), asc(shows.id)]),
+            : [asc(periodSubquery.start), asc(shows.id)]),
         )
         .limit(size)
         // 마지막 페이지를 넘으면 행이 없어 빈 items가 된다. 오류로 보지 않고 스토어가 리다이렉트를 정한다.
@@ -94,7 +100,10 @@ export class ShowsService {
       this.db
         .select({ count: count() })
         .from(shows)
-        .innerJoin(salesStatus, eq(salesStatus.showId, shows.id))
+        .innerJoin(
+          salesStatusSubquery,
+          eq(salesStatusSubquery.showId, shows.id),
+        )
         .where(listCondition),
     ]);
 
@@ -119,12 +128,15 @@ export class ShowsService {
   async findDetail(id: number): Promise<ShowDetailDto> {
     const now = this.clock.now();
     // 목록과 같은 서브쿼리로 공연 기간과 공연 판매 상태를 구해, 두 화면의 값이 어긋나지 않는다.
-    const period = buildShowPeriodSubquery(this.db);
-    const salesStatus = showSalesStatusSubquery(this.db, { now });
-    const { totalSeats, remainingSeats } = buildSeatCounts();
-    const performanceStatus = buildPerformanceSalesStatus({
+    const periodSubquery = buildShowPeriodSubquery(this.db);
+    const salesStatusSubquery = buildShowSalesStatusSubquery({
+      db: this.db,
       now,
-      remainingSeats,
+    });
+    const { totalSeatsSql, remainingSeatsSql } = buildSeatCountsSql();
+    const performanceSalesStatusSql = buildPerformanceSalesStatusSql({
+      now,
+      remainingSeatsSql,
     });
 
     const [[show], detailImageRows, seatGradeRows, performanceRows] =
@@ -140,16 +152,19 @@ export class ShowsService {
             posterPath: shows.posterPath,
             venueId: venues.id,
             venueName: venues.name,
-            start: period.start,
-            end: period.end,
-            salesStatus: salesStatus.salesStatus,
-            salesOpenAt: salesStatus.salesOpenAt,
+            start: periodSubquery.start,
+            end: periodSubquery.end,
+            salesStatus: salesStatusSubquery.salesStatus,
+            salesOpenAt: salesStatusSubquery.salesOpenAt,
           })
           .from(shows)
           .innerJoin(venues, eq(venues.id, shows.venueId))
           // 회차가 없는 공연은 목록처럼 없는 공연으로 본다.
-          .innerJoin(period, eq(period.showId, shows.id))
-          .innerJoin(salesStatus, eq(salesStatus.showId, shows.id))
+          .innerJoin(periodSubquery, eq(periodSubquery.showId, shows.id))
+          .innerJoin(
+            salesStatusSubquery,
+            eq(salesStatusSubquery.showId, shows.id),
+          )
           .where(eq(shows.id, id)),
         this.db
           .select({ path: showDetailImages.path })
@@ -166,13 +181,13 @@ export class ShowsService {
           .select({
             id: performances.id,
             startsAt: performances.startsAt,
-            salesStatus: performanceStatus,
-            remainingSeats,
-            totalSeats,
+            salesStatus: performanceSalesStatusSql,
+            remainingSeats: remainingSeatsSql,
+            totalSeats: totalSeatsSql,
             isAlmostSoldOut: buildAlmostSoldOutCondition({
-              salesStatus: performanceStatus,
-              remainingSeats,
-              totalSeats,
+              salesStatusSql: performanceSalesStatusSql,
+              remainingSeatsSql,
+              totalSeatsSql,
             }),
           })
           .from(performances)

@@ -11,24 +11,24 @@ function PaginationExample({
 }) {
   const { pages, previousPage, nextPage, hasPreviousPage, hasNextPage } =
     getPagination({ currentPage, totalPages });
-  const href = (page: number) => `?page=${page}`;
+  const buildHref = (page: number) => `?page=${page}`;
   return (
     <Pagination.Root>
       <Pagination.Previous
         disabled={!hasPreviousPage}
-        render={<a href={href(previousPage)} />}
+        render={<a href={buildHref(previousPage)} />}
       />
       {pages.map(({ page, isActive }) => (
         <Pagination.Link
           key={page}
           page={page}
           active={isActive}
-          render={<a href={href(page)} />}
+          render={<a href={buildHref(page)} />}
         />
       ))}
       <Pagination.Next
         disabled={!hasNextPage}
-        render={<a href={href(nextPage)} />}
+        render={<a href={buildHref(nextPage)} />}
       />
     </Pagination.Root>
   );
@@ -39,11 +39,11 @@ const { pages, previousPage, nextPage, hasPreviousPage, hasNextPage } =
   getPagination({ currentPage, totalPages });
 
 <Pagination.Root>
-  <Pagination.Previous disabled={!hasPreviousPage} render={<Link href={href(previousPage)} />} />
+  <Pagination.Previous disabled={!hasPreviousPage} render={<Link href={buildHref(previousPage)} />} />
   {pages.map(({ page, isActive }) => (
-    <Pagination.Link key={page} page={page} active={isActive} render={<Link href={href(page)} />} />
+    <Pagination.Link key={page} page={page} active={isActive} render={<Link href={buildHref(page)} />} />
   ))}
-  <Pagination.Next disabled={!hasNextPage} render={<Link href={href(nextPage)} />} />
+  <Pagination.Next disabled={!hasNextPage} render={<Link href={buildHref(nextPage)} />} />
 </Pagination.Root>
 \`\`\``;
 

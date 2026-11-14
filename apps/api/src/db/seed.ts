@@ -46,7 +46,7 @@ interface SectionLayout {
 }
 
 // 구역 이름은 A구역부터 붙이고, 구역마다 같은 열 수와 열당 좌석 수를 쓴다.
-function sectionsOf({
+function buildSections({
   count,
   rows,
   seatsPerRow,
@@ -66,17 +66,17 @@ const VENUE_LAYOUTS: { name: string; sections: SectionLayout[] }[] = [
   // 100석
   {
     name: '낙산 소극장',
-    sections: sectionsOf({ count: 2, rows: 5, seatsPerRow: 10 }),
+    sections: buildSections({ count: 2, rows: 5, seatsPerRow: 10 }),
   },
   // 300석
   {
     name: '한강 아트홀',
-    sections: sectionsOf({ count: 3, rows: 10, seatsPerRow: 10 }),
+    sections: buildSections({ count: 3, rows: 10, seatsPerRow: 10 }),
   },
   // 600석
   {
     name: '서울 그랜드 씨어터',
-    sections: sectionsOf({ count: 4, rows: 10, seatsPerRow: 15 }),
+    sections: buildSections({ count: 4, rows: 10, seatsPerRow: 15 }),
   },
 ];
 
@@ -211,7 +211,7 @@ const FIXED_SCENARIOS: Scenario[] = [
   },
 ];
 
-function randomScenario(): Scenario {
+function pickRandomScenario(): Scenario {
   if (faker.datatype.boolean({ probability: 0.7 })) {
     return {
       salesOpenDay: -faker.number.int({ min: 3, max: 20 }),
@@ -233,10 +233,17 @@ function randomScenario(): Scenario {
   };
 }
 
-function kstAt(
-  today: number,
-  { day, hour, minute }: { day: number; hour: number; minute: number },
-): Date {
+function buildKstDate({
+  today,
+  day,
+  hour,
+  minute,
+}: {
+  today: number;
+  day: number;
+  hour: number;
+  minute: number;
+}): Date {
   return new Date(today + day * DAY_MS + (hour * 60 + minute) * MINUTE_MS);
 }
 
@@ -253,7 +260,8 @@ function buildPerformances({
   const pastCount =
     scenario.pastCount === 'all' ? count : Math.min(scenario.pastCount, count);
   const futureCount = count - pastCount;
-  const salesOpenAt = kstAt(today, {
+  const salesOpenAt = buildKstDate({
+    today,
     day: scenario.salesOpenDay,
     hour: 14,
     minute: 0,
@@ -278,7 +286,7 @@ function buildPerformances({
     ]);
     const isFuture = index >= pastCount;
     return {
-      startsAt: kstAt(today, { day, ...time }),
+      startsAt: buildKstDate({ today, day, ...time }),
       salesOpenAt,
       isCancelled:
         index === futureIndexToCancel ||
@@ -287,7 +295,7 @@ function buildPerformances({
   });
 }
 
-function seatCountOf(layout: { sections: SectionLayout[] }): number {
+function countSeats(layout: { sections: SectionLayout[] }): number {
   return layout.sections.reduce(
     (sum, { rows, seatsPerRow }) => sum + rows * seatsPerRow,
     0,
@@ -295,7 +303,7 @@ function seatCountOf(layout: { sections: SectionLayout[] }): number {
 }
 
 // 회차마다 판매됨으로 둘 좌석 수를 정한다. 판매 예정이나 취소된 회차는 판매된 좌석이 없다.
-function soldCountsOf({
+function buildSoldCounts({
   performances: list,
   sales,
   seatCount,
@@ -306,7 +314,7 @@ function soldCountsOf({
   seatCount: number;
   now: number;
 }): number[] {
-  const some = () =>
+  const pickSomeSoldCount = () =>
     Math.floor(seatCount * faker.number.float({ min: 0, max: 0.7 }));
   let almostSoldOutLeft = sales === 'one-almost-sold-out';
 
@@ -315,7 +323,7 @@ function soldCountsOf({
       return 0;
     }
     if (startsAt.getTime() <= now) {
-      return some();
+      return pickSomeSoldCount();
     }
     if (sales === 'sold-out') {
       return seatCount;
@@ -328,13 +336,13 @@ function soldCountsOf({
         faker.number.int({ min: 1, max: Math.floor(seatCount / 10) })
       );
     }
-    return some();
+    return pickSomeSoldCount();
   });
 }
 
 function buildShows(today: number) {
   return SEED_SHOW_CONTENTS.map((content, index) => {
-    const scenario = FIXED_SCENARIOS[index] ?? randomScenario();
+    const scenario = FIXED_SCENARIOS[index] ?? pickRandomScenario();
     const performanceCount = faker.number.int({ min: 3, max: 15 });
     return {
       content,
@@ -348,7 +356,8 @@ function buildShows(today: number) {
         minAge: content.minAge,
         runningMinutes: content.runningMinutes,
         description: buildShowDescription(content),
-        createdAt: kstAt(today, {
+        createdAt: buildKstDate({
+          today,
           day: -faker.number.int({ min: 1, max: 60 }),
           hour: 10,
           minute: 0,
@@ -375,8 +384,8 @@ function buildSeedShows(now: number) {
         `공연장 순번이 범위를 벗어났습니다: ${seedShow.show.venueIndex}`,
       );
     }
-    const seatCount = seatCountOf(layout);
-    const soldCounts = soldCountsOf({
+    const seatCount = countSeats(layout);
+    const soldCounts = buildSoldCounts({
       performances: seedShow.performances,
       sales,
       seatCount,
@@ -404,13 +413,13 @@ const seedShows = buildSeedShows(Date.now());
 // 포스터에 적을 공연 기간. 카드와 같이 첫 회차부터 마지막 회차까지의 한국 날짜다.
 function formatPosterPeriod(list: { startsAt: Date }[]): string {
   const times = list.map(({ startsAt }) => startsAt.getTime());
-  const kstDate = (time: number) =>
+  const formatKstDate = (time: number) =>
     new Date(time + KST_OFFSET_MS)
       .toISOString()
       .slice(0, 10)
       .replaceAll('-', '.');
-  const start = kstDate(Math.min(...times));
-  const end = kstDate(Math.max(...times));
+  const start = formatKstDate(Math.min(...times));
+  const end = formatKstDate(Math.max(...times));
   return start === end ? start : `${start} – ${end}`;
 }
 
@@ -634,7 +643,7 @@ try {
     0,
   );
   const seatCount = VENUE_LAYOUTS.reduce(
-    (sum, layout) => sum + seatCountOf(layout),
+    (sum, layout) => sum + countSeats(layout),
     0,
   );
   console.log(

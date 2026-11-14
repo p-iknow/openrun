@@ -15,25 +15,25 @@ export function ShowListPagination({
 }) {
   const { pages, previousPage, nextPage, hasPreviousPage, hasNextPage } =
     getPagination({ currentPage: query.page, totalPages });
-  const href = (page: number) => getShowListHref({ ...query, page });
+  const buildHref = (page: number) => getShowListHref({ ...query, page });
 
   return (
     <Pagination.Root>
       <Pagination.Previous
         disabled={!hasPreviousPage}
-        render={<Link href={href(previousPage)} />}
+        render={<Link href={buildHref(previousPage)} />}
       />
       {pages.map(({ page, isActive }) => (
         <Pagination.Link
           key={page}
           page={page}
           active={isActive}
-          render={<Link href={href(page)} />}
+          render={<Link href={buildHref(page)} />}
         />
       ))}
       <Pagination.Next
         disabled={!hasNextPage}
-        render={<Link href={href(nextPage)} />}
+        render={<Link href={buildHref(nextPage)} />}
       />
     </Pagination.Root>
   );
