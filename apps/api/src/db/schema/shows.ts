@@ -62,10 +62,13 @@ export const performances = pgTable(
 );
 
 // 회차에서 판매되는 좌석 하나다. 회차를 만들 때 공연장의 좌석 수만큼 만든다.
-// 회차 좌석의 소유 모듈은 1.5(예매)에서 다시 정한다. 지금은 회차와 함께 shows 모듈에 둔다.
+// 회차 좌석의 소유 모듈은 예매 기능을 만들 때 다시 정한다. 지금은 회차와 함께 shows 모듈에 둔다.
 export const performanceSeats = pgTable(
   'performance_seats',
   {
+    // (performance_id, seat_id) 조합 대신 id를 기본 키로 둔다. 예매에서 좌석 선점, 주문, 티켓이 회차 좌석을 가리키는데,
+    // 조합이 기본 키면 그 테이블마다 칸 두 개와 복합 외래 키가 필요하다. id 하나면 칸 하나로 가리킨다.
+    // 아무도 가리키지 않는 좌석 등급 지정(seat_grade_assignments)은 조합을 기본 키로 둔다.
     id: integer().primaryKey().generatedAlwaysAsIdentity(),
     performanceId: integer('performance_id')
       .notNull()
@@ -116,7 +119,9 @@ export const seatGrades = pgTable(
     // 한 공연에 같은 이름의 등급이 두 번 들어가지 않게 막는다. 이 제약이 만드는 인덱스가 show_id로 시작하므로,
     // 공연 하나의 등급을 찾을 때도 쓰인다.
     unique().on(table.showId, table.name),
-    // 좌석 등급 지정이 (등급, 공연) 쌍을 참조할 수 있게 한다. id만으로도 유일하지만, 외래 키는 참조 대상 컬럼 묶음에 유일 제약이 있어야 한다.
+    // seat_grade_assignments의 외래 키가 이 (id, show_id) 묶음을 가리킨다.
+    // id만으로 이미 유일해서 의미로는 중복이지만, PostgreSQL은 외래 키가 가리키는 컬럼 묶음과
+    // 정확히 같은 유일 제약(또는 PK)이 있어야 외래 키를 만들어 준다.
     unique().on(table.id, table.showId),
   ],
 );
@@ -137,7 +142,9 @@ export const seatGradeAssignments = pgTable(
   (table) => [
     // 공연마다 좌석 하나에 등급은 하나뿐이다. 이 키의 인덱스가 show_id로 시작하므로, 공연 하나의 지정을 찾을 때도 쓰인다.
     primaryKey({ columns: [table.showId, table.seatId] }),
-    // 다른 공연의 등급을 지정하지 못하게, 등급을 (등급, 공연) 쌍으로 참조한다.
+    // 다른 공연의 등급을 지정하지 못하게 막는다. seat_grade_id 하나로만 참조하면 등급이 있는지만 확인해서,
+    // 공연 1의 좌석에 공연 2의 등급을 지정해도 통과한다. (seat_grade_id, show_id)를 묶어 참조하면
+    // "이 id이면서 이 공연의 등급"이 있어야 하므로, 지정의 공연과 등급의 공연이 늘 같다.
     // 자동으로 짓는 이름은 PostgreSQL 이름 길이(63자)를 넘어 잘리므로 직접 짓는다.
     foreignKey({
       name: 'seat_grade_assignments_seat_grade_fk',
@@ -145,6 +152,6 @@ export const seatGradeAssignments = pgTable(
       foreignColumns: [seatGrades.id, seatGrades.showId],
     }),
     // 좌석이 공연의 공연장에 있는지와 공연장의 모든 좌석에 지정했는지는 DB 제약으로 막지 않는다.
-    // 1.3에서는 시드가 지키고, 1.7 어드민에서 등록할 때 검증한다.
+    // 지금은 시드가 지키고, 어드민에 공연 등록이 생기면 등록할 때 검증한다.
   ],
 );

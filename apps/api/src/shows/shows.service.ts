@@ -170,6 +170,8 @@ export class ShowsService {
           .leftJoin(
             seatGradeAssignments,
             and(
+              // 결과는 등급 id만으로도 같다(복합 외래 키가 공연을 맞춘다). show_id 조건이 있어야 지정 테이블을
+              // 기본 키 (show_id, seat_id) 인덱스로 찾는다. 빼면 seat_grade_id 인덱스가 없어 테이블 전체를 읽는다.
               eq(seatGradeAssignments.showId, seatGrades.showId),
               eq(seatGradeAssignments.seatGradeId, seatGrades.id),
             ),
