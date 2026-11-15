@@ -18,6 +18,8 @@
           <li><a href="#steps">단계</a></li>
           <li><a href="#tree">트리</a></li>
           <li><a href="#code">코드</a></li>
+          <li><a href="#seq">순서도</a></li>
+          <li><a href="#timeline">시간 막대</a></li>
           <li><a href="#erd">테이블 관계도</a></li>
           <li><a href="#table">표와 배지</a></li>
           <li><a href="#callout">강조 상자</a></li>
@@ -119,6 +121,47 @@
             <code>language-ts</code>를 붙이면 구문이 강조된다.
           </p>
           <pre><code class="language-ts">const value = await load();</code></pre>
+        </section>
+
+        <section id="seq">
+          <h2>순서도</h2>
+          <div class="seq">
+            <ol class="seq-actors">
+              <li>브라우저</li>
+              <li>API 서버</li>
+              <li>DB</li>
+            </ol>
+            <ol class="seq-steps">
+              <li data-from="1" data-to="2">POST /요청 <small>보충 설명</small></li>
+              <li data-at="2">서버 안에서 하는 일</li>
+              <li data-from="2" data-to="3">SELECT ...</li>
+              <li class="reply" data-from="3" data-to="2">행</li>
+              <li class="seq-note">구간 이름이나 설명</li>
+              <li class="reply" data-from="2" data-to="1">200 OK</li>
+              <li class="stop" data-at="1-2">실패해 흐름이 끊긴 일</li>
+            </ol>
+          </div>
+        </section>
+
+        <section id="timeline">
+          <h2>시간 막대</h2>
+          <div class="timeline" style="--tl-max: 9" data-unit="일">
+            <div class="tl-row">
+              <span class="tl-label">기간과 사건</span>
+              <div class="tl-track">
+                <span class="tl-bar blue" style="--from: 0; --to: 7">파란 기간</span>
+                <span class="tl-event" style="--at: 1.5">사건</span>
+              </div>
+            </div>
+            <div class="tl-row">
+              <span class="tl-label">대체된 기간<small>보충 설명</small></span>
+              <div class="tl-track">
+                <span class="tl-bar faded" style="--from: 0; --to: 7">지나간 기간</span>
+                <span class="tl-bar green" style="--from: 1.5; --to: 8.5">초록 기간</span>
+                <span class="tl-event end" style="--at: 8.5">끝 사건</span>
+              </div>
+            </div>
+          </div>
         </section>
 
         <section id="erd">

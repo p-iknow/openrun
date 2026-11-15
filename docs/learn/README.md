@@ -10,6 +10,7 @@
 |---|---|
 | `react-next/` | React와 Next.js(훅, 렌더링, 서버 컴포넌트), 스토어 앱 구조, API 호출 |
 | `nest/` | NestJS, API 테스트 |
+| `auth/` | 인증과 인가(비밀번호, 세션, 쿠키, 로그인 가드, 소셜 로그인)의 흐름과 이 저장소의 코드 |
 | `zod/` | zod 스키마로 실행 중에 값 검사하기, 타입과 문서 만들기 |
 | `db-and-drizzle/` | DB와 SQL 개념, Drizzle 스키마와 쿼리, 마이그레이션 |
 | `design-system/` | `store-ui`의 토큰, 컴포넌트, Storybook, 라이브러리 빌드 |
@@ -34,6 +35,7 @@
 | `db-and-drizzle/02-drizzle-스키마-문법.html` | Drizzle 스키마 파일에 쓰는 문법(빌더, 수식어, `references`, `index`, `pgEnum` 등). 문법마다 코드, 생성되는 SQL, TS 타입에 주는 영향을 적는다. 이 저장소가 왜 그 문법을 골랐는지는 적지 않는다 |
 | `db-and-drizzle/03-drizzle-쿼리-문법.html` | 서비스, 시드, 테스트에서 DB를 읽고 쓰는 Drizzle 쿼리 문법(`select`, `innerJoin`, `orderBy`, 집계, 서브쿼리, `insert`, `transaction` 등). 문법마다 이 저장소의 코드, 생성되는 SQL, 결과 타입을 적는다 |
 | `db-and-drizzle/08-마이그레이션.html` | 마이그레이션 개념, drizzle-kit 명령의 순서, 실수하기 쉬운 곳, 그리고 이 저장소의 마이그레이션 사례. 마이그레이션을 만들 때마다 `이 저장소의 사례` 절에 `h3`로 한 항목씩 더한다 |
+| `auth/01-웹-인증-개념.html` | 이 저장소 코드와 무관한 웹 인증·보안 개념(쿠키 속성, 해시·암호화·HMAC, 세션과 JWT, 난수와 엔트로피, 타이밍 공격, CSRF, CORS 등). 읽는 사람은 프론트엔드 개발자로 보고, 개념마다 비유와 짧은 코드를 붙인다. 인증 문서를 쓰다 설명이 필요한 개념이 없으면 여기에 `h2` 절을 더한다 |
 | `style/00-tailwind-배치-패턴.html` | 클래스 몇 개가 함께 있어야 의도대로 배치되는 조합(예: `relative` + `fill` 이미지, `rounded-*` + `overflow-hidden`). 패턴마다 푸는 문제, 만들어지는 CSS, 이 저장소의 사례, 하나를 빼면 생기는 일을 적는다. 리뷰에서 클래스가 왜 붙었는지 설명하면 그 패턴을 `h2` 절로 더하고, 이미 있으면 사례만 더한다 |
 
 - 다른 문서를 쓰다가 설명이 필요한 DB 개념이나 Drizzle 스키마·쿼리 문법이 나오면, 해당 참고 문서에 있는지 먼저 찾는다. 없으면 그 문서에 `h2` 절을 하나 더하고 목차에도 넣는다. 절의 `id`는 짧은 영어로 짓는다(예: `fk`, `index`).
@@ -62,6 +64,7 @@
 | `css` | CSS와 Tailwind의 배치, 꾸미기 패턴 |
 | `url-state` | 화면 상태(검색어, 정렬, 페이지)를 주소의 쿼리에 담고 읽고 만드는 방식 |
 | `react` | React의 상태와 훅, 렌더링 동작(제어·비제어 컴포넌트, `key`, transition 등) |
+| `auth` | 인증과 인가, 세션, 쿠키 보안, 비밀번호 해시, OAuth |
 
 ## 모듈
 
@@ -79,6 +82,8 @@
 | 흐름도 | `flow`, `lane`, `lane-title`, `chain` | 전체 흐름을 한눈에 보여 주기 |
 | 단계 | `steps` | 번호를 매긴 순서 설명. 항목의 첫 `strong`이 단계 제목이 되고, 본문 안의 `strong`은 문장 속 강조로 남는다 |
 | 트리 | `tree`, `tree-row`, `tree-node`, `tree-note` | 연결선이 있는 계층 구조와 오른쪽 설명. 설명 열은 깊이와 상관없이 맞춰진다. 이름이 길면 `style="--tree-col: 17rem"`처럼 이름 열을 넓힌다 |
+| 순서도 | `seq`, `seq-actors`, `seq-steps`, `seq-note`, `reply`, `stop` | 참여자(브라우저, API, DB) 사이에 요청과 응답이 오가는 순서. 아래 "순서도" 참고 |
+| 시간 막대 | `timeline`, `tl-row`, `tl-label`, `tl-track`, `tl-bar`, `tl-event` | 만료와 연장처럼 시간축 위에서 일어나는 일. 아래 "시간 막대" 참고 |
 | 테이블 관계도 | `erd`, `erd-table`, `erd-title`, `erd-constraints`, `erd-mark`, `erd-note` | 테이블을 칸 목록 상자로 그리고 외래 키를 선으로 잇는 ERD. 아래 "테이블 관계도" 참고 |
 | 표 | `table-wrap` | 좁은 화면에서 가로로 스크롤되는 표 |
 | 배지 | `badge` | 표나 문장 안의 짧은 분류 |
@@ -101,6 +106,20 @@
 - 여러 칸에 걸친 제약(`PRIMARY KEY (a, b)`, `UNIQUE (a, b)`)은 상자 안 `p.erd-constraints`에 적는다. 강조할 칸이나 제약에는 `erd-mark`를 붙인다.
 - 관계도 바로 아래의 `p.erd-note`에 선과 표시를 읽는 법을 적는다.
 - 상자가 본문 폭(760px)을 넘으면 가로로 스크롤된다. 넘지 않게 열 수와 배치를 고른다.
+
+순서도(`seq`)는 참여자와 순서만 HTML로 적고 열 배치, 화살표, 번호, 생명선은 `learn.js`가 그린다.
+
+- `ol.seq-actors`에 참여자를 왼쪽부터 `li`로 적는다. 참여자 번호는 1부터다.
+- `ol.seq-steps`에 순서대로 `li`를 적는다. 참여자 사이의 메시지는 `data-from="1" data-to="2"`, 한 참여자 안에서 일어나는 일은 `data-at="2"`(여러 열에 걸치면 `data-at="2-3"`)이다. 둘 다 번호가 자동으로 붙는다.
+- 응답은 `reply`(초록 점선), 실패나 거절은 `stop`(빨강)을 붙인다. 보충 설명은 안에 `small`로 쓴다.
+- 구간 이름이나 순서 사이의 설명은 `li.seq-note`로 쓴다. 전체 폭에 걸치고 번호가 붙지 않는다.
+- 참여자는 3~4개로 둔다. 한 열이 8.5rem보다 좁아지면 가로로 스크롤된다.
+
+시간 막대(`timeline`)는 축의 끝을 `style="--tl-max: 9"`, 단위를 `data-unit="일"`, 눈금 간격을 `data-tick`(기본 1)으로 정한다. 눈금 줄은 `learn.js`가 마지막에 더한다.
+
+- 줄마다 `div.tl-row` 안에 `span.tl-label`(줄 이름)과 `div.tl-track`을 둔다. 이름이 길면 `.timeline`에 `style="--tl-label: 9rem"`을 준다.
+- 기간은 `span.tl-bar`에 `style="--from: 0; --to: 7"`, 한 시점의 사건은 `span.tl-event`에 `style="--at: 1.5"`를 준다. 축 끝 가까이의 사건은 `end`를 붙여 글을 선 왼쪽에 둔다.
+- 막대 색은 `blue`, `green`, 대체되거나 지나간 기간은 `faded`(점선)를 붙인다.
 
 자가 점검 문제는 `quiz`로 쓴다. `quiz-q`에 질문을, `quiz-context`에 어느 절의 무엇을 묻는지를 적고, 바꾸는 코드는 `language-diff` 코드 블록으로, 필요한 데이터는 표로 질문 아래에 둔다. 답만 `<details class="quiz-answer">` 안의 `fold-body`에 접는다. 질문 한 줄만으로 무엇을 묻는지 분명할 때만 클래스 없는 `<details>`를 쓴다. 그 밖에 문단만 접어 둘 때도 클래스 없이 `<details>`를 쓴다. 코드나 표가 든 선택 읽기 내용을 접을 때는 `<details class="fold">` 안에 `<div class="fold-body">`를 두고, 접어도 흐름이 이어지도록 결론은 접기 밖에 적는다.
 

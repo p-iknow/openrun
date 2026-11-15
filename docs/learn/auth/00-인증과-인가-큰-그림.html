@@ -1,0 +1,638 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>00 인증과 인가 큰 그림</title>
+    <link rel="stylesheet" href="../learn.css" />
+    <script src="../vendor/highlightjs/highlight.min.js" defer></script>
+    <script src="../learn.js" defer></script>
+  </head>
+  <body>
+    <div class="layout">
+      <nav aria-label="목차">
+        <strong>목차</strong>
+        <ol>
+          <li><a href="#authn-authz">인증과 인가</a></li>
+          <li><a href="#map">1단계 인증 전체 지도</a></li>
+          <li><a href="#request">요청 하나가 지나가는 길</a></li>
+          <li><a href="#files">파일 지도</a></li>
+          <li><a href="#decisions">주요 결정</a></li>
+          <li><a href="#social">소셜 로그인이 붙으면</a></li>
+          <li><a href="#reading">읽는 순서</a></li>
+          <li><a href="#planned">앞으로 추가할 문서</a></li>
+          <li><a href="#check">점검 문제</a></li>
+        </ol>
+      </nav>
+
+      <main>
+        <h1>00 인증과 인가 큰 그림</h1>
+        <p class="lead">
+          이 폴더의 문서들이 어떤 순서로 이어지는지 먼저 본다. 인증과 인가가 무엇인지, 1단계 인증에서 무엇을 만들었고
+          무엇이 남았는지, 로그인한 요청 하나가 어떤 파일을 지나가는지를 한 장에 모았다. 세부 동작은 뒤 문서에서 하나씩
+          파고든다.
+        </p>
+
+        <section id="authn-authz">
+          <h2>인증과 인가</h2>
+          <p>
+            둘 다 "인증"처럼 들려 헷갈리지만 묻는 질문이 다르다. 공연장 입구에 빗대면 이렇다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>인증 (authentication)</th>
+                  <th>인가 (authorization)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>묻는 것</td>
+                  <td>너는 <strong>누구</strong>인가?</td>
+                  <td>너는 이것을 <strong>해도 되는가</strong>?</td>
+                </tr>
+                <tr>
+                  <td>공연장 비유</td>
+                  <td>입구에서 신분증을 보고 손목 띠를 채워 준다</td>
+                  <td>손목 띠 색을 보고 VIP석 구역에 들여보낼지 정한다</td>
+                </tr>
+                <tr>
+                  <td>이 저장소에서</td>
+                  <td>이메일과 비밀번호를 확인하고 세션 쿠키를 내린다. 이후 요청은 쿠키로 "몇 번 사용자"인지 안다</td>
+                  <td>그 사용자가 이 API를, 이 데이터를 쓸 수 있는지 판단한다</td>
+                </tr>
+                <tr>
+                  <td>실패 응답</td>
+                  <td><code>401 Unauthorized</code> (이름과 달리 "인증 안 됨"이다)</td>
+                  <td><code>403 Forbidden</code>, 또는 존재를 숨기려고 <code>404</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            인가는 늘 인증 다음이다. 누구인지 모르면 무엇을 해도 되는지 판단할 수 없다. 그래서 이 폴더도 인증부터
+            다룬다.
+          </p>
+
+          <h3>지금 만든 인가: "로그인했는가"</h3>
+          <p>
+            지금 코드에 있는 인가는 하나뿐이다. <code>/me</code>에 붙은 로그인 가드(<code>UserSessionGuard</code>)가
+            "로그인한 사용자만 들어온다"를 검사한다. 가장 거친 인가지만, 인가 판단이 컨트롤러에 들어가기 전에 한곳에서
+            일어나는 구조가 여기서 시작된다. 이 가드는 <a href="08-로그인-가드와-CurrentSession.html">08 문서</a>에서
+            본다.
+          </p>
+          <h3>앞으로 더할 인가</h3>
+          <ul>
+            <li>
+              <strong>운영자 경로 분리:</strong> <code>/admin/*</code>은 운영자 세션만, 나머지는 사용자 세션만 읽는다(<a
+                href="../../adr/0010-separate-operator-accounts.md"
+                >ADR 0010</a
+              >). 사용자에게 역할 컬럼을 두지 않으니, 사용자가 운영자 API를 부를 길이 구조적으로 없다.
+            </li>
+            <li>
+              <strong>IDOR 방어:</strong> 주문, 티켓처럼 주인이 있는 데이터는 "로그인했는가"로 부족하다. 로그인한
+              사람이 <code>/orders/123</code>의 주인인지도 확인해야 한다. 남의 id를 넣어 남의 데이터를 읽는 공격을
+              IDOR(Insecure Direct Object Reference)라 한다. 주문과 티켓이 생기는 예매(1.5)부터 다룬다.
+            </li>
+          </ul>
+        </section>
+
+        <section id="map">
+          <h2>1단계 인증 전체 지도</h2>
+          <p>
+            로드맵 1단계의 인증(1.4)은 이메일 인증(1.4a)과 소셜 로그인(1.4b)으로 나뉜다. 사용자가 실제로 겪는 순서대로
+            놓으면 아래와 같다. <span class="badge green">구현됨</span>은 #71에서 만든 것, <span class="badge blue">예정</span>은
+            아직 티켓만 있는 것이다.
+          </p>
+          <div class="flow">
+            <div class="lane blue">
+              <div class="lane-title">1.4a 이메일 계정</div>
+              <ol class="chain">
+                <li><span>회원가입 #74 · 화면 #75</span></li>
+                <li><span>인증 메일과 이메일 인증 #76 · 화면 #77</span></li>
+                <li><span>로그인 #71 ✓</span></li>
+                <li><span>세션 발급·확인·연장·로그아웃 #71 ✓</span></li>
+                <li><span>로그인 가드 #71 ✓</span></li>
+              </ol>
+            </div>
+            <div class="lane blue">
+              <div class="lane-title">1.4a 함께 붙는 것</div>
+              <ol class="chain">
+                <li><span>CSRF 방어와 CORS #72</span></li>
+                <li><span>스토어 로그인 화면과 헤더 #73</span></li>
+                <li><span>약관 재동의 #79 · #80 · #81</span></li>
+                <li><span>운영자 로그인 #82</span></li>
+              </ol>
+            </div>
+            <div class="lane green">
+              <div class="lane-title">1.4b 소셜 로그인</div>
+              <ol class="chain">
+                <li><span>구글 로그인</span></li>
+                <li><span>카카오 로그인</span></li>
+                <li><span>기존 계정과 연결</span></li>
+              </ol>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>조각</th>
+                  <th>상태</th>
+                  <th>하는 일</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>사용자·계정·세션 테이블</td>
+                  <td><span class="badge green">구현됨</span></td>
+                  <td><code>users</code>, <code>accounts</code>, <code>sessions</code>. 소셜 계정을 받을 자리까지 미리 만들었다</td>
+                </tr>
+                <tr>
+                  <td>비밀번호 해시</td>
+                  <td><span class="badge green">구현됨</span></td>
+                  <td>scrypt로 해시하고 상수 시간으로 비교한다</td>
+                </tr>
+                <tr>
+                  <td>로그인 <code>POST /auth/sign-in</code></td>
+                  <td><span class="badge green">구현됨</span></td>
+                  <td>비밀번호를 확인하고 세션 쿠키를 내린다</td>
+                </tr>
+                <tr>
+                  <td>로그아웃 <code>POST /auth/sign-out</code></td>
+                  <td><span class="badge green">구현됨</span></td>
+                  <td>세션 행과 쿠키를 지운다</td>
+                </tr>
+                <tr>
+                  <td>현재 세션 <code>GET /auth/session</code></td>
+                  <td><span class="badge green">구현됨</span></td>
+                  <td>헤더가 로그인 상태를 그릴 때 부른다. 로그인 안 했으면 <code>null</code></td>
+                </tr>
+                <tr>
+                  <td>내 정보 <code>GET /me</code></td>
+                  <td><span class="badge green">구현됨</span></td>
+                  <td>로그인 가드가 붙는 첫 API</td>
+                </tr>
+                <tr>
+                  <td>회원가입, 이메일 인증</td>
+                  <td><span class="badge blue">예정</span></td>
+                  <td>#74, #76</td>
+                </tr>
+                <tr>
+                  <td>CSRF 방어(<code>Origin</code> 검사)와 CORS</td>
+                  <td><span class="badge blue">예정</span></td>
+                  <td>#72</td>
+                </tr>
+                <tr>
+                  <td>운영자 세션</td>
+                  <td><span class="badge blue">예정</span></td>
+                  <td>#82. 같은 <code>SessionManager</code>를 다른 테이블과 쿠키로 쓴다</td>
+                </tr>
+                <tr>
+                  <td>구글·카카오 로그인</td>
+                  <td><span class="badge blue">예정</span></td>
+                  <td>1.4b</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="request">
+          <h2>요청 하나가 지나가는 길</h2>
+          <p>
+            인증의 핵심은 두 장면이다. 로그인할 때 서버가 "출입증"(세션 쿠키)을 만들어 주고, 그 뒤 요청마다 브라우저가
+            출입증을 내밀면 서버가 DB에서 확인한다. 자세한 단계는 <a href="02-로그인-요청-한-번-따라가기.html">02 문서</a>에서
+            한 줄씩 따라간다.
+          </p>
+          <div class="seq">
+            <ol class="seq-actors">
+              <li>브라우저</li>
+              <li>API 서버</li>
+              <li>DB</li>
+            </ol>
+            <ol class="seq-steps">
+              <li class="seq-note">장면 1: 로그인</li>
+              <li data-from="1" data-to="2">POST /auth/sign-in <small>이메일, 비밀번호, 로그인 상태 유지</small></li>
+              <li data-from="2" data-to="3">계정의 비밀번호 해시 읽기</li>
+              <li data-at="2">비밀번호 확인 <small>scrypt로 다시 계산해 비교</small></li>
+              <li data-at="2">새 세션 토큰 만들기</li>
+              <li data-from="2" data-to="3">세션 행 저장 <small>토큰은 SHA-256 해시만</small></li>
+              <li class="reply" data-from="2" data-to="1">200 + Set-Cookie <small>토큰.HMAC서명</small></li>
+              <li class="seq-note">장면 2: 로그인이 필요한 요청</li>
+              <li data-from="1" data-to="2">GET /me <small>Cookie 헤더에 세션 쿠키가 실려 간다</small></li>
+              <li data-at="2">로그인 가드: 서명 확인</li>
+              <li data-from="2" data-to="3">토큰 해시로 세션 찾기</li>
+              <li data-at="2">만료 확인, 필요하면 연장</li>
+              <li class="reply" data-from="2" data-to="1">200 내 정보</li>
+            </ol>
+          </div>
+          <div class="callout">
+            <p>
+              브라우저 자바스크립트는 세션 쿠키를 읽지도 만지지도 않는다. 쿠키는 <code>HttpOnly</code>라 스크립트에
+              보이지 않고, 브라우저가 요청마다 알아서 실어 보낸다. 프론트엔드가 할 일은 <code>credentials</code>를 켜서
+              쿠키가 실려 가게 하는 것뿐이다.
+            </p>
+          </div>
+        </section>
+
+        <section id="files">
+          <h2>파일 지도</h2>
+          <p>
+            인증 코드는 두 폴더로 나뉜다. <code>auth/</code>는 "세션이란 무엇인가"를 정하는 공용 로직이고, 특정 테이블을
+            모른다. <code>users/</code>는 사용자에게 그 로직을 연결한다. 운영자 로그인(#82)이 붙으면 운영자 모듈이
+            <code>users/</code>와 같은 모양으로 <code>auth/</code>를 가져다 쓴다.
+          </p>
+          <ul class="tree" style="--tree-col: 19rem">
+            <li>
+              <div class="tree-row"><span class="tree-node">apps/api/src</span></div>
+              <ul>
+                <li>
+                  <div class="tree-row">
+                    <span class="tree-node">auth/</span>
+                    <span class="tree-note"><span class="badge blue">공용</span> 사용자·운영자가 함께 쓴다</span>
+                  </div>
+                  <ul>
+                    <li>
+                      <div class="tree-row">
+                        <span class="tree-node">password.ts</span>
+                        <span class="tree-note">scrypt 해시와 확인 (<a href="04-비밀번호-해시와-확인.html">04</a>)</span>
+                      </div>
+                    </li>
+                    <li>
+                      <div class="tree-row">
+                        <span class="tree-node">session-token.ts</span>
+                        <span class="tree-note">토큰 만들기, HMAC 서명, SHA-256 해시 (<a href="05-세션-토큰-만들기-서명-저장.html">05</a>)</span>
+                      </div>
+                    </li>
+                    <li>
+                      <div class="tree-row">
+                        <span class="tree-node">session-manager.ts</span>
+                        <span class="tree-note">세션 발급·확인·연장·폐기, 쿠키 쓰기 (<a href="06-SessionManager-발급-확인-연장-폐기.html">06</a>, <a href="07-세션-쿠키-설정.html">07</a>)</span>
+                      </div>
+                    </li>
+                    <li>
+                      <div class="tree-row">
+                        <span class="tree-node">session-guard.ts</span>
+                        <span class="tree-note">로그인 가드 팩토리와 <code>@CurrentSession()</code> (<a href="08-로그인-가드와-CurrentSession.html">08</a>)</span>
+                      </div>
+                    </li>
+                    <li>
+                      <div class="tree-row">
+                        <span class="tree-node">authentication-required.ts</span>
+                        <span class="tree-note">401 <code>AUTHENTICATION_REQUIRED</code> 오류 (<a href="09-인증-API-응답-설계.html">09</a>)</span>
+                      </div>
+                    </li>
+                  </ul>
+                </li>
+                <li>
+                  <div class="tree-row">
+                    <span class="tree-node">users/</span>
+                    <span class="tree-note"><span class="badge green">사용자</span> 공용 로직을 사용자에 연결한다</span>
+                  </div>
+                  <ul>
+                    <li>
+                      <div class="tree-row">
+                        <span class="tree-node">user-session.ts</span>
+                        <span class="tree-note">사용자 세션 정책(7일/1일), 쿠키 이름, <code>UserSessionGuard</code></span>
+                      </div>
+                    </li>
+                    <li>
+                      <div class="tree-row">
+                        <span class="tree-node">user-session-store.ts</span>
+                        <span class="tree-note"><code>sessions</code> 테이블을 읽고 쓰는 <code>SessionStore</code> 구현</span>
+                      </div>
+                    </li>
+                    <li>
+                      <div class="tree-row">
+                        <span class="tree-node">users.service.ts</span>
+                        <span class="tree-note">비밀번호 확인, 세션 응답에 담을 사용자 읽기</span>
+                      </div>
+                    </li>
+                    <li>
+                      <div class="tree-row">
+                        <span class="tree-node">auth.controller.ts</span>
+                        <span class="tree-note"><code>/auth/sign-in</code>, <code>/auth/sign-out</code>, <code>/auth/session</code></span>
+                      </div>
+                    </li>
+                    <li>
+                      <div class="tree-row">
+                        <span class="tree-node">me.controller.ts</span>
+                        <span class="tree-note"><code>GET /me</code>. 로그인 가드가 붙는다</span>
+                      </div>
+                    </li>
+                    <li>
+                      <div class="tree-row">
+                        <span class="tree-node">sign-in-body.ts</span>
+                        <span class="tree-note">로그인 요청 본문의 zod 스키마</span>
+                      </div>
+                    </li>
+                    <li>
+                      <div class="tree-row">
+                        <span class="tree-node">session.dto.ts</span>
+                        <span class="tree-note">세션 응답 모양</span>
+                      </div>
+                    </li>
+                    <li>
+                      <div class="tree-row">
+                        <span class="tree-node">invalid-credentials.ts</span>
+                        <span class="tree-note">401 <code>INVALID_CREDENTIALS</code> 오류</span>
+                      </div>
+                    </li>
+                  </ul>
+                </li>
+                <li>
+                  <div class="tree-row">
+                    <span class="tree-node">db/schema/users.ts</span>
+                    <span class="tree-note"><code>users</code>, <code>accounts</code>, <code>sessions</code> 테이블 (<a href="03-사용자-계정-세션-테이블.html">03</a>)</span>
+                  </div>
+                </li>
+                <li>
+                  <div class="tree-row">
+                    <span class="tree-node">config/env.ts</span>
+                    <span class="tree-note"><code>AUTH_SECRET</code>, <code>COOKIE_DOMAIN</code>, Secure 쿠키 여부</span>
+                  </div>
+                </li>
+              </ul>
+            </li>
+          </ul>
+          <p>
+            두 폴더를 잇는 이음매는 <code>SessionStore</code> 인터페이스다. <code>auth/</code>의 <code>SessionManager</code>는
+            "세션 행을 만들고, 해시로 찾고, 만료를 늘리고, 지운다"는 네 동작만 요구하고, <code>users/</code>의
+            <code>UserSessionStore</code>가 그것을 <code>sessions</code> 테이블로 구현해 넘긴다.
+          </p>
+        </section>
+
+        <section id="decisions">
+          <h2>주요 결정</h2>
+          <p>
+            세션 방식은 라이브러리 <a href="../../research/better-auth-session.md">Better Auth</a>의 설계를 본떠 직접
+            만들었다. 라이브러리가 감추는 동작을 배우기 위해서다. 결정과 이유는 ADR에 있다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>결정</th>
+                  <th>이유</th>
+                  <th>근거</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>JWT가 아니라 DB에 저장하는 세션</td>
+                  <td>탈퇴하거나 로그아웃하면 즉시 끊어야 하고, API 서버가 하나라 JWT의 무상태 장점이 작다</td>
+                  <td><a href="../../adr/0009-session-auth-modeled-on-better-auth.md">ADR 0009</a></td>
+                </tr>
+                <tr>
+                  <td>쿠키에 HMAC으로 서명한 불투명 토큰</td>
+                  <td>위조한 쿠키는 DB를 조회하기 전에 거른다</td>
+                  <td>ADR 0009</td>
+                </tr>
+                <tr>
+                  <td>DB에는 토큰의 SHA-256 해시만 저장</td>
+                  <td>DB가 유출돼도 그 값으로 로그인할 수 없다</td>
+                  <td>ADR 0009 (Better Auth와 다름)</td>
+                </tr>
+                <tr>
+                  <td>7일 만료, 마지막 연장 뒤 1일 지난 첫 요청에서 연장</td>
+                  <td>쓰는 동안은 로그인이 이어지고, 요청마다 DB에 쓰지는 않는다</td>
+                  <td>ADR 0009</td>
+                </tr>
+                <tr>
+                  <td>CSRF 토큰 없이 <code>Origin</code> 검사, <code>SameSite=Lax</code>, JSON 본문</td>
+                  <td>세 겹으로 막으면 토큰을 주고받는 복잡함 없이 충분하다</td>
+                  <td>ADR 0009 (#72에서 구현)</td>
+                </tr>
+                <tr>
+                  <td>운영자는 별도 테이블, 별도 세션과 쿠키</td>
+                  <td>역할 검사를 빠뜨려 운영자 권한이 생길 길을 구조적으로 없앤다. 운영자에게만 30분 유휴 만료</td>
+                  <td><a href="../../adr/0010-separate-operator-accounts.md">ADR 0010</a></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout">
+            <p>
+              <strong>Better Auth와 다르게 정한 것</strong>이 몇 가지 있다. 토큰을 해시로 저장하기, 쿠키 캐시를 처음부터
+              켜지 않기, <code>AUTH_SECRET</code>이 32자보다 짧으면 부팅하지 않기, <code>rememberMe</code>를 필수 값으로
+              받기, 로그인 상태 유지 여부를 쿠키가 아니라 세션 행에 두기, 요청 속도 제한은 10단계로 미루기. 각 문서에서
+              해당 코드를 볼 때 다시 짚는다.
+            </p>
+          </div>
+        </section>
+
+        <section id="social">
+          <h2>소셜 로그인이 붙으면</h2>
+          <p>
+            소셜 로그인은 "누구인가"를 확인하는 방법만 바뀐다. 비밀번호 대신 구글이나 카카오가 "이 사람은 우리 쪽 몇 번
+            계정이다"라고 알려 준다. 확인이 끝난 뒤 세션을 만들고 쿠키를 내리는 부분은 지금 코드를 그대로 쓴다.
+          </p>
+          <div class="flow">
+            <div class="lane blue">
+              <div class="lane-title">이메일 로그인 (지금)</div>
+              <ol class="chain">
+                <li><span>이메일·비밀번호 받기</span></li>
+                <li><span>accounts(provider=credential)의 비밀번호 해시와 비교</span></li>
+                <li><span>사용자 id 얻음</span></li>
+                <li><span>SessionManager.issue</span></li>
+                <li><span>세션 쿠키</span></li>
+              </ol>
+            </div>
+            <div class="lane green">
+              <div class="lane-title">소셜 로그인 (1.4b)</div>
+              <ol class="chain">
+                <li><span>구글·카카오로 보냈다가 콜백으로 돌아옴</span></li>
+                <li><span>제공자에게 그 사람의 계정 id 받기</span></li>
+                <li><span>accounts(provider=google, providerAccountId)로 사용자 찾기·만들기</span></li>
+                <li><span>SessionManager.issue</span></li>
+                <li><span>세션 쿠키</span></li>
+              </ol>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>그대로인 것</th>
+                  <th>더해지는 것</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>
+                    <code>sessions</code> 테이블, <code>SessionManager</code>의 발급·확인·연장·폐기, 세션 쿠키, 로그인 가드,
+                    <code>/auth/session</code>과 <code>/me</code>
+                  </td>
+                  <td>
+                    <code>account_provider</code> enum에 <code>google</code>, <code>kakao</code>. 사용자 한 명에
+                    <code>accounts</code> 행이 여러 개 생긴다. 제공자로 보내고 돌아오는 두 경로(시작, 콜백). 위조 요청을
+                    막는 state와 PKCE 값을 잠시 보관할 곳
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            <code>accounts</code>를 처음부터 사용자 테이블과 나눠 둔 이유가 이것이다. 비밀번호를 <code>users</code>에 두지
+            않았기 때문에, 비밀번호 없이 카카오로만 가입한 사용자도 같은 모양이 된다. 구조는
+            <a href="03-사용자-계정-세션-테이블.html">03 문서</a>에서 본다.
+          </p>
+        </section>
+
+        <section id="reading">
+          <h2>읽는 순서</h2>
+          <p>
+            큰 흐름에서 세부 로직으로 내려간다. 모르는 개념(쿠키 속성, 해시, HMAC 등)이 나오면
+            <a href="01-웹-인증-개념.html">01 웹 인증 개념</a>의 해당 절로 넘어갔다 돌아오면 된다.
+          </p>
+          <ol class="steps blue">
+            <li><strong>02 로그인 요청 한 번 따라가기</strong> 로그인부터 <code>/me</code>까지 한 요청씩 따라가며 각 단계가 어느 파일인지 잇는다.</li>
+            <li><strong>03 사용자·계정·세션 테이블</strong> 세 테이블의 관계, 소셜 계정을 받을 수 있게 나눈 구조.</li>
+            <li><strong>04 비밀번호 해시와 확인</strong> scrypt, 솔트, 상수 시간 비교, 없는 이메일에도 해시를 계산하는 이유.</li>
+            <li><strong>05 세션 토큰: 만들기, 서명, 저장</strong> 190비트 난수 토큰, 쿠키의 HMAC 서명, DB의 SHA-256 해시.</li>
+            <li><strong>06 SessionManager: 발급, 확인, 연장, 폐기</strong> 세션의 일생과 연장 계산, 겹치는 요청.</li>
+            <li><strong>07 세션 쿠키 설정</strong> 쿠키 속성 하나하나를 왜 그렇게 정했는지.</li>
+            <li><strong>08 로그인 가드와 CurrentSession</strong> 가드가 컨트롤러 앞에서 세션을 확인하고 넘기는 방식.</li>
+            <li><strong>09 인증 API 응답 설계</strong> 네 API의 응답과 오류 코드를 그렇게 정한 이유.</li>
+          </ol>
+          <p>
+            Nest의 가드 자체가 처음이면 08 전에
+            <a href="../nest/06-가드와-파라미터-데코레이터.html">nest 06 가드와 파라미터 데코레이터</a>를 먼저 읽는다.
+          </p>
+        </section>
+
+        <section id="planned">
+          <h2>앞으로 추가할 문서</h2>
+          <p>
+            아직 코드가 없는 부분이다. 티켓이 병합되면 해당 문서를 이 폴더의 다음 번호로 만들고 이 목록에서 지운다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>문서</th>
+                  <th>티켓</th>
+                  <th>다룰 것</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>회원가입과 비밀번호 규칙</td>
+                  <td>#74</td>
+                  <td>사용자와 credential 계정을 한 트랜잭션으로 만들기, 이메일 중복, 비밀번호 규칙</td>
+                </tr>
+                <tr>
+                  <td>이메일 인증 토큰</td>
+                  <td>#76</td>
+                  <td>한 번 쓰고 버리는 토큰, 만료, 인증 메일 링크</td>
+                </tr>
+                <tr>
+                  <td>CSRF 방어와 CORS</td>
+                  <td>#72</td>
+                  <td><code>Origin</code> 검사, credentials를 허용하는 CORS, <code>SameSite</code>와 함께 막는 범위</td>
+                </tr>
+                <tr>
+                  <td>운영자 세션</td>
+                  <td>#82</td>
+                  <td>같은 <code>SessionManager</code>에 다른 테이블·쿠키·정책(30분 유휴 만료) 끼우기</td>
+                </tr>
+                <tr>
+                  <td>약관 재동의</td>
+                  <td>#79</td>
+                  <td>동의 이력, 개정판이 나오면 로그인한 사용자를 재동의로 보내기</td>
+                </tr>
+                <tr>
+                  <td>스토어 로그인 화면과 서버에서 세션 읽기</td>
+                  <td>#73</td>
+                  <td>Next.js 서버 렌더링에서 쿠키를 API로 넘기기, 헤더의 로그인 상태</td>
+                </tr>
+                <tr>
+                  <td>OAuth 2.0 큰 그림</td>
+                  <td>1.4b</td>
+                  <td>제공자, 클라이언트, 인가 코드, 액세스 토큰. 소셜 로그인이 OAuth 위에서 하는 일</td>
+                </tr>
+                <tr>
+                  <td>구글·카카오 로그인 흐름</td>
+                  <td>1.4b</td>
+                  <td>제공자로 보내기, 콜백에서 인가 코드를 토큰으로 바꾸기, 사용자 정보 받기</td>
+                </tr>
+                <tr>
+                  <td>state와 PKCE</td>
+                  <td>1.4b</td>
+                  <td>콜백 위조와 인가 코드 가로채기를 막는 값</td>
+                </tr>
+                <tr>
+                  <td>기존 계정과 소셜 계정 연결</td>
+                  <td>1.4b</td>
+                  <td>같은 이메일의 계정이 이미 있을 때, 한 사용자에 <code>accounts</code> 행 여러 개</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="check">
+          <h2>점검 문제</h2>
+          <div class="quiz">
+            <p class="quiz-q">1. 로그인하지 않고 <code>/me</code>를 부르면 401, 로그인한 사용자가 남의 주문을 열면 403이나 404다. 각각 인증과 인가 중 무엇이 실패한 것인가?</p>
+            <p class="quiz-context"><a href="#authn-authz">인증과 인가</a> 절의 표를 떠올린다.</p>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  앞은 인증 실패다. 누구인지 모르니 401이다. 뒤는 인가 실패다. 누구인지는 알지만 그 주문을 볼 권한이 없다.
+                  남의 주문이 있는지조차 알리지 않으려고 404로 응답하기도 한다.
+                </p>
+              </div>
+            </details>
+          </div>
+          <div class="quiz">
+            <p class="quiz-q">2. 운영자 로그인(#82)을 붙일 때 <code>auth/</code> 폴더의 파일을 고쳐야 하는가?</p>
+            <p class="quiz-context"><a href="#files">파일 지도</a> 절의 <code>SessionStore</code> 설명을 본다.</p>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  고치지 않아도 되도록 나눠 두었다. 운영자 모듈이 <code>operator_sessions</code> 같은 테이블로
+                  <code>SessionStore</code>를 구현하고, 쿠키 이름과 정책(30분 유휴 만료)을 정해 <code>SessionManager</code>를
+                  하나 더 만들면 된다. 가드도 <code>createSessionGuard</code>에 그 주입 토큰을 넘겨 만든다.
+                </p>
+              </div>
+            </details>
+          </div>
+          <div class="quiz">
+            <p class="quiz-q">3. 카카오로만 가입한 사용자에게는 비밀번호가 없다. 비밀번호 해시를 <code>users</code> 테이블에 두었다면 무엇이 불편했을까?</p>
+            <p class="quiz-context"><a href="#social">소셜 로그인이 붙으면</a> 절.</p>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  비밀번호 칸이 NULL인 사용자와 아닌 사용자가 섞이고, 카카오 계정 id와 구글 계정 id를 담을 칸을 제공자마다
+                  <code>users</code>에 더해야 한다. 한 사람이 이메일과 카카오를 함께 쓰는 경우도 표현하기 어렵다.
+                  <code>accounts</code>로 나누면 로그인 수단이 하나 늘 때 행이 하나 늘 뿐이다.
+                </p>
+              </div>
+            </details>
+          </div>
+          <div class="quiz">
+            <p class="quiz-q">4. 소셜 로그인을 붙여도 <code>/me</code>의 로그인 가드 코드는 바뀌지 않는다. 왜인가?</p>
+            <p class="quiz-context"><a href="#request">요청 하나가 지나가는 길</a>의 장면 2와 <a href="#social">소셜 로그인</a> 절의 두 흐름을 비교한다.</p>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  가드는 "세션 쿠키가 가리키는 세션이 살아 있는가"만 본다. 그 세션을 비밀번호로 확인하고 만들었는지,
+                  카카오로 확인하고 만들었는지는 모른다. 두 로그인 모두 마지막에 같은 <code>SessionManager.issue</code>로
+                  같은 모양의 세션을 만들기 때문이다.
+                </p>
+              </div>
+            </details>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

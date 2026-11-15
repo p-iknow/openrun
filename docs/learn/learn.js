@@ -31,6 +31,23 @@ const learnFolders = [
       { file: '03-통합-테스트-구성.html', title: '03 통합 테스트 구성', tags: ['testing'] },
       { file: '04-예외-필터와-APP_FILTER.html', title: '04 예외 필터와 APP_FILTER', tags: ['nestjs'] },
       { file: '05-파이프와-검증.html', title: '05 파이프와 검증', tags: ['nestjs', 'openapi'] },
+      { file: '06-가드와-파라미터-데코레이터.html', title: '06 가드와 파라미터 데코레이터', tags: ['nestjs', 'auth'] },
+    ],
+  },
+  {
+    folder: 'auth',
+    title: '인증과 인가',
+    documents: [
+      { file: '00-인증과-인가-큰-그림.html', title: '00 인증과 인가 큰 그림', tags: ['auth'] },
+      { file: '01-웹-인증-개념.html', title: '01 웹 인증 개념', tags: ['auth'] },
+      { file: '02-로그인-요청-한-번-따라가기.html', title: '02 로그인 요청 한 번 따라가기', tags: ['auth'] },
+      { file: '03-사용자-계정-세션-테이블.html', title: '03 사용자·계정·세션 테이블', tags: ['auth', 'drizzle', 'database'] },
+      { file: '04-비밀번호-해시와-확인.html', title: '04 비밀번호 해시와 확인', tags: ['auth'] },
+      { file: '05-세션-토큰-만들기-서명-저장.html', title: '05 세션 토큰: 만들기, 서명, 저장', tags: ['auth'] },
+      { file: '06-SessionManager-발급-확인-연장-폐기.html', title: '06 SessionManager: 발급, 확인, 연장, 폐기', tags: ['auth'] },
+      { file: '07-세션-쿠키-설정.html', title: '07 세션 쿠키 설정', tags: ['auth'] },
+      { file: '08-로그인-가드와-CurrentSession.html', title: '08 로그인 가드와 CurrentSession', tags: ['auth', 'nestjs'] },
+      { file: '09-인증-API-응답-설계.html', title: '09 인증 API 응답 설계', tags: ['auth', 'openapi'] },
     ],
   },
   {
@@ -427,8 +444,104 @@ function renderErds() {
   document.querySelectorAll('.erd').forEach(setUpErd);
 }
 
+// .seq(순서도)의 열 수, 생명선, 메시지의 열 범위와 번호를 정한다.
+// 메시지는 data-from과 data-to(참여자 번호, 1부터), 한 참여자 안의 일은 data-at="2"나 data-at="2-3"이다.
+function setUpSequence(seq) {
+  const actors = seq.querySelectorAll('.seq-actors > li');
+  const steps = seq.querySelector('.seq-steps');
+  if (!steps) return;
+  seq.style.setProperty('--seq-cols', actors.length);
+  actors.forEach((_, index) => {
+    const line = element('span', 'seq-lifeline');
+    line.style.setProperty('--i', index);
+    line.setAttribute('aria-hidden', 'true');
+    steps.prepend(line);
+  });
+  let number = 0;
+  for (const step of steps.querySelectorAll(':scope > li')) {
+    const { from, to, at } = step.dataset;
+    if (from && to) {
+      const [a, b] = [Number(from), Number(to)];
+      step.classList.add('seq-msg');
+      if (b < a) step.classList.add('to-left');
+      step.style.gridColumn = `${Math.min(a, b)} / ${Math.max(a, b) + 1}`;
+      step.style.setProperty('--span', Math.abs(b - a) + 1);
+    } else if (at) {
+      const [start, end = start] = at.split('-').map(Number);
+      step.classList.add('seq-self');
+      step.style.gridColumn = `${start} / ${end + 1}`;
+    } else {
+      continue;
+    }
+    number += 1;
+    step.prepend(element('span', 'seq-num', String(number)));
+  }
+}
+
+function renderSequences() {
+  document.querySelectorAll('.seq').forEach(setUpSequence);
+}
+
+// .timeline(시간 막대)의 마지막에 눈금 줄을 더한다. 축의 끝은 --tl-max, 단위는 data-unit, 간격은 data-tick이다.
+function setUpTimeline(timeline) {
+  const max = Number(getComputedStyle(timeline).getPropertyValue('--tl-max'));
+  const tick = Number(timeline.dataset.tick ?? 1);
+  const unit = timeline.dataset.unit ?? '';
+  timeline.style.setProperty('--tl-tick', tick);
+  const row = element('div', 'tl-row tl-axis');
+  row.setAttribute('aria-hidden', 'true');
+  const track = element('div', 'tl-track');
+  for (let at = 0; at <= max + 1e-9; at += tick) {
+    const label = element('span', 'tl-tick', `${Number(at.toFixed(2))}${unit}`);
+    label.style.setProperty('--at', at);
+    track.append(label);
+  }
+  row.append(element('span', 'tl-label'), track);
+  timeline.append(row);
+
+  // 막대가 좁아 글이 잘리면 글을 막대 오른쪽 바깥으로 뺀다. 그 자리에 다른 막대가 있으면 글을 숨기고 마우스를 올릴 때만 보인다.
+  const overlaps = (a, b) => a.left < b.right && b.left < a.right;
+  for (const bar of timeline.querySelectorAll('.tl-bar')) {
+    if (bar.scrollWidth <= bar.clientWidth + 1) continue;
+    bar.classList.add('label-outside');
+    bar.title = bar.textContent;
+    const label = element('span', 'tl-bar-label', bar.textContent);
+    label.style.setProperty('--at', bar.style.getPropertyValue('--to'));
+    bar.after(label);
+    const box = label.getBoundingClientRect();
+    const blocked = [...bar.parentElement.querySelectorAll('.tl-bar')].some(
+      (other) => other !== bar && overlaps(box, other.getBoundingClientRect()),
+    );
+    if (blocked || box.right > timeline.getBoundingClientRect().right) label.remove();
+  }
+  // 같은 줄의 사건 글이 앞 사건 글과 겹치면 한 줄 아래로 내린다.
+  const textBox = (node) => {
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    return range.getBoundingClientRect();
+  };
+  for (const track of timeline.querySelectorAll('.tl-track')) {
+    const placed = [];
+    for (const event of track.querySelectorAll('.tl-event')) {
+      const box = textBox(event);
+      if (placed.some((other) => box.left < other.right + 4 && other.left < box.right + 4)) {
+        event.classList.add('lower');
+        track.classList.add('stacked');
+      } else {
+        placed.push(box);
+      }
+    }
+  }
+}
+
+function renderTimelines() {
+  document.querySelectorAll('.timeline').forEach(setUpTimeline);
+}
+
 renderTags();
 renderDocumentNav();
 renderDocumentIndex();
 highlightCode();
 renderErds();
+renderSequences();
+renderTimelines();

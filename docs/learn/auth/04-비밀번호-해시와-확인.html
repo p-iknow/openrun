@@ -1,0 +1,696 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>04 비밀번호 해시와 확인</title>
+    <link rel="stylesheet" href="../learn.css" />
+    <script src="../vendor/highlightjs/highlight.min.js" defer></script>
+    <script src="../learn.js" defer></script>
+  </head>
+  <body>
+    <div class="layout">
+      <nav aria-label="목차">
+        <strong>1부: 비밀번호를 저장하는 법</strong>
+        <ol>
+          <li><a href="#overview">한눈에 보기</a></li>
+          <li><a href="#hash-password">hashPassword: 솔트:키 만들기</a></li>
+          <li><a href="#stored-shape">저장된 값의 모양</a></li>
+          <li><a href="#params">scrypt 파라미터와 메모리</a></li>
+          <li><a href="#nfkc">NFKC 정규화</a></li>
+        </ol>
+        <strong>2부: 비밀번호를 확인하는 법</strong>
+        <ol>
+          <li><a href="#verify-password">verifyPassword: 다시 만들어 비교하기</a></li>
+          <li><a href="#compare">길이를 먼저, 그다음 timingSafeEqual</a></li>
+        </ol>
+        <strong>3부: 로그인에서 쓰는 법</strong>
+        <ol>
+          <li><a href="#verify-credentials">verifyCredentials의 세 갈래</a></li>
+          <li><a href="#dummy-hash">없는 이메일에도 해시를 계산하는 이유</a></li>
+          <li><a href="#same-error">같은 401 응답</a></li>
+          <li><a href="#email">이메일 정규화와 형식 검사를 하지 않는 이유</a></li>
+        </ol>
+        <strong>마무리</strong>
+        <ol>
+          <li><a href="#later">아직 없는 것</a></li>
+          <li><a href="#check">스스로 확인하기</a></li>
+        </ol>
+      </nav>
+
+      <main>
+        <h1>04 비밀번호 해시와 확인</h1>
+        <p class="lead">
+          비밀번호를 DB에 어떤 모양으로 저장하고, 로그인할 때 어떻게 맞는지 확인하는지 정리한다.
+          <code>apps/api/src/auth/password.ts</code>의 두 함수와, 로그인에서 그 함수를 부르는
+          <code>UsersService.verifyCredentials</code>를 한 줄씩 따라간다. 숫자(메모리, 걸리는 시간, 문자열 길이)는 이 저장소의
+          Node에서 직접 실행해 확인했다.
+        </p>
+
+        <section id="overview">
+          <h2>한눈에 보기</h2>
+          <div class="callout">
+            <p>
+              비밀번호는 원문도, 되돌릴 수 있는 암호문도 저장하지 않는다. <strong>무작위 솔트</strong>와 비밀번호를
+              <strong>scrypt</strong>에 넣어 나온 키만 <code>솔트:키</code> 형식으로 저장한다. 확인할 때는 저장된 솔트로 입력한
+              비밀번호를 <strong>다시 한 번 같은 방식으로 계산</strong>해, 나온 키가 저장된 키와 같은지 본다.
+            </p>
+          </div>
+          <div class="flow">
+            <div class="lane blue">
+              <div class="lane-title">저장할 때: hashPassword</div>
+              <ol class="chain">
+                <li><span>비밀번호 <code>pw1234!</code></span></li>
+                <li><span>무작위 솔트 16바이트</span></li>
+                <li><span>NFKC 정규화</span></li>
+                <li><span>scrypt → 키 64바이트</span></li>
+                <li><span><code>솔트:키</code> 문자열</span></li>
+                <li><span><code>accounts.password_hash</code>에 저장</span></li>
+              </ol>
+            </div>
+            <div class="lane green">
+              <div class="lane-title">확인할 때: verifyPassword</div>
+              <ol class="chain">
+                <li><span>저장된 <code>솔트:키</code></span></li>
+                <li><span><code>:</code>로 나누기</span></li>
+                <li><span>입력한 비밀번호 + 저장된 솔트로 scrypt</span></li>
+                <li><span>새 키와 저장된 키 비교</span></li>
+                <li><span>같으면 <code>true</code></span></li>
+              </ol>
+            </div>
+          </div>
+          <p>
+            해시, 솔트, 키 유도 함수(KDF)라는 개념 자체는
+            <a href="01-웹-인증-개념.html#hash">01 문서의 해시</a>,
+            <a href="01-웹-인증-개념.html#salt">솔트</a>,
+            <a href="01-웹-인증-개념.html#kdf">키 유도 함수</a> 절에 있다. 이 문서는 이 저장소의 코드가 그 개념을 어떻게
+            쓰는지만 다룬다. 비유하면 비밀번호 확인은 자물쇠를 열어 보는 일이 아니라, 같은 재료(비밀번호 + 솔트)로 같은 반죽을
+            다시 빚어 보고 모양이 똑같은지 대조하는 일이다. 반죽에서 재료를 되돌려 뽑아낼 방법은 없다.
+          </p>
+        </section>
+
+        <section id="hash-password">
+          <h2>hashPassword: 솔트:키 만들기</h2>
+          <p>
+            비밀번호를 저장할 문자열로 바꾸는 함수다. 지금은 테스트와 시드가 쓰고, 회원가입 API(#74)가 생기면 가입할 때도 쓴다.
+          </p>
+          <pre><code class="language-ts" data-lines="2-4">/** 비밀번호를 `솔트:키`(hex) 형식의 scrypt 해시로 만든다. */
+export async function hashPassword(password: string): Promise&lt;string&gt; {
+  const salt = randomBytes(SALT_BYTES).toString('hex');
+  const key = await deriveKey({ password, salt });
+  return `${salt}:${key.toString('hex')}`;
+}</code></pre>
+          <ol class="steps blue">
+            <li>
+              <strong>솔트를 뽑는다</strong>
+              <code>randomBytes(16)</code>은 운영체제의 암호용 난수로 16바이트(128비트)를 뽑는다. <code>toString('hex')</code>로
+              바이트 하나를 두 글자로 바꾸므로 솔트는 32글자 문자열이 된다. 같은 비밀번호라도 사용자마다 솔트가 달라서, 저장된
+              값이 모두 다르다.
+            </li>
+            <li>
+              <strong>scrypt로 키를 유도한다</strong>
+              <code>deriveKey</code>가 비밀번호를 NFKC로 정규화한 뒤 솔트와 함께 scrypt에 넣어 64바이트 키를 만든다.
+              일부러 느리고 메모리를 많이 쓰게 만든 계산이라 한 번에 약 60ms가 걸린다(<a href="#params">아래</a>).
+            </li>
+            <li>
+              <strong>솔트와 키를 콜론으로 잇는다</strong>
+              확인할 때 같은 솔트가 다시 필요하므로 솔트를 키 옆에 함께 저장한다. 솔트는 비밀이 아니다. 비밀은 비밀번호뿐이고,
+              솔트는 "같은 비밀번호라도 결과가 달라지게" 하는 역할만 한다.
+            </li>
+          </ol>
+          <p><code>deriveKey</code>는 Node의 콜백 방식 <code>scrypt</code>를 Promise로 감싼 것이다.</p>
+          <pre><code class="language-ts" data-lines="8-15">function deriveKey({
+  password,
+  salt,
+}: {
+  password: string;
+  salt: string;
+}): Promise&lt;Buffer&gt; {
+  return new Promise((resolve, reject) =&gt; {
+    // 같은 글자를 다른 코드 포인트로 입력해도(예: 조합형 한글) 같은 비밀번호로 보도록 정규화한다(Better Auth와 같음).
+    scrypt(
+      password.normalize('NFKC'),
+      salt,
+      KEY_LENGTH,
+      SCRYPT_OPTIONS,
+      (error, key) =&gt; (error ? reject(error) : resolve(key)),
+    );
+  });
+}</code></pre>
+          <div class="callout">
+            <p>
+              <code>scryptSync</code>가 아니라 비동기 <code>scrypt</code>를 쓴다. 60ms짜리 계산을 동기로 돌리면 그동안 Node의
+              이벤트 루프가 멈춰 <strong>다른 모든 요청</strong>이 기다린다. 비동기 버전은 계산을 libuv 스레드 풀로 보내고 이벤트
+              루프는 다른 요청을 계속 처리한다. 프론트엔드에서 무거운 계산을 Web Worker로 보내 메인 스레드를 막지 않는 것과 같다.
+            </p>
+          </div>
+        </section>
+
+        <section id="stored-shape">
+          <h2>저장된 값의 모양</h2>
+          <p><code>accounts.password_hash</code> 칸에 들어가는 값은 이렇게 생겼다(값은 예시).</p>
+          <pre><code>3f9a0c1e5b7d2a4c6e8f0a1b2c3d4e5f:9c2e…(128글자)…41ab</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>부분</th>
+                  <th>바이트</th>
+                  <th>hex 글자 수</th>
+                  <th>정하는 상수</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>솔트</td>
+                  <td>16</td>
+                  <td>32</td>
+                  <td><code>SALT_BYTES = 16</code></td>
+                </tr>
+                <tr>
+                  <td>구분자 <code>:</code></td>
+                  <td>-</td>
+                  <td>1</td>
+                  <td>-</td>
+                </tr>
+                <tr>
+                  <td>키</td>
+                  <td>64</td>
+                  <td>128</td>
+                  <td><code>KEY_LENGTH = 64</code></td>
+                </tr>
+                <tr>
+                  <td>합계</td>
+                  <td>-</td>
+                  <td>161</td>
+                  <td>-</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            hex는 <code>0-9a-f</code>만 쓰므로 솔트와 키 안에는 <code>:</code>가 나올 수 없다. 그래서 <code>split(':')</code>로
+            안전하게 나눌 수 있다. 어느 알고리즘과 파라미터로 만든 값인지는 문자열에 적혀 있지 않다. 파라미터는 코드의
+            <code>SCRYPT_OPTIONS</code>가 정하므로, 나중에 파라미터를 바꾸면 이미 저장된 해시는 확인되지 않는다는 점을 기억해 둔다.
+          </p>
+          <p>
+            이 칸이 <code>users</code>가 아니라 <code>accounts</code>에 있는 이유(소셜 로그인만 쓰는 사용자도 같은 모양으로 담기
+            위해)는 <a href="03-사용자-계정-세션-테이블.html">03 문서</a>에 있다.
+          </p>
+        </section>
+
+        <section id="params">
+          <h2>scrypt 파라미터와 메모리</h2>
+          <pre><code class="language-ts" data-lines="3-6">// Better Auth와 같은 scrypt 파라미터다. 해시 하나에 약 128 × N × r = 32MiB를 쓴다.
+const SCRYPT_OPTIONS = {
+  N: 16384,
+  r: 16,
+  p: 1,
+  // Node의 기본 메모리 한도(32MiB)에 딱 걸려 오류가 나므로 두 배로 넉넉히 준다.
+  maxmem: 128 * 16384 * 16 * 2,
+} satisfies ScryptOptions;
+const KEY_LENGTH = 64;
+const SALT_BYTES = 16;</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>파라미터</th>
+                  <th>값</th>
+                  <th>뜻</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>N</code></td>
+                  <td>16384 (2<sup>14</sup>)</td>
+                  <td>비용. 내부에서 큰 표를 만들고 무작위 순서로 다시 읽는 횟수와 표 크기를 정한다. 두 배로 올리면 시간과 메모리가 두 배다</td>
+                </tr>
+                <tr>
+                  <td><code>r</code></td>
+                  <td>16</td>
+                  <td>블록 크기. 표의 한 칸이 <code>128 × r</code>바이트다. 메모리 사용량에 곱해진다</td>
+                </tr>
+                <tr>
+                  <td><code>p</code></td>
+                  <td>1</td>
+                  <td>병렬도. 같은 계산을 몇 번 따로 돌릴지다. 1이면 한 번</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <h3>메모리: 128 × N × r = 32MiB</h3>
+          <p>scrypt가 쓰는 메모리는 대략 <code>128 × N × r</code>바이트다.</p>
+          <pre><code>128 × 16384 × 16 = 33,554,432바이트 = 32MiB</code></pre>
+          <p>
+            비밀번호 하나를 확인하는 데 32MiB를 잡아먹는다는 뜻이다. 서버 입장에서는 로그인 한 번에 잠깐 쓰는 양이지만, DB를
+            훔친 공격자가 비밀번호 수십억 개를 GPU로 대입해 보려면 시도마다 32MiB가 필요하다. GPU는 계산 장치는 많아도 장치마다
+            쓸 수 있는 메모리가 적어서, 메모리를 많이 요구하는 계산은 병렬로 많이 돌리기 어렵다. scrypt가 "메모리를 먹는(memory-hard)"
+            함수로 설계된 이유다.
+          </p>
+          <h3>maxmem을 두 배로 준 이유</h3>
+          <p>
+            Node의 <code>scrypt</code>에는 메모리 한도 <code>maxmem</code>이 있고 기본값이 32MiB다. 필요한 양이 딱 32MiB라 한도와
+            같은데, 실제로는 한도를 넘었다고 실패한다. 이 저장소의 Node에서 <code>maxmem</code> 없이 실행하면 이렇게 된다.
+          </p>
+          <pre><code>Invalid scrypt params: error:030000AC:digital envelope routines::memory limit exceeded</code></pre>
+          <p>
+            계산에 필요한 메모리가 <code>128 × N × r</code>보다 조금 더 크기 때문이다. 그래서 한도를 두 배(64MiB)로 넉넉히 준다.
+            <code>maxmem</code>은 "이만큼 쓰라"가 아니라 "이보다 많이 쓰면 거부하라"는 안전장치라서, 올려도 실제 사용량은 늘지 않는다.
+          </p>
+          <h3>얼마나 걸리나</h3>
+          <p>
+            이 저장소 개발 환경(Apple Silicon 노트북)에서 같은 파라미터로 재 보니 한 번에 <strong>약 59ms</strong>였다. 로그인
+            한 번에 사용자가 느끼지 못할 만큼이지만, 공격자가 초당 시도할 수 있는 횟수는 코어 하나당 약 17번으로 줄어든다. 운영
+            서버에서는 CPU에 따라 달라진다.
+          </p>
+          <div class="callout">
+            <p>
+              <strong>Better Auth와 같다.</strong> N, r, p, 키 길이, 솔트 길이, <code>솔트:키</code> hex 형식, NFKC 정규화를 모두
+              Better Auth에서 그대로 가져왔다. 나중에 Better Auth로 옮기거나 비교할 때 해시를 그대로 쓸 수 있다.
+            </p>
+          </div>
+        </section>
+
+        <section id="nfkc">
+          <h2>NFKC 정규화</h2>
+          <p>
+            유니코드에서는 눈에 같아 보이는 글자를 여러 코드 포인트 조합으로 쓸 수 있다. 한글 <code>한</code>이 대표적이다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>입력 방식</th>
+                  <th>코드 포인트</th>
+                  <th>JS 문자열</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>완성형 (대부분의 키보드)</td>
+                  <td><code>U+D55C</code> 한 개</td>
+                  <td><code>'한'</code></td>
+                </tr>
+                <tr>
+                  <td>조합형 (macOS 파일 이름, 일부 입력기)</td>
+                  <td><code>U+1112</code> ᄒ + <code>U+1161</code> ᅡ + <code>U+11AB</code> ᆫ 세 개</td>
+                  <td><code>'한'</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <pre><code class="language-ts">'한' === '한'; // false: 바이트가 다르다
+'한'.normalize('NFKC') === '한'.normalize('NFKC'); // true: 둘 다 U+D55C가 된다</code></pre>
+          <p>
+            해시는 바이트가 하나만 달라도 완전히 다른 값이 나온다. 정규화하지 않으면 휴대폰에서 가입한 비밀번호
+            <code>한글1234</code>를 다른 기기에서 똑같이 쳐도 로그인되지 않을 수 있다. 그래서 <code>deriveKey</code>는 scrypt에
+            넣기 전에 늘 <code>password.normalize('NFKC')</code>를 거친다. 저장할 때와 확인할 때 같은 함수를 지나므로 둘이 어긋나지
+            않는다.
+          </p>
+          <p>
+            NFKC의 K(호환)는 모양이 비슷한 호환 문자도 기본 문자로 바꾼다. 예를 들어 전각 <code>Ａ</code>는 <code>A</code>로,
+            <code>①</code>은 <code>1</code>로 바뀐다(직접 실행해 확인). 비밀번호의 가짓수는 아주 조금 줄지만, 같은 글자를 쳤는데
+            로그인이 안 되는 문제를 막는 쪽을 택한 것이다.
+          </p>
+        </section>
+
+        <section id="verify-password">
+          <h2>verifyPassword: 다시 만들어 비교하기</h2>
+          <pre><code class="language-ts" data-lines="8-15">/** 비밀번호가 해시와 맞는지 상수 시간으로 비교한다. */
+export async function verifyPassword({
+  password,
+  hash,
+}: {
+  password: string;
+  hash: string;
+}): Promise&lt;boolean&gt; {
+  const [salt, keyHex] = hash.split(':');
+  if (!salt || !keyHex) {
+    return false;
+  }
+  const expected = Buffer.from(keyHex, 'hex');
+  const actual = await deriveKey({ password, salt });
+  return expected.length === actual.length &amp;&amp; timingSafeEqual(expected, actual);
+}</code></pre>
+          <ol class="steps green">
+            <li>
+              <strong>솔트와 키를 나눈다</strong>
+              <code>'솔트:키'.split(':')</code>의 앞 두 조각을 꺼낸다.
+            </li>
+            <li>
+              <strong>모양이 깨졌으면 바로 false</strong>
+              DB 값이 비었거나 <code>:</code>가 없거나 한쪽이 빈 문자열이면(<code>':abc'</code>, <code>'abc:'</code>) 확인할 재료가
+              없으므로 예외를 던지지 않고 "맞지 않음"으로 끝낸다. 로그인 쪽에서는 틀린 비밀번호와 똑같이 401이 된다.
+            </li>
+            <li>
+              <strong>저장된 키를 바이트로 되돌린다</strong>
+              <code>Buffer.from(keyHex, 'hex')</code>는 hex 두 글자를 1바이트로 바꾼다. 정상이면 64바이트다.
+            </li>
+            <li>
+              <strong>입력한 비밀번호로 키를 다시 만든다</strong>
+              저장할 때와 같은 솔트, 같은 파라미터, 같은 정규화를 거치므로 비밀번호가 같으면 바이트까지 똑같은 64바이트가 나온다.
+            </li>
+            <li>
+              <strong>두 키를 비교한다</strong>
+              길이가 같은지 먼저 보고, 같을 때만 <code>timingSafeEqual</code>로 내용을 비교한다. 순서가 중요한 이유는 다음 절에 있다.
+            </li>
+          </ol>
+        </section>
+
+        <section id="compare">
+          <h2>길이를 먼저, 그다음 timingSafeEqual</h2>
+          <pre><code class="language-ts">return expected.length === actual.length &amp;&amp; timingSafeEqual(expected, actual);</code></pre>
+          <h3>왜 === 가 아니라 timingSafeEqual인가</h3>
+          <p>
+            보통의 비교는 앞에서부터 한 바이트씩 보다가 다른 바이트를 만나면 바로 멈춘다. 그러면 앞부분이 많이 맞을수록 비교가
+            조금 더 오래 걸리고, 공격자가 그 시간 차이를 재서 값을 한 조각씩 맞혀 갈 여지가 생긴다(<a
+              href="01-웹-인증-개념.html#timing">01 문서의 타이밍 공격</a>). <code>timingSafeEqual</code>은 다른 바이트를 만나도
+            끝까지 비교해, 어디서 달라지든 같은 시간이 걸린다.
+          </p>
+          <h3>왜 길이를 먼저 보나</h3>
+          <p>
+            <code>timingSafeEqual</code>은 두 버퍼의 길이가 다르면 비교하지 않고 예외를 던진다.
+          </p>
+          <pre><code>timingSafeEqual(Buffer.from('ab'), Buffer.from('abc'));
+// RangeError [ERR_CRYPTO_TIMING_SAFE_EQUAL_LENGTH]</code></pre>
+          <p>
+            새로 만든 키(<code>actual</code>)는 늘 64바이트지만, 저장된 키(<code>expected</code>)는 DB 값이 깨졌다면 다를 수 있다.
+            예를 들어 hex가 아닌 글자가 섞이면 <code>Buffer.from</code>은 그 앞까지만 읽는다(<code>Buffer.from('12zz', 'hex')</code>는
+            1바이트). 길이 검사를 <code>&amp;&amp;</code> 앞에 두면 이런 경우 예외 대신 <code>false</code>가 나와, 로그인 요청이
+            500이 아니라 401로 끝난다. 길이는 비밀이 아니므로(정상이면 늘 64) 길이를 먼저 비교해 시간이 달라져도 새는 정보가 없다.
+          </p>
+        </section>
+
+        <section id="verify-credentials">
+          <h2>verifyCredentials의 세 갈래</h2>
+          <p>
+            로그인 API(<code>POST /auth/sign-in</code>)는 이메일과 비밀번호를 <code>UsersService.verifyCredentials</code>에
+            넘긴다. 맞으면 사용자 id를 돌려주고, 아니면 401을 던진다. 요청 전체 흐름은
+            <a href="02-로그인-요청-한-번-따라가기.html">02 문서</a>에 있고, 여기서는 이 함수 안만 본다.
+          </p>
+          <pre><code class="language-ts" data-lines="8-12">async verifyCredentials({
+  email,
+  password,
+}: {
+  email: string;
+  password: string;
+}): Promise&lt;number&gt; {
+  const [account] = await this.db
+    .select({ userId: accounts.userId, passwordHash: accounts.passwordHash })
+    .from(accounts)
+    .innerJoin(users, eq(users.id, accounts.userId))
+    .where(and(eq(users.email, email), eq(accounts.provider, 'credential')));
+
+  if (!account?.passwordHash) {
+    // 비밀번호 해시는 수십 ms가 걸린다. 없는 이메일에서도 한 번 계산해 응답 시간으로 가입 여부를 알 수 없게 한다(Better Auth와 같음).
+    await hashPassword(password);
+    throw createInvalidCredentialsException();
+  }
+  const matches = await verifyPassword({
+    password,
+    hash: account.passwordHash,
+  });
+  if (!matches) {
+    throw createInvalidCredentialsException();
+  }
+  return account.userId;
+}</code></pre>
+          <p>
+            먼저 이메일이 같은 사용자의 <strong>이메일 로그인 계정</strong>(<code>provider = 'credential'</code>)을 찾는다. 소셜
+            로그인(1.4b)이 생기면 한 사용자에게 구글, 카카오 계정 행도 붙지만, 비밀번호가 있는 행은 <code>credential</code>
+            하나뿐이다. 찾은 결과에 따라 세 갈래로 나뉜다.
+          </p>
+          <div class="seq">
+            <ol class="seq-actors">
+              <li>AuthController</li>
+              <li>verifyCredentials</li>
+              <li>DB</li>
+            </ol>
+            <ol class="seq-steps">
+              <li data-from="1" data-to="2">이메일, 비밀번호</li>
+              <li data-from="2" data-to="3">SELECT … WHERE email = ? AND provider = 'credential'</li>
+              <li class="seq-note">갈래 A: 계정이 없다 (가입하지 않은 이메일, 또는 소셜 계정만 있다)</li>
+              <li class="reply" data-from="3" data-to="2">빈 결과</li>
+              <li data-at="2">hashPassword(입력한 비밀번호) <small>결과는 버린다. 약 60ms</small></li>
+              <li class="stop" data-from="2" data-to="1">401 INVALID_CREDENTIALS</li>
+              <li class="seq-note">갈래 B: 계정은 있는데 비밀번호가 틀렸다</li>
+              <li class="reply" data-from="3" data-to="2">userId, passwordHash</li>
+              <li data-at="2">verifyPassword → false <small>약 60ms</small></li>
+              <li class="stop" data-from="2" data-to="1">401 INVALID_CREDENTIALS</li>
+              <li class="seq-note">갈래 C: 비밀번호가 맞다</li>
+              <li class="reply" data-from="3" data-to="2">userId, passwordHash</li>
+              <li data-at="2">verifyPassword → true <small>약 60ms</small></li>
+              <li class="reply" data-from="2" data-to="1">userId</li>
+            </ol>
+          </div>
+          <p>
+            세 갈래 모두 scrypt를 정확히 한 번 계산한다. 그리고 A와 B는 같은 예외를 던진다. 이 두 가지가 다음 두 절의 주제다.
+          </p>
+        </section>
+
+        <section id="dummy-hash">
+          <h2>없는 이메일에도 해시를 계산하는 이유</h2>
+          <p>
+            갈래 A에서 <code>hashPassword(password)</code>의 결과는 어디에도 쓰지 않는다. 시간을 쓰는 것 자체가 목적이다. 이 줄을
+            지우면 어떻게 되는지 시간 막대로 비교해 보자. 맨 앞의 짧은 회색 막대가 DB 조회(수 ms로 잡았다)이고, scrypt는 위에서 잰 약 60ms다.
+          </p>
+          <div class="timeline" style="--tl-max: 70; --tl-label: 11rem" data-unit="ms" data-tick="10">
+            <div class="tl-row">
+              <span class="tl-label">B. 틀린 비밀번호</span>
+              <div class="tl-track">
+                <span class="tl-bar" style="--from: 0; --to: 4">DB</span>
+                <span class="tl-bar blue" style="--from: 4; --to: 63">verifyPassword (scrypt)</span>
+                <span class="tl-event end" style="--at: 63">401</span>
+              </div>
+            </div>
+            <div class="tl-row">
+              <span class="tl-label">A. 없는 이메일<small>지금 코드</small></span>
+              <div class="tl-track">
+                <span class="tl-bar" style="--from: 0; --to: 4">DB</span>
+                <span class="tl-bar green" style="--from: 4; --to: 63">hashPassword (버리는 scrypt)</span>
+                <span class="tl-event end" style="--at: 63">401</span>
+              </div>
+            </div>
+            <div class="tl-row">
+              <span class="tl-label">A. 없는 이메일<small>해시를 건너뛰면</small></span>
+              <div class="tl-track">
+                <span class="tl-bar" style="--from: 0; --to: 4">DB</span>
+                <span class="tl-event" style="--at: 4">401 (약 15배 빠름)</span>
+              </div>
+            </div>
+          </div>
+          <p>
+            해시를 건너뛰면 없는 이메일은 몇 ms 만에, 있는 이메일은 60ms쯤 뒤에 401이 온다. 응답 본문이 똑같아도 공격자는 이메일
+            목록을 하나씩 넣어 보며 <strong>시간만 재서</strong> 누가 가입했는지 가려낼 수 있다. 이렇게 가입 여부를 알아내는 것을
+            계정 열거라고 한다(<a href="01-웹-인증-개념.html#enumeration">01 문서의 계정 열거</a>). 가입한 이메일 목록은 비밀번호
+            대입 공격이나 피싱 메일의 표적 목록이 된다.
+          </p>
+          <p>
+            <code>hashPassword</code>는 솔트를 뽑고 <code>deriveKey</code>를 한 번 부른다. <code>verifyPassword</code>도
+            <code>deriveKey</code>를 한 번 부른다. 무거운 부분이 같으므로 두 갈래의 응답 시간이 거의 같아진다.
+          </p>
+          <div class="callout">
+            <p>
+              <strong>Better Auth와 같다.</strong> Better Auth도 이메일로 사용자를 찾지 못하면 입력한 비밀번호를 한 번 해시한 뒤
+              같은 오류를 던진다.
+            </p>
+          </div>
+          <details class="fold">
+            <summary>선택 읽기: 이 동작을 지키는 테스트</summary>
+            <div class="fold-body">
+              <p>
+                응답 시간을 직접 재는 테스트는 기계 상태에 따라 흔들린다. 그래서 테스트는 "없는 이메일에서도 해시 함수가 한 번
+                불렸다"를 확인한다. <code>apps/api/test/auth.int.spec.ts</code>의
+                <code>'없는 이메일도 같은 401이고, 비밀번호 해시를 한 번 계산해 응답 시간으로 구분되지 않게 한다'</code>가 그 테스트다.
+                누군가 더미 해시 줄을 "쓸모없는 코드"로 보고 지우면 이 테스트가 실패한다.
+              </p>
+            </div>
+          </details>
+        </section>
+
+        <section id="same-error">
+          <h2>같은 401 응답</h2>
+          <pre><code class="language-ts">import { HttpStatus } from '@nestjs/common';
+import { ProblemException } from '../problem-details/problem.exception.js';
+
+// 없는 이메일과 틀린 비밀번호에 같은 응답을 보내, 어느 쪽이 틀렸는지로 가입 여부를 알 수 없게 한다.
+export function createInvalidCredentialsException(): ProblemException {
+  return new ProblemException({
+    status: HttpStatus.UNAUTHORIZED,
+    code: 'INVALID_CREDENTIALS',
+    detail: '이메일 또는 비밀번호가 올바르지 않습니다.',
+  });
+}</code></pre>
+          <p>
+            갈래 A와 B는 이 함수가 만든 같은 예외를 던진다. 응답은 상태 코드, <code>code</code>, 문구까지 똑같다.
+          </p>
+          <pre><code class="language-json">{
+  "type": "about:blank",
+  "title": "Unauthorized",
+  "status": 401,
+  "detail": "이메일 또는 비밀번호가 올바르지 않습니다.",
+  "code": "INVALID_CREDENTIALS"
+}</code></pre>
+          <p>
+            "가입하지 않은 이메일입니다"와 "비밀번호가 틀렸습니다"로 나눠 알려 주면 사용자에게는 친절하지만, 공격자에게는 시간을
+            잴 필요도 없이 가입 여부를 알려 주는 셈이다. 그래서 응답 내용과 응답 시간을 모두 같게 맞춘다. 실제 예매 서비스의
+            로그인 화면도 대부분 "아이디 또는 비밀번호를 확인해 주세요"처럼 어느 쪽이 틀렸는지 말하지 않는다. 응답 형식(Problem
+            Details)과 <code>code</code>를 고른 이유는 <a href="09-인증-API-응답-설계.html">09 문서</a>에 있다.
+          </p>
+        </section>
+
+        <section id="email">
+          <h2>이메일 정규화와 형식 검사를 하지 않는 이유</h2>
+          <p>
+            <code>verifyCredentials</code>에 들어오는 이메일은 이미 요청 본문 스키마를 지나 정리된 값이다.
+          </p>
+          <pre><code class="language-ts" data-lines="7-8 12-13">import { z } from 'zod';
+
+const EMAIL_MESSAGE = '이메일을 입력해야 합니다.';
+const PASSWORD_MESSAGE = '비밀번호를 입력해야 합니다.';
+
+// POST /auth/sign-in의 본문. 이 스키마 하나에서 검증, OpenAPI 요청 본문, 타입이 모두 나온다.
+// 이메일은 가입할 때처럼 앞뒤 공백을 지우고 소문자로 바꿔 비교한다.
+// 형식 검사는 하지 않는다. 형식이 틀린 이메일도 없는 이메일과 같은 401로 응답하면 된다.
+export const signInBodySchema = z.object({
+  email: z
+    .string(EMAIL_MESSAGE)
+    .trim()
+    .toLowerCase()
+    .min(1, EMAIL_MESSAGE)
+    .meta({ description: '이메일', example: 'user@example.com' }),
+  password: z
+    .string(PASSWORD_MESSAGE)
+    .min(1, PASSWORD_MESSAGE)
+    .meta({ description: '비밀번호' }),
+  rememberMe: z.boolean('true나 false여야 합니다.').meta({
+    description:
+      '로그인 상태 유지. 켜면 세션이 7일 동안 유지되고 쓰는 동안 연장된다. 끄면 1일 뒤 끝나고 브라우저를 닫으면 쿠키가 사라진다.',
+  }),
+});
+
+export type SignInBody = z.infer&lt;typeof signInBodySchema&gt;;</code></pre>
+          <h3>trim과 toLowerCase</h3>
+          <p>
+            <code>users.email</code>에는 가입할 때 소문자로 바꾼 값이 들어간다(<a href="03-사용자-계정-세션-테이블.html">03 문서</a>).
+            로그인할 때도 같은 규칙으로 바꿔야 <code>' User@Example.com '</code>처럼 앞뒤에 공백을 붙이거나 대문자를 섞어 쳐도
+            같은 계정을 찾는다. 스키마가 값을 바꿔서 넘기므로(zod의 <code>trim</code>, <code>toLowerCase</code>는 검사가 아니라 변환이다)
+            서비스 코드는 정리된 값만 받는다.
+          </p>
+          <h3>형식 검사를 하지 않는 이유</h3>
+          <p>
+            <code>z.email()</code> 같은 형식 검사를 넣지 않았다. 넣으면 <code>abc</code>는 400 <code>VALIDATION_FAILED</code>,
+            <code>abc@x.com</code>은 401 <code>INVALID_CREDENTIALS</code>로 응답이 갈린다. 형식이 틀린 이메일은 어차피 가입되어
+            있을 수 없으므로, 없는 이메일과 같은 401로 끝내면 결과가 같고 규칙도 하나 줄어든다. 형식 검사는 새 값을 받아 저장하는
+            회원가입(#74)에서 한다. 빈 값만은 <code>min(1)</code>로 400을 낸다. 빈 칸을 보낸 것은 공격이 아니라 화면의 실수라서,
+            어느 칸이 비었는지 알려 주는 편이 낫다.
+          </p>
+        </section>
+
+        <section id="later">
+          <h2>아직 없는 것</h2>
+          <ul>
+            <li>
+              <strong>비밀번호 규칙과 가입할 때의 해시</strong>: 최소 길이 같은 규칙과, 가입 요청에서 <code>hashPassword</code>를
+              불러 <code>accounts</code>에 넣는 흐름은 회원가입 API(#74)에서 더한다. 그때 이 문서에 절을 더한다.
+            </li>
+            <li>
+              <strong>로그인 시도 횟수 제한</strong>: scrypt가 한 번의 시도를 느리게 만들어도, 많은 서버에서 많이 시도하면 막지
+              못한다.
+            </li>
+          </ul>
+          <div class="callout warn">
+            <p>
+              <strong>Better Auth와 다르다.</strong> Better Auth는 운영 환경에서 로그인·가입 요청 속도 제한을 기본으로 켠다. 이
+              저장소는 속도 제한을 Redis를 처음 들이는 10단계에서 함께 넣는다(ADR 0009). 그 전까지 로그인 API는 횟수 제한이 없다.
+            </p>
+          </div>
+        </section>
+
+        <section id="check">
+          <h2>스스로 확인하기</h2>
+
+          <div class="quiz">
+            <p class="quiz-q">1. 두 사용자가 같은 비밀번호 <code>pw1234!</code>를 쓴다. 두 사람의 <code>password_hash</code>는 같은가?</p>
+            <p class="quiz-context"><a href="#hash-password">hashPassword</a> 절의 솔트를 떠올린다.</p>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  다르다. 저장할 때마다 <code>randomBytes(16)</code>로 새 솔트를 뽑으므로 솔트가 다르고, scrypt에 들어가는 재료가
+                  달라 키도 완전히 달라진다. 그래서 DB를 본 사람이 "이 두 사람은 비밀번호가 같다"는 것도 알 수 없고, 흔한
+                  비밀번호의 해시를 미리 계산해 둔 표(레인보우 테이블)도 쓸 수 없다.
+                </p>
+              </div>
+            </details>
+          </div>
+
+          <div class="quiz">
+            <p class="quiz-q">2. 아래처럼 바꾸면 어떤 요청에서 무엇이 달라지는가?</p>
+            <p class="quiz-context"><a href="#compare">길이를 먼저, 그다음 timingSafeEqual</a> 절의 비교 줄을 바꾼다.</p>
+            <pre><code class="language-diff">-  return expected.length === actual.length &amp;&amp; timingSafeEqual(expected, actual);
++  return timingSafeEqual(expected, actual);</code></pre>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  정상 해시에서는 둘 다 64바이트라 결과가 같다. DB의 해시가 깨져 저장된 키가 64바이트가 아니면,
+                  <code>timingSafeEqual</code>이 <code>RangeError</code>를 던진다. 로그인 요청이 401이 아니라 500으로 끝난다.
+                </p>
+              </div>
+            </details>
+          </div>
+
+          <div class="quiz">
+            <p class="quiz-q">3. 아래 변경은 응답 본문을 바꾸지 않는다. 그런데도 보안에 문제가 되는 이유는?</p>
+            <p class="quiz-context"><a href="#dummy-hash">없는 이메일에도 해시를 계산하는 이유</a> 절의 코드를 바꾼다.</p>
+            <pre><code class="language-diff">     if (!account?.passwordHash) {
+-      await hashPassword(password);
+       throw createInvalidCredentialsException();
+     }</code></pre>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  없는 이메일은 DB 조회만 하고 몇 ms 만에, 있는 이메일은 scrypt까지 해서 약 60ms 뒤에 401이 온다. 응답 본문은
+                  같아도 응답 시간으로 가입 여부를 알 수 있어 계정 열거가 가능해진다.
+                </p>
+              </div>
+            </details>
+          </div>
+
+          <div class="quiz">
+            <p class="quiz-q">4. macOS에서 복사해 붙여 넣은 비밀번호 <code>한글1234</code>가 조합형이었다. 가입은 휴대폰(완성형)으로 했다. 로그인되는가?</p>
+            <p class="quiz-context"><a href="#nfkc">NFKC 정규화</a> 절의 코드 포인트 표를 본다.</p>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  된다. <code>deriveKey</code>가 저장할 때와 확인할 때 모두 <code>normalize('NFKC')</code>를 거치므로, 조합형
+                  <code>U+1112 U+1161 U+11AB</code>도 완성형 <code>U+D55C</code>로 바뀐 뒤 scrypt에 들어간다. 정규화가 없었다면
+                  바이트가 달라 다른 키가 나오고 로그인에 실패한다.
+                </p>
+              </div>
+            </details>
+          </div>
+
+          <div class="quiz">
+            <p class="quiz-q">5. <code>maxmem</code>을 <code>128 * 16384 * 16 * 2</code>에서 <code>128 * 16384 * 16 * 10</code>으로 올리면 로그인 한 번에 쓰는 메모리가 늘어나는가?</p>
+            <p class="quiz-context"><a href="#params">scrypt 파라미터와 메모리</a> 절을 본다.</p>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  늘지 않는다. 실제로 쓰는 메모리는 <code>N</code>과 <code>r</code>이 정한다(약 <code>128 × N × r</code> = 32MiB).
+                  <code>maxmem</code>은 그보다 많이 쓰려 하면 거부하는 상한일 뿐이다. 메모리를 더 쓰게 하려면 <code>N</code>이나
+                  <code>r</code>을 올려야 하고, 그러면 이미 저장된 해시는 확인되지 않는다.
+                </p>
+              </div>
+            </details>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

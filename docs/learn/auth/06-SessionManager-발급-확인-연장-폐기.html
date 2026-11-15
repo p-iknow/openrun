@@ -1,0 +1,1308 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>06 SessionManager: 발급, 확인, 연장, 폐기</title>
+    <link rel="stylesheet" href="../learn.css" />
+    <script src="../vendor/highlightjs/highlight.min.js" defer></script>
+    <script src="../learn.js" defer></script>
+  </head>
+  <body>
+    <div class="layout">
+      <nav aria-label="목차">
+        <strong>1부: 한눈에</strong>
+        <ol>
+          <li><a href="#overview">SessionManager가 하는 네 가지 일</a></li>
+          <li><a href="#policy">세션 정책 두 가지</a></li>
+        </ol>
+        <strong>2부: 메서드 하나씩</strong>
+        <ol>
+          <li><a href="#issue">issue: 발급</a></li>
+          <li><a href="#authenticate">authenticate: 확인의 판단 순서</a></li>
+          <li><a href="#sliding">연장: 언제, 얼마나</a></li>
+          <li><a href="#race">로그아웃과 연장이 겹칠 때</a></li>
+          <li><a href="#memo">WeakMap: 요청당 한 번만 확인</a></li>
+          <li><a href="#revoke">revoke: 폐기</a></li>
+          <li><a href="#read-token">readToken: 서명부터 본다</a></li>
+        </ol>
+        <strong>3부: 설계</strong>
+        <ol>
+          <li><a href="#design">테이블과 정책을 바깥에서 받는다</a></li>
+          <li><a href="#clock">Clock: 시간을 테스트에서 움직이기</a></li>
+          <li><a href="#cleanup">아직 없는 것: 만료된 행 정리</a></li>
+          <li><a href="#better-auth">Better Auth와 같은 점, 다른 점</a></li>
+        </ol>
+        <strong>마무리</strong>
+        <ol>
+          <li><a href="#check">스스로 확인하기</a></li>
+        </ol>
+      </nav>
+
+      <main>
+        <h1>06 SessionManager: 발급, 확인, 연장, 폐기</h1>
+        <p class="lead">
+          인증 코드의 한가운데인 <code>apps/api/src/auth/session-manager.ts</code>를 한 줄씩 읽는다. 로그인하면 세션을
+          만들고(발급), 요청마다 쿠키로 세션을 찾고(확인), 쓰는 동안 만료를 늦추고(연장), 로그아웃하면 지운다(폐기).
+          판단 순서는 표와 트리로, 만료와 연장은 시간 막대로, 요청 두 개가 겹치는 상황은 순서도로 본다.
+        </p>
+
+        <section id="overview">
+          <h2>SessionManager가 하는 네 가지 일</h2>
+          <div class="callout">
+            <p>
+              <strong>SessionManager</strong>는 "세션의 규칙"만 아는 클래스다. 어느 테이블에 저장하는지, 만료가 며칠인지,
+              쿠키 이름이 무엇인지는 모르고 생성자로 받는다. 그래서 사용자 세션과 (앞으로 만들) 운영자 세션이 같은 클래스를
+              쓴다. 공개 메서드는 <code>issue</code>, <code>authenticate</code>, <code>revoke</code> 셋이고, 연장은
+              <code>authenticate</code> 안에서 일어난다.
+            </p>
+          </div>
+          <div class="flow">
+            <div class="lane blue">
+              <div class="lane-title">로그인: POST /auth/sign-in</div>
+              <ol class="chain">
+                <li><span>비밀번호 확인(<code>UsersService</code>)</span></li>
+                <li><span><code>issue</code>: 행 저장 + 쿠키 굽기</span></li>
+              </ol>
+            </div>
+            <div class="lane green">
+              <div class="lane-title">로그인이 필요한 요청: GET /me, GET /auth/session</div>
+              <ol class="chain">
+                <li><span><code>authenticate</code>: 쿠키 → 행 찾기</span></li>
+                <li><span>만료면 지우기</span></li>
+                <li><span>연장할 때면 연장</span></li>
+                <li><span>세션 또는 <code>null</code></span></li>
+              </ol>
+            </div>
+            <div class="lane blue">
+              <div class="lane-title">로그아웃: POST /auth/sign-out</div>
+              <ol class="chain">
+                <li><span><code>revoke</code>: 행 삭제 + 쿠키 지우기</span></li>
+              </ol>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>메서드</th>
+                  <th>누가 부르나</th>
+                  <th>DB에 하는 일</th>
+                  <th>응답에 하는 일</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>issue</code></td>
+                  <td><code>AuthController.signIn</code></td>
+                  <td>이전 세션 행 삭제(있으면), 새 행 INSERT</td>
+                  <td>세션 쿠키 굽기</td>
+                </tr>
+                <tr>
+                  <td><code>authenticate</code></td>
+                  <td>로그인 가드, <code>AuthController.getSession</code></td>
+                  <td>SELECT, 만료면 DELETE, 연장할 때면 UPDATE</td>
+                  <td>만료·없음이면 쿠키 지우기, 연장하면 쿠키 다시 굽기</td>
+                </tr>
+                <tr>
+                  <td><code>revoke</code></td>
+                  <td><code>AuthController.signOut</code></td>
+                  <td>행 DELETE(있으면)</td>
+                  <td>쿠키 지우기</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            토큰을 만들고 서명하고 해시하는 함수(<code>createSessionToken</code>, <code>signSessionToken</code>,
+            <code>hashSessionToken</code>, <code>readSignedSessionToken</code>)는
+            <a href="05-세션-토큰-만들기-서명-저장.html">05 문서</a>에서, 쿠키 속성은
+            <a href="07-세션-쿠키-설정.html">07 문서</a>에서 다룬다. 이 문서는 그 함수들을 <strong>언제, 어떤 순서로</strong>
+            부르는지에 집중한다.
+          </p>
+        </section>
+
+        <section id="policy">
+          <h2>세션 정책 두 가지</h2>
+          <p>
+            로그인할 때 사용자가 고른 "로그인 상태 유지(<code>rememberMe</code>)"에 따라 세션의 수명 규칙이 달라진다. 이
+            규칙 묶음을 <strong>정책(<code>SessionPolicy</code>)</strong>이라고 부르고, 사용자 쪽 파일
+            <code>users/user-session.ts</code>에 둔다.
+          </p>
+          <pre><code class="language-ts">// apps/api/src/auth/session-manager.ts
+/** 세션 하나의 만료와 연장 규칙. */
+export interface SessionPolicy {
+  expiresInMs: number;
+  /** 마지막 연장 뒤 이만큼 지난 첫 요청에서 만료를 지금부터 expiresInMs로 다시 쓴다. null이면 연장하지 않는다. */
+  updateAgeMs: number | null;
+  /** true면 쿠키에 Max-Age(expiresInMs)를 둔다. false면 브라우저를 닫을 때 사라지는 쿠키다. */
+  persistentCookie: boolean;
+}</code></pre>
+          <pre><code class="language-ts">// apps/api/src/users/user-session.ts
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// 로그인 상태 유지를 켜면 7일 동안 유지하고, 마지막 연장 뒤 1일이 지난 첫 요청에서 다시 7일로 연장한다(Better Auth와 같음).
+const REMEMBERED_POLICY: SessionPolicy = {
+  expiresInMs: 7 * DAY_MS,
+  updateAgeMs: DAY_MS,
+  persistentCookie: true,
+};
+// 끄면 1일 뒤 끝나고 연장하지 않는다. 쿠키에 Max-Age가 없어 브라우저를 닫으면 사라진다.
+const NOT_REMEMBERED_POLICY: SessionPolicy = {
+  expiresInMs: DAY_MS,
+  updateAgeMs: null,
+  persistentCookie: false,
+};</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>로그인 상태 유지 켬</th>
+                  <th>로그인 상태 유지 끔</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>expiresInMs</code> (유지 기간)</td>
+                  <td>7일</td>
+                  <td>1일</td>
+                </tr>
+                <tr>
+                  <td><code>updateAgeMs</code> (연장 간격)</td>
+                  <td>1일: 마지막 연장 뒤 1일이 지난 첫 요청에서 다시 7일로</td>
+                  <td><code>null</code>: 연장하지 않음</td>
+                </tr>
+                <tr>
+                  <td><code>persistentCookie</code></td>
+                  <td><code>true</code>: 쿠키에 <code>Max-Age</code> 7일</td>
+                  <td><code>false</code>: 브라우저를 닫으면 사라지는 쿠키</td>
+                </tr>
+                <tr>
+                  <td>결과</td>
+                  <td>7일 안에 한 번이라도 쓰면 계속 로그인돼 있다</td>
+                  <td>길어야 1일, 브라우저를 닫으면 그 전에 끝난다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            세션마다 정책이 다르므로 <code>SessionManager</code>는 정책 하나를 받지 않고 <strong>세션을 보고 정책을 고르는 함수
+            <code>getPolicy</code></strong>를 받는다. 발급할 때는 요청 본문의 <code>rememberMe</code>로, 확인할 때는 DB 행에
+            저장해 둔 <code>rememberMe</code>로 같은 함수를 부른다.
+          </p>
+          <pre><code class="language-ts">// apps/api/src/users/user-session.ts
+      getPolicy: ({ rememberMe }) =&gt;
+        rememberMe ? REMEMBERED_POLICY : NOT_REMEMBERED_POLICY,</code></pre>
+        </section>
+
+        <section id="issue">
+          <h2>issue: 발급</h2>
+          <p>
+            <code>AuthController.signIn</code>이 비밀번호를 확인해 사용자 id를 얻은 뒤 부른다. 여기서 <code>subjectId</code>는
+            "이 세션의 주인"이다. 사용자 세션이면 사용자 id, 운영자 세션이면 운영자 id가 된다.
+          </p>
+          <pre><code class="language-ts">// apps/api/src/auth/session-manager.ts
+  /** 새 세션을 만들고 쿠키를 내린다. 요청에 이전 세션 쿠키가 있으면 그 세션은 지운다. */
+  async issue({
+    request,
+    response,
+    subjectId,
+    rememberMe,
+  }: {
+    request: Request;
+    response: Response;
+    subjectId: number;
+    rememberMe: boolean;
+  }): Promise&lt;void&gt; {
+    const { store, secret, clock, getPolicy } = this.options;
+    const previousToken = this.readToken(request);
+    if (previousToken) {
+      await store.deleteByTokenHash(hashSessionToken(previousToken));
+    }
+
+    const token = createSessionToken();
+    const policy = getPolicy({ rememberMe });
+    await store.create({
+      tokenHash: hashSessionToken(token),
+      subjectId,
+      expiresAt: new Date(clock.now().getTime() + policy.expiresInMs),
+      rememberMe,
+      ipAddress: request.ip ?? null,
+      userAgent: request.get('user-agent') ?? null,
+    });
+    this.setCookie({
+      response,
+      value: signSessionToken({ token, secret }),
+      policy,
+    });
+  }</code></pre>
+          <ol class="steps blue">
+            <li>
+              <strong>이전 세션 쿠키가 있으면 그 행을 지운다 (92-95행)</strong>
+              로그인한 채로 다시 로그인하면 브라우저에는 이전 쿠키가 실려 온다. 새 쿠키가 이전 쿠키를 덮어쓰므로, 이전 행을
+              그대로 두면 아무도 쓰지 않는 세션이 만료될 때까지 남는다. 그 토큰이 혹시 어딘가로 새어 나갔다면 그것도 계속 유효하다.
+              그래서 새 세션을 만들기 전에 지운다. <code>readToken</code>이 서명을 확인하므로 위조한 쿠키로 남의 행을 지울 수는 없다.
+            </li>
+            <li>
+              <strong>새 토큰을 만든다 (97행)</strong>
+              이전 쿠키가 있든 없든 <strong>항상 새 토큰</strong>이다. 이것이
+              <a href="01-웹-인증-개념.html#session-fixation">세션 고정 공격</a>을 막는 핵심이다. 공격자가 미리 심어 둔 토큰이 로그인
+              뒤에도 쓰이는 일이 없다.
+            </li>
+            <li>
+              <strong>정책으로 만료 일시를 정한다 (98, 102행)</strong>
+              <code>지금 + expiresInMs</code>다. 지금 시각은 <code>Date.now()</code>가 아니라 주입받은 <code>clock.now()</code>로
+              구한다(<a href="#clock">아래</a>).
+            </li>
+            <li>
+              <strong>행을 저장한다 (99-106행)</strong>
+              토큰 원문이 아니라 <strong>SHA-256 해시</strong>를 저장한다. IP와 User-Agent는 나중에 "로그인한 기기 목록" 같은
+              화면에 쓸 수 있도록 함께 남긴다.
+            </li>
+            <li>
+              <strong>서명한 토큰을 쿠키로 굽는다 (107-111행)</strong>
+              쿠키 값은 <code>토큰.서명</code>이다. 정책의 <code>persistentCookie</code>에 따라 <code>Max-Age</code>가 붙거나 빠진다.
+            </li>
+          </ol>
+          <div class="callout warn">
+            <p>
+              <strong>"이전 행 지우기"와 "세션 고정 방지"는 다른 일이다.</strong> 고정 공격은 2번(늘 새 토큰)으로 이미 막힌다.
+              1번은 덮어써져 주인 없는 행이 남지 않게 하는 정리다. 둘 다 스펙 #70의 "다시 로그인하면 새 세션을 발급하고 이전 쿠키의
+              세션은 지운다"에서 나왔다.
+            </p>
+          </div>
+          <details class="fold">
+            <summary>선택 읽기: 이 동작을 지키는 테스트</summary>
+            <div class="fold-body">
+              <p>첫 로그인 쿠키를 실은 채 다시 로그인하면, 첫 쿠키로는 세션이 <code>null</code>이고 두 번째 쿠키는 값이 다르다.</p>
+              <pre><code class="language-ts">// apps/api/test/auth.int.spec.ts
+describe('다시 로그인', () =&gt; {
+  it('로그인한 채 다시 로그인하면 이전 세션은 지워진다', async () =&gt; {
+    await userFactory.build();
+    const first = await signIn();
+
+    const second = await request(app.getHttpServer())
+      .post('/auth/sign-in')
+      .set('Cookie', first.header)
+      .send({
+        email: 'user@example.com',
+        password: 'password1!',
+        rememberMe: true,
+      });
+
+    expect(second.status).toBe(200);
+    expect((await getSession(first.header)).text).toBe('null');
+    const secondCookie = findSessionCookie(second);
+    expect(secondCookie?.value).not.toBe(first.cookie.value);
+    expect(
+      (
+        await getSession(
+          `${SESSION_COOKIE}=${encodeURIComponent(secondCookie?.value ?? '')}`,
+        )
+      ).body,
+    ).not.toBeNull();
+  });
+});</code></pre>
+            </div>
+          </details>
+        </section>
+
+        <section id="authenticate">
+          <h2>authenticate: 확인의 판단 순서</h2>
+          <p>
+            <code>authenticate</code>는 결과를 요청에 묶어 두는 껍데기이고(<a href="#memo">아래</a>), 실제 판단은
+            <code>findSession</code>이 한다. 판단은 위에서 아래로 한 번만 흐르고, 걸리는 곳에서 바로 끝난다.
+          </p>
+          <ul class="tree" style="--tree-col: 19rem">
+            <li>
+              <div class="tree-row">
+                <span class="tree-node">요청의 Cookie 헤더</span>
+                <span class="tree-note">쿠키 이름으로 값을 꺼낸다</span>
+              </div>
+              <ul>
+                <li>
+                  <div class="tree-row">
+                    <span class="tree-node">① 쿠키 없음 / 서명 틀림</span>
+                    <span class="tree-note"><span class="badge blue">null</span> DB를 보지 않는다. 쿠키도 건드리지 않는다</span>
+                  </div>
+                </li>
+                <li>
+                  <div class="tree-row">
+                    <span class="tree-node">토큰 해시로 행 찾기</span>
+                    <span class="tree-note">SELECT 한 번</span>
+                  </div>
+                  <ul>
+                    <li>
+                      <div class="tree-row">
+                        <span class="tree-node">② 행 없음</span>
+                        <span class="tree-note"><span class="badge blue">null</span> 쿠키 지우기 (로그아웃·탈퇴 뒤 남은 쿠키)</span>
+                      </div>
+                    </li>
+                    <li>
+                      <div class="tree-row">
+                        <span class="tree-node">③ 만료 일시 ≤ 지금</span>
+                        <span class="tree-note"><span class="badge blue">null</span> 행 DELETE + 쿠키 지우기</span>
+                      </div>
+                    </li>
+                    <li>
+                      <div class="tree-row">
+                        <span class="tree-node">④ 연장할 때가 됐다</span>
+                        <span class="tree-note">UPDATE로 만료를 지금 + 유지 기간으로</span>
+                      </div>
+                      <ul>
+                        <li>
+                          <div class="tree-row">
+                            <span class="tree-node">⑤ UPDATE된 행 0개</span>
+                            <span class="tree-note"><span class="badge blue">null</span> 그새 로그아웃됐다. 쿠키 지우기</span>
+                          </div>
+                        </li>
+                        <li>
+                          <div class="tree-row">
+                            <span class="tree-node">⑥ UPDATE 성공</span>
+                            <span class="tree-note"><span class="badge green">세션</span> 같은 토큰으로 쿠키 다시 굽기</span>
+                          </div>
+                        </li>
+                      </ul>
+                    </li>
+                    <li>
+                      <div class="tree-row">
+                        <span class="tree-node">⑦ 아직 연장할 때가 아니다</span>
+                        <span class="tree-note"><span class="badge green">세션</span> 쿠키를 건드리지 않는다</span>
+                      </div>
+                    </li>
+                  </ul>
+                </li>
+              </ul>
+            </li>
+          </ul>
+          <p>경우마다 DB와 응답에 무슨 일이 일어나는지 모으면 이렇다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>경우</th>
+                  <th>DB 조회</th>
+                  <th>DB 쓰기</th>
+                  <th><code>Set-Cookie</code></th>
+                  <th>결과</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>① 쿠키 없음 / 서명 틀림</td>
+                  <td>0</td>
+                  <td>0</td>
+                  <td>없음</td>
+                  <td><code>null</code></td>
+                </tr>
+                <tr>
+                  <td>② 행 없음</td>
+                  <td>1</td>
+                  <td>0</td>
+                  <td>지우기</td>
+                  <td><code>null</code></td>
+                </tr>
+                <tr>
+                  <td>③ 만료</td>
+                  <td>1</td>
+                  <td>DELETE</td>
+                  <td>지우기</td>
+                  <td><code>null</code></td>
+                </tr>
+                <tr>
+                  <td>⑤ 연장하려는데 행이 사라짐</td>
+                  <td>1</td>
+                  <td>UPDATE(0행)</td>
+                  <td>지우기</td>
+                  <td><code>null</code></td>
+                </tr>
+                <tr>
+                  <td>⑥ 연장 성공</td>
+                  <td>1</td>
+                  <td>UPDATE</td>
+                  <td>다시 굽기</td>
+                  <td>세션</td>
+                </tr>
+                <tr>
+                  <td>⑦ 그냥 통과 (가장 흔함)</td>
+                  <td>1</td>
+                  <td>0</td>
+                  <td>없음</td>
+                  <td>세션</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            로그인한 사용자의 요청 대부분은 ⑦이다. SELECT 한 번으로 끝나고 아무것도 쓰지 않는다. 이제 코드를 단계별로 본다.
+          </p>
+
+          <h3>① 쿠키에서 토큰 꺼내기</h3>
+          <pre><code class="language-ts" data-lines="9-13">// apps/api/src/auth/session-manager.ts
+  private async findSession({
+    request,
+    response,
+  }: {
+    request: Request;
+    response: Response;
+  }): Promise&lt;AuthenticatedSession | null&gt; {
+    const { store, secret, clock, getPolicy } = this.options;
+    const token = this.readToken(request);
+    if (!token) {
+      return null;
+    }
+    const tokenHash = hashSessionToken(token);
+    const session = await store.findByTokenHash(tokenHash);
+    if (!session) {
+      this.clearCookie(response);
+      return null;
+    }
+
+    const now = clock.now().getTime();
+    if (session.expiresAt.getTime() &lt;= now) {
+      await store.deleteByTokenHash(tokenHash);
+      this.clearCookie(response);
+      return null;
+    }
+
+    const policy = getPolicy(session);
+    // 만료 일시에서 유지 기간을 빼면 마지막으로 만료를 정한(발급하거나 연장한) 시각이다(Better Auth와 같음).
+    const lastRefreshedAt = session.expiresAt.getTime() - policy.expiresInMs;
+    if (
+      policy.updateAgeMs !== null &amp;&amp;
+      lastRefreshedAt + policy.updateAgeMs &lt;= now
+    ) {
+      const extended = await store.extend({
+        id: session.id,
+        expiresAt: new Date(now + policy.expiresInMs),
+      });
+      // 확인한 뒤 연장하기 전에 다른 요청(로그아웃)이 행을 지웠다.
+      if (!extended) {
+        this.clearCookie(response);
+        return null;
+      }
+      this.setCookie({
+        response,
+        value: signSessionToken({ token, secret }),
+        policy,
+      });
+    }
+
+    return { sessionId: session.id, subjectId: session.subjectId };
+  }</code></pre>
+          <p>
+            <code>readToken</code>은 쿠키가 없거나 서명이 틀리면 <code>null</code>을 준다. 이때는 쿠키를 지우지 않는다. 서명이
+            틀린 쿠키는 우리가 구운 것이 아닐 수 있고, 그냥 무시하면 충분하다.
+          </p>
+
+          <h3>② 행이 없으면 쿠키를 지운다</h3>
+          <pre><code class="language-ts" data-lines="3-6">    const tokenHash = hashSessionToken(token);
+    const session = await store.findByTokenHash(tokenHash);
+    if (!session) {
+      this.clearCookie(response);
+      return null;
+    }</code></pre>
+          <p>
+            서명이 맞으니 우리가 구운 쿠키인데 행이 없다. 다른 탭에서 로그아웃했거나, 다시 로그인해 이전 행이 지워졌거나, 탈퇴한
+            경우다. 쓸모없어진 쿠키를 브라우저가 계속 보내지 않도록 지운다.
+          </p>
+
+          <h3>③ 만료됐으면 행과 쿠키를 지운다</h3>
+          <pre><code class="language-ts" data-lines="2-6">    const now = clock.now().getTime();
+    if (session.expiresAt.getTime() &lt;= now) {
+      await store.deleteByTokenHash(tokenHash);
+      this.clearCookie(response);
+      return null;
+    }</code></pre>
+          <p>
+            비교가 <code>&lt;=</code>라는 점을 보자. 만료 일시와 지금이 정확히 같으면 이미 만료다. 7일짜리 세션은 발급 뒤
+            <strong>7일 - 1ms</strong>까지 통하고 정확히 7일에 끝난다. 쿠키의 <code>Max-Age</code>도 7일이라 보통은 브라우저가
+            먼저 쿠키를 버리지만, 서버는 쿠키 수명을 믿지 않고 행의 <code>expires_at</code>으로 판단한다.
+          </p>
+
+          <h3>④~⑦ 연장</h3>
+          <pre><code class="language-ts" data-lines="3-7">    const policy = getPolicy(session);
+    // 만료 일시에서 유지 기간을 빼면 마지막으로 만료를 정한(발급하거나 연장한) 시각이다(Better Auth와 같음).
+    const lastRefreshedAt = session.expiresAt.getTime() - policy.expiresInMs;
+    if (
+      policy.updateAgeMs !== null &amp;&amp;
+      lastRefreshedAt + policy.updateAgeMs &lt;= now
+    ) {
+      const extended = await store.extend({
+        id: session.id,
+        expiresAt: new Date(now + policy.expiresInMs),
+      });
+      // 확인한 뒤 연장하기 전에 다른 요청(로그아웃)이 행을 지웠다.
+      if (!extended) {
+        this.clearCookie(response);
+        return null;
+      }
+      this.setCookie({
+        response,
+        value: signSessionToken({ token, secret }),
+        policy,
+      });
+    }
+
+    return { sessionId: session.id, subjectId: session.subjectId };</code></pre>
+          <p>연장 조건의 계산은 그림이 있어야 이해하기 쉬우므로 다음 절에서 따로 본다.</p>
+        </section>
+
+        <section id="sliding">
+          <h2>연장: 언제, 얼마나</h2>
+          <p>
+            로그인 상태 유지를 켠 세션은 "7일 동안 쓰지 않으면 끝나는" 세션이다. 이런 방식을 <strong>슬라이딩 만료</strong>라고
+            부른다. 요청이 올 때마다 만료를 뒤로 미는 것이다. 문제는 "요청마다" 미루면 요청마다 DB에 UPDATE를 하게 된다는 점이다.
+            그래서 <strong>마지막으로 미룬 뒤 1일(<code>updateAgeMs</code>)이 지난 첫 요청에서만</strong> 미룬다. DB 쓰기가 세션당
+            하루 한 번 이하로 줄어든다.
+          </p>
+
+          <h3>"마지막으로 미룬 시각"을 저장하지 않고 구한다</h3>
+          <p>
+            마지막 연장 시각을 따로 칸에 두지 않는다. 만료 일시는 늘 <code>마지막으로 정한 시각 + expiresInMs</code>로 정해지므로,
+            거꾸로 빼면 된다.
+          </p>
+          <pre><code class="language-ts">lastRefreshedAt = expiresAt - expiresInMs      // 발급했거나 마지막으로 연장한 시각
+연장할 때인가    = lastRefreshedAt + updateAgeMs &lt;= now</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>요청 시각</th>
+                  <th><code>expiresAt</code></th>
+                  <th><code>lastRefreshedAt</code> (= expiresAt - 7일)</th>
+                  <th>+ 1일 ≤ 지금?</th>
+                  <th>결과</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>0일 (로그인)</td>
+                  <td>7일</td>
+                  <td>-</td>
+                  <td>-</td>
+                  <td>발급</td>
+                </tr>
+                <tr>
+                  <td>0.5일</td>
+                  <td>7일</td>
+                  <td>0일</td>
+                  <td>1일 ≤ 0.5일? 아니다</td>
+                  <td>⑦ 그냥 통과</td>
+                </tr>
+                <tr>
+                  <td>1.5일</td>
+                  <td>7일</td>
+                  <td>0일</td>
+                  <td>1일 ≤ 1.5일? 그렇다</td>
+                  <td>⑥ 연장: <code>expiresAt</code> = 1.5 + 7 = <strong>8.5일</strong></td>
+                </tr>
+                <tr>
+                  <td>2일</td>
+                  <td>8.5일</td>
+                  <td>1.5일</td>
+                  <td>2.5일 ≤ 2일? 아니다</td>
+                  <td>⑦ 그냥 통과</td>
+                </tr>
+                <tr>
+                  <td>8.5일 (그 사이 요청 없음)</td>
+                  <td>8.5일</td>
+                  <td>-</td>
+                  <td>-</td>
+                  <td>③ 만료</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>같은 이야기를 시간축에 그리면 이렇다. 빨간 선이 요청, 막대가 그 시점의 유효 기간이다.</p>
+          <div class="timeline" style="--tl-max: 10; --tl-label: 9rem" data-unit="일">
+            <div class="tl-row">
+              <span class="tl-label">요청</span>
+              <div class="tl-track">
+                <span class="tl-event" style="--at: 0">로그인</span>
+                <span class="tl-event" style="--at: 0.5">요청</span>
+                <span class="tl-event" style="--at: 1.5">요청 → 연장</span>
+                <span class="tl-event" style="--at: 2">요청</span>
+                <span class="tl-event end" style="--at: 8.5">만료</span>
+              </div>
+            </div>
+            <div class="tl-row">
+              <span class="tl-label">처음 유효 기간<small>로그인 때 정한 만료</small></span>
+              <div class="tl-track">
+                <span class="tl-bar faded" style="--from: 0; --to: 7">0일 ~ 7일 (1.5일에 대체됨)</span>
+              </div>
+            </div>
+            <div class="tl-row">
+              <span class="tl-label">연장한 유효 기간<small>1.5일 요청이 다시 정함</small></span>
+              <div class="tl-track">
+                <span class="tl-bar blue" style="--from: 1.5; --to: 8.5">1.5일 ~ 8.5일</span>
+              </div>
+            </div>
+            <div class="tl-row">
+              <span class="tl-label">연장하지 않는 구간<small>마지막 연장 뒤 1일</small></span>
+              <div class="tl-track">
+                <span class="tl-bar green" style="--from: 0; --to: 1"></span>
+                <span class="tl-bar green" style="--from: 1.5; --to: 2.5"></span>
+              </div>
+            </div>
+          </div>
+          <p>
+            0.5일 요청은 초록 구간 안이라 연장하지 않는다. 1.5일 요청은 초록 구간을 벗어났으므로 연장한다. 2일 요청은 새 초록
+            구간(1.5~2.5일) 안이라 다시 그냥 통과한다. 2일 뒤로 요청이 없으면 8.5일에 만료된다.
+          </p>
+          <p>로그인 상태 유지를 끈 세션은 훨씬 단순하다. <code>updateAgeMs</code>가 <code>null</code>이라 연장 조건을 아예 보지 않는다.</p>
+          <div class="timeline" style="--tl-max: 3; --tl-label: 9rem" data-unit="일" data-tick="0.5">
+            <div class="tl-row">
+              <span class="tl-label">요청</span>
+              <div class="tl-track">
+                <span class="tl-event" style="--at: 0">로그인</span>
+                <span class="tl-event" style="--at: 0.8">요청 (연장 없음)</span>
+                <span class="tl-event" style="--at: 1.2">요청 → 401</span>
+              </div>
+            </div>
+            <div class="tl-row">
+              <span class="tl-label">유효 기간<small>브라우저를 닫으면 쿠키도 사라짐</small></span>
+              <div class="tl-track">
+                <span class="tl-bar blue" style="--from: 0; --to: 1">0일 ~ 1일</span>
+              </div>
+            </div>
+          </div>
+          <div class="callout">
+            <p>
+              <strong>상한이 없다.</strong> 로그인 상태 유지를 켜고 7일 안에 한 번씩만 쓰면 세션은 끝없이 이어진다. "로그인한 지
+              30일이 지나면 무조건 다시 로그인" 같은 절대 만료는 지금 없다. Better Auth도 기본 세션에는 절대 만료를 두지 않고, 민감한
+              작업에만 "로그인한 지 얼마나 됐나(<code>freshAge</code>)"를 따로 본다.
+            </p>
+          </div>
+          <details class="fold">
+            <summary>선택 읽기: 1일 경계를 확인하는 테스트</summary>
+            <div class="fold-body">
+              <p>
+                <code>moveClock</code>으로 앱의 시각을 옮긴다(<a href="#clock">Clock</a> 절). 정확히 1일 뒤 요청에서 쿠키를 다시 받고,
+                처음 만료(7일)를 넘겨도 연장한 만료(8일) 전이면 <code>/me</code>가 통한다.
+              </p>
+              <pre><code class="language-ts">// apps/api/test/auth.int.spec.ts
+  it('켜면 마지막 연장 뒤 1일이 지나기 전에는 쿠키를 다시 내리지 않는다', async () =&gt; {
+    await userFactory.build();
+    const { header } = await signIn({ rememberMe: true });
+
+    moveClock(DAY_MS - 1);
+    const response = await getSession(header);
+
+    expect(response.body).not.toBeNull();
+    expect(findSessionCookie(response)).toBeUndefined();
+  });
+
+  it('켜면 마지막 연장 뒤 1일이 지난 첫 요청에서 지금부터 7일로 연장하고 쿠키를 다시 내린다', async () =&gt; {
+    await userFactory.build();
+    const { cookie, header } = await signIn({ rememberMe: true });
+
+    moveClock(DAY_MS);
+    const extended = await getSession(header);
+
+    expect(extended.body).not.toBeNull();
+    expect(findSessionCookie(extended)).toMatchObject({
+      value: cookie.value,
+      maxAge: 7 * 24 * 60 * 60,
+    });
+    // 처음 만료(로그인 뒤 7일)가 지나도 연장한 만료(로그인 뒤 8일) 전이면 통한다.
+    moveClock(8 * DAY_MS - 1);
+    expect((await getMe(header)).status).toBe(200);
+  });</code></pre>
+            </div>
+          </details>
+        </section>
+
+        <section id="race">
+          <h2>로그아웃과 연장이 겹칠 때</h2>
+          <p>
+            탭 두 개를 열어 두었다고 하자. 탭 A가 <code>GET /me</code>를 보냈고 마침 연장할 때가 됐다. 그런데 A가 행을 읽은 직후,
+            탭 B가 로그아웃해 행을 지운다. A는 이미 "유효한 세션"이라고 판단한 뒤라 UPDATE를 시도한다.
+          </p>
+          <div class="seq">
+            <ol class="seq-actors">
+              <li>탭 A</li>
+              <li>API 서버</li>
+              <li>DB</li>
+              <li>탭 B</li>
+            </ol>
+            <ol class="seq-steps">
+              <li data-from="1" data-to="2">GET /me <small>세션 쿠키</small></li>
+              <li data-from="2" data-to="3">SELECT ... WHERE token_hash = ?</li>
+              <li class="reply" data-from="3" data-to="2">행 <small>만료 전, 연장할 때가 됨</small></li>
+              <li class="seq-note">A가 판단을 마치고 UPDATE하기 전에 B가 끼어든다</li>
+              <li data-from="4" data-to="2">POST /auth/sign-out</li>
+              <li data-from="2" data-to="3">DELETE ... WHERE token_hash = ?</li>
+              <li class="reply" data-from="2" data-to="4">204 <small>쿠키 지우기</small></li>
+              <li data-from="2" data-to="3">UPDATE ... WHERE id = ? RETURNING id <small>A의 연장</small></li>
+              <li class="reply stop" data-from="3" data-to="2">0행</li>
+              <li class="reply stop" data-from="2" data-to="1">401 <small>쿠키 지우기</small></li>
+            </ol>
+          </div>
+          <p>
+            저장소의 <code>extend</code>는 UPDATE에 <code>RETURNING id</code>를 붙여, 실제로 바뀐 행이 있었는지를 불리언으로 돌려준다.
+          </p>
+          <pre><code class="language-ts" data-lines="13-14">// apps/api/src/users/user-session-store.ts
+  async extend({
+    id,
+    expiresAt,
+  }: {
+    id: number;
+    expiresAt: Date;
+  }): Promise&lt;boolean&gt; {
+    const updated = await this.db
+      .update(sessions)
+      .set({ expiresAt, updatedAt: this.clock.now() })
+      .where(eq(sessions.id, id))
+      .returning({ id: sessions.id });
+    return updated.length &gt; 0;
+  }</code></pre>
+          <pre><code class="language-ts" data-lines="5-9">      const extended = await store.extend({
+        id: session.id,
+        expiresAt: new Date(now + policy.expiresInMs),
+      });
+      // 확인한 뒤 연장하기 전에 다른 요청(로그아웃)이 행을 지웠다.
+      if (!extended) {
+        this.clearCookie(response);
+        return null;
+      }</code></pre>
+          <p>이 확인이 없다면 어떻게 될까?</p>
+          <ul>
+            <li>UPDATE는 0행을 바꾸고도 오류 없이 끝난다. SQL에서 "조건에 맞는 행이 없음"은 실패가 아니다.</li>
+            <li>A는 세션을 돌려받아 로그아웃된 뒤인데도 로그인한 사용자로 처리된다.</li>
+            <li>
+              A의 응답이 B의 응답보다 늦게 도착하면, A가 다시 구운 쿠키가 B가 지운 쿠키를 되살린다. 행은 없으니 다음 요청에서 ②로
+              걸리긴 하지만, 사용자는 "로그아웃했는데 쿠키가 남아 있는" 이상한 상태를 본다.
+            </li>
+          </ul>
+          <div class="callout warn">
+            <p>
+              <strong>모든 겹침을 막지는 않는다.</strong> ⑦(연장 없이 통과)인 요청이 B의 DELETE 직전에 행을 읽었다면, 그 요청 하나는
+              로그인한 채로 끝난다. 이미 판단을 마친 요청을 되돌릴 방법은 없고, 그다음 요청부터 막히면 충분하다고 본다. 연장 경로만
+              확인하는 이유는 그 경로가 <strong>쿠키를 새로 굽는</strong> 유일한 확인 경로이기 때문이다.
+            </p>
+          </div>
+        </section>
+
+        <section id="memo">
+          <h2>WeakMap: 요청당 한 번만 확인</h2>
+          <pre><code class="language-ts" data-lines="3-7 16-21">// apps/api/src/auth/session-manager.ts
+export class SessionManager {
+  // 한 요청에서 가드와 컨트롤러가 함께 불러도 DB 조회와 연장을 한 번만 하도록 결과를 요청에 묶어 둔다.
+  private readonly authenticated = new WeakMap&lt;
+    Request,
+    Promise&lt;AuthenticatedSession | null&gt;
+  &gt;();
+  // ...
+  authenticate({
+    request,
+    response,
+  }: {
+    request: Request;
+    response: Response;
+  }): Promise&lt;AuthenticatedSession | null&gt; {
+    let result = this.authenticated.get(request);
+    if (!result) {
+      result = this.findSession({ request, response });
+      this.authenticated.set(request, result);
+    }
+    return result;
+  }</code></pre>
+          <p>
+            <code>authenticate</code>는 같은 요청 객체로 두 번 불려도 <code>findSession</code>을 한 번만 실행한다. 왜 필요할까?
+          </p>
+          <ol class="steps blue">
+            <li>
+              <strong>한 요청에서 여러 곳이 세션을 확인할 수 있다</strong>
+              로그인 가드가 확인한 뒤, 같은 요청에서 다른 가드나 컨트롤러가 또 확인할 수 있다. 지금 코드에는 한 요청에서 두 번 부르는
+              곳이 아직 없다(<code>/me</code>는 가드가 확인한 결과를 <code>@CurrentSession()</code>으로 받는다). 하지만 세션을 보는
+              곳이 늘어날 때를 대비해 두었다.
+            </li>
+            <li>
+              <strong>두 번 실행하면 비용과 부작용이 두 번이다</strong>
+              SELECT가 두 번 나간다. 연장할 때라면 UPDATE와 <code>Set-Cookie</code>도 두 번이다. 응답 헤더에 같은 쿠키가 두 줄
+              들어가는 것은 오류는 아니어도 깔끔하지 않다.
+            </li>
+            <li>
+              <strong>결과가 아니라 Promise를 저장한다</strong>
+              첫 호출이 아직 DB를 기다리는 중에 두 번째 호출이 오면, 결과를 저장하는 방식으로는 아직 저장된 값이 없어 또 조회한다.
+              Promise를 바로 저장해 두면 두 번째 호출은 <strong>같은 Promise</strong>를 받아 같은 결과를 기다린다.
+            </li>
+            <li>
+              <strong>Map이 아니라 WeakMap이다</strong>
+              키가 요청 객체다. 일반 <code>Map</code>은 키를 꽉 붙잡고 있어서, 요청이 끝나도 요청 객체와 결과가 메모리에서 사라지지
+              않는다. 요청이 쌓일수록 메모리가 샌다. <code>WeakMap</code>은 키를 약하게 붙잡아서, 요청 객체를 아무도 쓰지 않으면
+              항목도 함께 사라진다.
+            </li>
+          </ol>
+          <pre><code class="language-ts">// 프론트엔드에 비유하면 "같은 요청 안에서만 유효한 캐시"다. React의 cache()가 렌더 한 번 안에서만 결과를 나누는 것과 비슷하다.
+const authenticated = new WeakMap&lt;Request, Promise&lt;Session | null&gt;&gt;();
+
+const a = authenticate(req); // findSession 실행, Promise를 저장
+const b = authenticate(req); // 저장된 같은 Promise를 돌려줌
+a === b;                     // true
+
+// 요청이 끝나 req를 아무도 참조하지 않으면 WeakMap의 항목도 가비지 컬렉션 대상이 된다.</code></pre>
+          <p>
+            결과를 요청 객체의 속성(<code>request.session = ...</code>)에 붙이지 않은 것도 이유가 있다. <code>SessionManager</code>는
+            사용자용과 운영자용이 따로 만들어지고, 각자 자기 <code>WeakMap</code>을 가진다. 한 요청에서 두 매니저가 확인해도 결과가
+            섞이지 않는다.
+          </p>
+        </section>
+
+        <section id="revoke">
+          <h2>revoke: 폐기</h2>
+          <pre><code class="language-ts">// apps/api/src/auth/session-manager.ts
+  /** 세션 행과 쿠키를 지운다. 세션이 이미 없어도 그대로 끝난다. */
+  async revoke({
+    request,
+    response,
+  }: {
+    request: Request;
+    response: Response;
+  }): Promise&lt;void&gt; {
+    const token = this.readToken(request);
+    if (token) {
+      await this.options.store.deleteByTokenHash(hashSessionToken(token));
+    }
+    this.clearCookie(response);
+  }</code></pre>
+          <p>
+            토큰이 있으면 그 해시로 행을 지우고, 쿠키는 <strong>무조건</strong> 지운다. 행이 이미 없거나, 쿠키가 없거나, 서명이
+            틀려도 오류를 내지 않는다. 로그아웃의 목적은 "이 브라우저가 로그인돼 있지 않은 상태"이고, 이미 그 상태라면 성공으로 보면
+            된다. 이런 성질을 <strong>멱등성</strong>(몇 번 해도 결과가 같음)이라고 한다. 그래서 <code>POST /auth/sign-out</code>은
+            두 번 불러도, 쿠키 없이 불러도 204다(<a href="09-인증-API-응답-설계.html">09 문서</a>).
+          </p>
+          <p>
+            세션은 "행 삭제"로 끝난다. <code>revoked_at</code> 같은 칸을 두고 표시만 하지 않는다. 행이 없으면 ②로 걸리므로, 지우는
+            것만으로 그 토큰은 다시 쓰일 수 없다. 이것이 <a href="01-웹-인증-개념.html#session-vs-jwt">JWT 대신 DB 세션</a>을 고른
+            이유다. JWT는 서명만 맞으면 통하므로 만료 전에 끊으려면 차단 목록이 따로 필요하다.
+          </p>
+        </section>
+
+        <section id="read-token">
+          <h2>readToken: 서명부터 본다</h2>
+          <pre><code class="language-ts">// apps/api/src/auth/session-manager.ts
+  // 서명이 맞는 쿠키의 토큰만 돌려준다. 서명이 틀리면 DB를 조회하지 않고 없는 것으로 다룬다.
+  private readToken(request: Request): string | null {
+    const value = parseCookie(request.get('cookie') ?? '')[
+      this.options.cookie.name
+    ];
+    if (!value) {
+      return null;
+    }
+    return readSignedSessionToken({ value, secret: this.options.secret });
+  }</code></pre>
+          <p>
+            <code>issue</code>, <code>authenticate</code>, <code>revoke</code> 셋 다 쿠키를 이 함수로만 읽는다. 쿠키 값
+            <code>토큰.서명</code>의 서명을 <code>AUTH_SECRET</code>으로 다시 계산해 맞을 때만 토큰을 돌려준다.
+          </p>
+          <ul>
+            <li>
+              <strong>DB를 보호한다.</strong> 아무 문자열이나 쿠키에 넣어 보내는 요청은 서명에서 걸러져 DB까지 가지 않는다. HMAC 계산은
+              메모리 안에서 끝나므로 DB 조회보다 훨씬 싸다.
+            </li>
+            <li>
+              <strong>한 번 더 막는다.</strong> 토큰 자체가 약 190비트 난수라 추측은 사실상 불가능하지만, 서명이 있으면 DB가 유출돼도
+              비밀키 없이는 쓸 수 있는 쿠키를 만들 수 없다.
+            </li>
+          </ul>
+          <p>
+            서명을 비교할 때 <code>===</code> 대신 <code>timingSafeEqual</code>을 쓰는 이유와 해시·서명의 차이는
+            <a href="05-세션-토큰-만들기-서명-저장.html">05 문서</a>와 <a href="01-웹-인증-개념.html#hmac">HMAC</a>,
+            <a href="01-웹-인증-개념.html#timing">타이밍 공격</a> 절에 있다.
+          </p>
+          <p>
+            쿠키를 굽고 지우는 <code>setCookie</code>, <code>clearCookie</code>, <code>buildCookieOptions</code>는
+            <a href="07-세션-쿠키-설정.html">07 문서</a>에서 다룬다. 여기서 기억할 것은 하나다. <strong>지울 때도 구울 때와 같은 속성(경로,
+            도메인)을 준다.</strong> 브라우저는 이름, 경로, 도메인이 모두 같아야 같은 쿠키로 보고 지운다.
+          </p>
+        </section>
+
+        <section id="design">
+          <h2>테이블과 정책을 바깥에서 받는다</h2>
+          <p>
+            <code>SessionManager</code>는 Nest의 <code>@Injectable()</code> 클래스가 아니다. 생성자로 옵션 객체 하나를 받는 평범한
+            클래스이고, 바뀌는 부분은 모두 그 옵션에 들어 있다.
+          </p>
+          <pre><code class="language-ts" data-lines="29-36">// apps/api/src/auth/session-manager.ts
+/** 저장소에서 읽은 세션. 주체(subject)는 사용자 세션이면 사용자, 운영자 세션이면 운영자다. */
+export interface StoredSession {
+  id: number;
+  subjectId: number;
+  expiresAt: Date;
+  rememberMe: boolean;
+}
+
+/**
+ * 세션 행을 읽고 쓰는 곳. 세션 테이블을 소유한 모듈이 구현해 넘긴다.
+ * 사용자 세션과 운영자 세션은 테이블만 다르고 같은 SessionManager 로직을 쓴다.
+ */
+export interface SessionStore {
+  create(input: {
+    tokenHash: string;
+    subjectId: number;
+    expiresAt: Date;
+    rememberMe: boolean;
+    ipAddress: string | null;
+    userAgent: string | null;
+  }): Promise&lt;void&gt;;
+  findByTokenHash(tokenHash: string): Promise&lt;StoredSession | null&gt;;
+  /** 만료 일시를 다시 쓴다. 그새 행이 지워졌으면 false다. */
+  extend(input: { id: number; expiresAt: Date }): Promise&lt;boolean&gt;;
+  deleteByTokenHash(tokenHash: string): Promise&lt;void&gt;;
+}
+// ...
+export interface SessionManagerOptions {
+  store: SessionStore;
+  cookie: SessionCookieSettings;
+  /** 쿠키 서명 키(AUTH_SECRET). */
+  secret: string;
+  clock: Clock;
+  getPolicy: (session: { rememberMe: boolean }) =&gt; SessionPolicy;
+}</code></pre>
+          <ul class="tree" style="--tree-col: 16rem">
+            <li>
+              <div class="tree-row">
+                <span class="tree-node">SessionManagerOptions</span>
+                <span class="tree-note">세션 종류마다 다른 것만 모았다</span>
+              </div>
+              <ul>
+                <li>
+                  <div class="tree-row">
+                    <span class="tree-node">store: SessionStore</span>
+                    <span class="tree-note">어느 테이블에 읽고 쓰나. 테이블을 소유한 모듈이 구현한다</span>
+                  </div>
+                </li>
+                <li>
+                  <div class="tree-row">
+                    <span class="tree-node">getPolicy</span>
+                    <span class="tree-note">세션마다 유지 기간, 연장 간격, 쿠키 수명</span>
+                  </div>
+                </li>
+                <li>
+                  <div class="tree-row">
+                    <span class="tree-node">cookie</span>
+                    <span class="tree-note">쿠키 이름, Domain, Secure</span>
+                  </div>
+                </li>
+                <li>
+                  <div class="tree-row">
+                    <span class="tree-node">secret</span>
+                    <span class="tree-note">서명 키 <code>AUTH_SECRET</code></span>
+                  </div>
+                </li>
+                <li>
+                  <div class="tree-row">
+                    <span class="tree-node">clock</span>
+                    <span class="tree-note">지금 시각. 테스트에서 바꿔 끼운다</span>
+                  </div>
+                </li>
+              </ul>
+            </li>
+          </ul>
+          <p>
+            <code>SessionStore</code>는 메서드 네 개짜리 인터페이스다. <code>SessionManager</code>는 Drizzle도, <code>sessions</code>
+            테이블도 모른다. 사용자 세션은 <code>users/user-session-store.ts</code>의 <code>UserSessionStore</code>가 구현하고,
+            <code>users/user-session.ts</code>가 모든 옵션을 채워 매니저를 만든다(<a href="08-로그인-가드와-CurrentSession.html">08
+            문서</a>).
+          </p>
+          <h3>운영자 세션(#82)은 옵션만 다르다</h3>
+          <p>
+            운영자 로그인 티켓(#82)은 아직 구현 전이다. 티켓에 적힌 규칙을 옵션에 대 보면, 바뀌는 곳이 옵션뿐이라는 것을 알 수 있다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>옵션</th>
+                  <th>사용자 세션 <span class="badge green">구현됨</span></th>
+                  <th>운영자 세션 <span class="badge blue">#82 예정</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>store</code></td>
+                  <td><code>UserSessionStore</code> (<code>sessions</code> 테이블)</td>
+                  <td>운영자 세션 테이블을 읽고 쓰는 저장소</td>
+                </tr>
+                <tr>
+                  <td><code>getPolicy</code></td>
+                  <td>켬: 7일 / 1일마다 연장 / Max-Age 있음<br />끔: 1일 / 연장 없음 / Max-Age 없음</td>
+                  <td>30분 / 5분마다 연장 / Max-Age 없음 (로그인 상태 유지 없음)</td>
+                </tr>
+                <tr>
+                  <td><code>cookie</code></td>
+                  <td><code>openrun.session_token</code>, 상위 도메인</td>
+                  <td>다른 이름, Domain 없이 API 호스트 전용</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            30분 동안 요청이 없으면 끝나는 "유휴 만료"도 새 코드가 아니다. 위의 슬라이딩 만료에 숫자만 30분과 5분으로 넣으면 된다.
+          </p>
+          <h3>소셜 로그인(1.4b)도 issue를 그대로 쓴다</h3>
+          <p>
+            구글·카카오 로그인은 "비밀번호 확인" 대신 "제공자가 확인해 준 계정으로 사용자 찾기"를 한다. 사용자 id를 얻은 다음부터는
+            이메일 로그인과 같다. 콜백에서 <code>issue({ request, response, subjectId: userId, rememberMe })</code>를 부르면 같은
+            세션, 같은 쿠키가 나온다. 세션은 "어떻게 로그인했나"를 몰라도 된다. 로그인 수단은
+            <a href="03-사용자-계정-세션-테이블.html">03 문서</a>의 <code>accounts</code> 테이블이 맡는다.
+          </p>
+        </section>
+
+        <section id="clock">
+          <h2>Clock: 시간을 테스트에서 움직이기</h2>
+          <p>
+            만료와 연장은 모두 "지금"에 달려 있다. <code>Date.now()</code>를 바로 부르면, 7일 만료를 테스트하려고 정말 7일을
+            기다리거나 전역 타이머를 가짜로 바꿔야 한다. 그래서 지금 시각을 주는 객체 <code>Clock</code>을 주입받는다.
+          </p>
+          <pre><code class="language-ts">// apps/api/src/clock/clock.module.ts
+// 현재 시각을 돌려준다. 판매 상태처럼 시각에 따라 달라지는 값은 DB의 now() 대신 이 값을 SQL 파라미터로 넘겨 계산한다.
+// 추상 클래스를 주입 토큰으로 써서, 테스트는 overrideProvider(Clock)로 고정 시각을 끼운다.
+export abstract class Clock {
+  abstract now(): Date;
+}
+
+@Injectable()
+export class SystemClock extends Clock {
+  now(): Date {
+    return new Date();
+  }
+}</code></pre>
+          <p>테스트는 앱을 만들 때 <code>Clock</code>을 바꿔 끼우고, 변수 <code>now</code>를 옮겨 시간을 흐르게 한다.</p>
+          <pre><code class="language-ts" data-lines="11-16">// apps/api/test/auth.int.spec.ts
+let app: INestApplication&lt;App&gt;;
+// 테스트마다 바꿀 수 있는 현재 시각. 앱의 Clock이 이 값을 돌려준다.
+let now: Date;
+// ...
+beforeEach(async () =&gt; {
+  await db.execute(
+    'TRUNCATE sessions, accounts, users RESTART IDENTITY CASCADE',
+  );
+
+  now = new Date(DEFAULT_NOW);
+  const moduleRef = await Test.createTestingModule({
+    imports: [AppModule],
+  })
+    .overrideProvider(Clock)
+    .useValue({ now: () =&gt; now })
+    .compile();
+
+  app = moduleRef.createNestApplication({ logger: false });</code></pre>
+          <pre><code class="language-ts">  function moveClock(ms: number) {
+    now = new Date(new Date(DEFAULT_NOW).getTime() + ms);
+  }</code></pre>
+          <p>
+            <code>SessionManager</code>는 <code>clock.now()</code>만 부르므로, 테스트는 실제 DB와 실제 HTTP 요청을 쓰면서도
+            "1일 - 1ms 뒤", "정확히 7일 뒤" 같은 경계를 몇 밀리초 만에 확인한다.
+          </p>
+        </section>
+
+        <section id="cleanup">
+          <h2>아직 없는 것: 만료된 행 정리</h2>
+          <p>
+            만료된 행은 <strong>그 쿠키가 다시 왔을 때만</strong> ③에서 지워진다. 사용자가 쿠키를 지웠거나 브라우저를 닫아 쿠키가 사라진
+            세션(로그인 상태 유지를 끈 세션)은 다시 오지 않으므로, 그 행은 만료된 채 <code>sessions</code> 테이블에 남는다.
+          </p>
+          <p>
+            지금은 이런 행을 주기적으로 지우는 작업이 없다. 남은 행은 <code>expires_at</code>이 지나 있어 쓰일 수 없으므로 보안
+            문제는 아니고, 테이블이 조금씩 커질 뿐이다.
+          </p>
+        </section>
+
+        <section id="better-auth">
+          <h2>Better Auth와 같은 점, 다른 점</h2>
+          <p>
+            이 클래스는 <a href="../../research/better-auth-session.md">Better Auth의 세션 처리</a>를 본떴다(ADR 0009).
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>항목</th>
+                  <th>Better Auth</th>
+                  <th>openrun</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>연장 조건 <code>expiresAt - expiresIn + updateAge &lt;= now</code></td>
+                  <td colspan="2">같다</td>
+                </tr>
+                <tr>
+                  <td>연장할 때 행이 사라졌으면 쿠키를 지우고 로그인 안 됨으로</td>
+                  <td colspan="2">같다</td>
+                </tr>
+                <tr>
+                  <td>찾은 세션이 만료됐으면 행과 쿠키를 지움</td>
+                  <td colspan="2">같다</td>
+                </tr>
+                <tr>
+                  <td>DB에 저장하는 토큰</td>
+                  <td>원문</td>
+                  <td>SHA-256 해시</td>
+                </tr>
+                <tr>
+                  <td>로그인 상태 유지를 끈 표시</td>
+                  <td>서명한 별도 쿠키 <code>dont_remember</code></td>
+                  <td>세션 행의 <code>remember_me</code></td>
+                </tr>
+                <tr>
+                  <td>쿠키 캐시(DB 조회를 잠시 건너뜀)</td>
+                  <td>설정으로 켬</td>
+                  <td>없음. 요청마다 DB 조회</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout">
+            <p>
+              <strong>Better Auth와 다르게 정한 것:</strong> 토큰은 해시로 저장한다. DB와 비밀키가 함께 유출돼도 저장된 값으로 쿠키를
+              만들 수 없게 하기 위해서다. 로그인 상태 유지 여부는 쿠키가 아니라 세션 행에 둔다. 쿠키 캐시는 세션 조회가 느리다는
+              측정 근거가 생기는 9단계에서 전후를 측정하며 도입한다(ADR 0009).
+            </p>
+          </div>
+        </section>
+
+        <section id="check">
+          <h2>스스로 확인하기</h2>
+
+          <div class="quiz">
+            <p class="quiz-q">1. 로그인 상태 유지를 켜고 로그인했다. 언제 만료될까?</p>
+            <p class="quiz-context"><a href="#sliding">연장</a> 절의 계산을 쓴다. 로그인 시각을 0일로 둔다.</p>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>시각</th>
+                    <th>한 일</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>0일</td>
+                    <td>로그인</td>
+                  </tr>
+                  <tr>
+                    <td>0.9일</td>
+                    <td><code>GET /me</code></td>
+                  </tr>
+                  <tr>
+                    <td>1.2일</td>
+                    <td><code>GET /me</code></td>
+                  </tr>
+                  <tr>
+                    <td>2.1일</td>
+                    <td><code>GET /me</code></td>
+                  </tr>
+                  <tr>
+                    <td>그 뒤</td>
+                    <td>요청 없음</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  <strong>8.2일.</strong> 0.9일은 마지막 연장(0일) 뒤 1일이 안 됐으므로 그냥 통과한다. 1.2일은 1일이 지났으므로 연장해
+                  만료가 1.2 + 7 = 8.2일이 된다. 2.1일은 마지막 연장(1.2일) 뒤 0.9일이라 연장하지 않는다. 그 뒤 요청이 없으니 8.2일에
+                  끝난다. 2.1일의 요청이 만료를 늘려 주지 않았다는 점이 핵심이다.
+                </p>
+              </div>
+            </details>
+          </div>
+
+          <div class="quiz">
+            <p class="quiz-q">2. 로그인 상태 유지를 끈 정책에도 연장을 켜면 어떻게 될까?</p>
+            <p class="quiz-context"><code>users/user-session.ts</code>의 정책을 아래처럼 바꾼다. 유지 기간과 연장 간격이 둘 다 1일이다.</p>
+            <pre><code class="language-diff"> const NOT_REMEMBERED_POLICY: SessionPolicy = {
+   expiresInMs: DAY_MS,
+-  updateAgeMs: null,
++  updateAgeMs: DAY_MS,
+   persistentCookie: false,
+ };</code></pre>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  <strong>한 번도 연장되지 않는다.</strong> 연장 조건은 <code>lastRefreshedAt + 1일 &lt;= now</code>인데,
+                  <code>lastRefreshedAt + 1일</code>은 바로 <code>expiresAt</code>이다. 즉 "만료 시각이 지났으면 연장"이라는 뜻이 된다.
+                  그런데 그 전에 ③이 <code>expiresAt &lt;= now</code>를 먼저 보고 행을 지운다. 연장 간격은 유지 기간보다 짧아야 의미가
+                  있다.
+                </p>
+              </div>
+            </details>
+          </div>
+
+          <div class="quiz">
+            <p class="quiz-q">3. 연장 결과 확인을 지우면 어떤 일이 생길 수 있을까?</p>
+            <p class="quiz-context"><a href="#race">로그아웃과 연장이 겹칠 때</a> 절의 코드를 바꾼다.</p>
+            <pre><code class="language-diff">-      const extended = await store.extend({
++      await store.extend({
+         id: session.id,
+         expiresAt: new Date(now + policy.expiresInMs),
+       });
+-      if (!extended) {
+-        this.clearCookie(response);
+-        return null;
+-      }
+       this.setCookie({</code></pre>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  다른 탭에서 로그아웃해 행이 지워진 직후에도, 연장하던 요청은 0행 UPDATE를 성공으로 여기고 로그인한 사용자로 처리된다.
+                  그리고 쿠키를 다시 구워, 늦게 도착하면 로그아웃이 지운 쿠키를 브라우저에 되살린다. 행이 없으니 다음 요청에서는 ②로
+                  막히지만, 로그아웃 직후의 상태가 어긋난다.
+                </p>
+              </div>
+            </details>
+          </div>
+
+          <div class="quiz">
+            <p class="quiz-q">4. WeakMap을 Map으로 바꾸면 결과가 틀려질까, 다른 문제가 생길까?</p>
+            <p class="quiz-context"><a href="#memo">WeakMap</a> 절의 필드를 바꾼다.</p>
+            <pre><code class="language-diff">-  private readonly authenticated = new WeakMap&lt;
++  private readonly authenticated = new Map&lt;
+     Request,
+     Promise&lt;AuthenticatedSession | null&gt;
+   &gt;();</code></pre>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  결과는 틀려지지 않는다. 요청마다 새 요청 객체가 만들어지므로 다른 요청의 결과를 잘못 꺼내 쓸 일은 없다. 대신
+                  <strong>메모리가 샌다.</strong> <code>SessionManager</code>는 앱이 켜져 있는 동안 하나만 살아 있고, 그 안의
+                  <code>Map</code>이 지금까지 들어온 모든 요청 객체와 결과를 붙잡고 놓지 않는다. 요청이 쌓일수록 메모리가 늘다가 결국
+                  프로세스가 죽는다.
+                </p>
+              </div>
+            </details>
+          </div>
+
+          <div class="quiz">
+            <p class="quiz-q">5. 위조한 쿠키로 로그인 요청을 보내 남의 세션을 지울 수 있을까?</p>
+            <p class="quiz-context">
+              <a href="#issue">issue</a>는 요청에 이전 세션 쿠키가 있으면 그 행을 지운다. 공격자가 쿠키 값에 아무 토큰이나 넣고
+              <code>POST /auth/sign-in</code>을 보낸다.
+            </p>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  지울 수 없다. 이전 토큰은 <code>readToken</code>으로 읽고, 이 함수는 <code>AUTH_SECRET</code>으로 계산한 서명이 맞을
+                  때만 토큰을 준다. 비밀키가 없는 공격자는 남의 토큰에 맞는 서명을 만들 수 없다. 남의 서명된 쿠키를 이미 가지고 있다면
+                  지울 수 있지만, 그 경우는 그 쿠키로 이미 로그인할 수 있으므로 더 큰 문제(쿠키 탈취)다.
+                </p>
+              </div>
+            </details>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

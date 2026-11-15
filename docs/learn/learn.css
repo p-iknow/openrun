@@ -278,6 +278,11 @@ th {
 td {
   background: var(--surface);
 }
+/* 표 칸의 코드는 글자 중간에서 끊지 않는다. 끊을 수 있다고 보면 자동 표 배치가 열을 글자 몇 개 폭까지 줄인다. */
+td code {
+  word-break: normal;
+  overflow-wrap: break-word;
+}
 /* 계산 표에서 보지 않고 건너뛰는 칸 */
 td.muted {
   color: var(--muted);
@@ -579,6 +584,280 @@ td.muted {
   margin: -0.5rem 0 1.25rem;
   color: var(--muted);
   font-size: 0.85rem;
+}
+
+/*
+ * 순서도: 참여자(브라우저, API, DB) 사이에 요청과 응답이 오가는 순서.
+ * 참여자 수만큼 같은 폭의 열을 두고, 메시지는 보내는 열부터 받는 열까지 걸친다.
+ * 열 수(--seq-cols), 메시지의 열 범위와 번호, 생명선은 learn.js가 정한다.
+ */
+.seq {
+  margin: 1.25rem 0;
+  padding: 1rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--code-bg);
+  overflow-x: auto;
+}
+.seq-actors,
+.seq-steps {
+  display: grid;
+  grid-template-columns: repeat(var(--seq-cols, 3), minmax(8.5rem, 1fr));
+  min-width: calc(var(--seq-cols, 3) * 8.5rem);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.seq-actors li {
+  justify-self: center;
+  margin: 0;
+  padding: 0.3rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  font-size: 0.85rem;
+  font-weight: 700;
+  line-height: 1.4;
+  text-align: center;
+}
+.seq-steps {
+  position: relative;
+  row-gap: 0.45rem;
+  padding: 0.9rem 0 0.3rem;
+}
+.seq-lifeline {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc((var(--i) + 0.5) * 100% / var(--seq-cols, 3));
+  border-left: 1px dashed var(--muted);
+  opacity: 0.55;
+}
+.seq-steps > li {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+.seq-num {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  margin-right: 0.3rem;
+  border-radius: 999px;
+  color: #fff;
+  background: var(--seq-color);
+  font-size: 0.7rem;
+  font-weight: 700;
+  vertical-align: 0.05em;
+}
+@media (prefers-color-scheme: dark) {
+  .seq-num {
+    color: #17181b;
+  }
+}
+/* 메시지: 보내는 열 가운데부터 받는 열 가운데까지 화살표를 긋고, 글은 그 위에 둔다. */
+.seq-msg {
+  --seq-color: var(--blue);
+  --seq-inset: calc(50% / var(--span, 2));
+  padding: 0 var(--seq-inset) 0.75rem;
+  text-align: center;
+}
+.seq-msg small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.seq-msg::after {
+  content: '';
+  position: absolute;
+  left: var(--seq-inset);
+  right: var(--seq-inset);
+  bottom: 0.3rem;
+  border-top: 1.5px solid var(--seq-color);
+}
+.seq-msg::before {
+  content: '';
+  position: absolute;
+  right: var(--seq-inset);
+  bottom: calc(0.3rem - 3.75px);
+  border-top: 4.5px solid transparent;
+  border-bottom: 4.5px solid transparent;
+  border-left: 8px solid var(--seq-color);
+}
+.seq-msg.to-left::before {
+  right: auto;
+  left: var(--seq-inset);
+  border-left: 0;
+  border-right: 8px solid var(--seq-color);
+}
+.seq-msg.reply {
+  --seq-color: var(--green);
+}
+.seq-msg.reply::after {
+  border-top-style: dashed;
+}
+/* 한 참여자 안에서 일어나는 일 */
+.seq-self {
+  --seq-color: var(--blue);
+  justify-self: center;
+  max-width: calc(100% - 0.75rem);
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--seq-color);
+  border-radius: 4px 6px 6px 4px;
+  background: var(--surface);
+  text-align: left;
+}
+.seq-self small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+/* 순서 사이에 끼우는 설명이나 구간 이름 */
+.seq-steps > li.seq-note {
+  grid-column: 1 / -1;
+  justify-self: center;
+  padding: 0.2rem 0.75rem;
+  border-radius: 999px;
+  color: var(--warn);
+  background: var(--warn-bg);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+/* 실패나 거절처럼 흐름이 끊기는 메시지와 동작 */
+.seq-steps > li.stop {
+  --seq-color: var(--accent);
+}
+
+/*
+ * 시간 막대: 만료, 연장처럼 시간축 위에서 일어나는 일.
+ * --tl-max가 축의 끝 값이다. 막대는 --from부터 --to까지, 사건은 --at에 그린다.
+ * 눈금 줄은 learn.js가 data-unit(단위)과 data-tick(간격, 기본 1)으로 마지막 줄에 더한다.
+ */
+.timeline {
+  --tl-max: 10;
+  margin: 1.25rem 0;
+  padding: 1rem 1.25rem 0.75rem 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--code-bg);
+  overflow-x: auto;
+}
+.tl-row {
+  display: grid;
+  grid-template-columns: var(--tl-label, 7.5rem) minmax(26rem, 1fr);
+  align-items: end;
+  gap: 0.75rem;
+  margin: 0 0 0.35rem;
+}
+.tl-label {
+  padding-bottom: 0.25rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.tl-label small {
+  display: block;
+  color: var(--muted);
+  font-weight: 400;
+}
+.tl-track {
+  position: relative;
+  height: 2.75rem;
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  background-image: linear-gradient(to right, var(--border) 1px, transparent 1px);
+  background-size: calc(100% / var(--tl-max) * var(--tl-tick, 1)) 100%;
+}
+.tl-bar {
+  position: absolute;
+  bottom: 0.2rem;
+  left: calc(var(--from) / var(--tl-max) * 100%);
+  width: calc((var(--to) - var(--from)) / var(--tl-max) * 100%);
+  height: 1.45rem;
+  padding: 0 0.4rem;
+  overflow: hidden;
+  border: 1px solid var(--muted);
+  border-radius: 4px;
+  color: var(--muted);
+  background: var(--surface);
+  font-size: 0.74rem;
+  line-height: calc(1.45rem - 2px);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.tl-bar.blue {
+  border-color: var(--blue);
+  color: var(--blue);
+  background: var(--blue-bg);
+}
+.tl-bar.green {
+  border-color: var(--green);
+  color: var(--green);
+  background: var(--green-bg);
+}
+/* 쓰이지 않게 된 기간(연장으로 대체된 옛 만료, 지나간 세션) */
+.tl-bar.faded {
+  border-style: dashed;
+  opacity: 0.6;
+}
+.tl-event {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--at) / var(--tl-max) * 100%);
+  padding-left: 0.25rem;
+  border-left: 2px solid var(--accent);
+  color: var(--accent);
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+/* 축 끝 가까이의 사건은 글을 선 왼쪽에 둔다. */
+.tl-event.end {
+  padding: 0 0.25rem 0 0;
+  border-left: 0;
+  border-right: 2px solid var(--accent);
+  transform: translateX(-100%);
+  text-align: right;
+}
+/* 사건 글이 겹치면 learn.js가 뒤의 사건을 한 줄 아래로 내리고 줄을 높인다. */
+.tl-track.stacked {
+  height: 3.6rem;
+}
+.tl-event.lower {
+  padding-top: 0.85rem;
+}
+/* 막대가 좁아 글이 잘리면 learn.js가 글을 막대 오른쪽 바깥으로 뺀다. */
+.tl-bar.label-outside {
+  color: transparent;
+}
+.tl-bar-label {
+  position: absolute;
+  bottom: 0.2rem;
+  left: calc(var(--at) / var(--tl-max) * 100%);
+  padding-left: 0.3rem;
+  color: var(--muted);
+  font-size: 0.74rem;
+  line-height: 1.45rem;
+  white-space: nowrap;
+}
+.tl-axis .tl-track {
+  height: 1.1rem;
+  border: 0;
+  background: none;
+}
+.tl-tick {
+  position: absolute;
+  left: calc(var(--at) / var(--tl-max) * 100%);
+  transform: translateX(-50%);
+  color: var(--muted);
+  font-size: 0.7rem;
+  white-space: nowrap;
 }
 
 .steps {
