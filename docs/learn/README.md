@@ -84,6 +84,9 @@
 | 트리 | `tree`, `tree-row`, `tree-node`, `tree-note` | 연결선이 있는 계층 구조와 오른쪽 설명. 설명 열은 깊이와 상관없이 맞춰진다. 이름이 길면 `style="--tree-col: 17rem"`처럼 이름 열을 넓힌다 |
 | 순서도 | `seq`, `seq-actors`, `seq-steps`, `seq-note`, `reply`, `stop` | 참여자(브라우저, API, DB) 사이에 요청과 응답이 오가는 순서. 아래 "순서도" 참고 |
 | 시간 막대 | `timeline`, `tl-row`, `tl-label`, `tl-track`, `tl-bar`, `tl-event` | 만료와 연장처럼 시간축 위에서 일어나는 일. 아래 "시간 막대" 참고 |
+| 요청 장면 | `scenes`, `scene`, `scene-url`, `scene-req`, `scene-server`, `scene-chips` | 사용자가 보고 있는 페이지에서 어떤 요청이 어디로 가고, 브라우저가 어떻게 판정하는지. SameSite, CORS처럼 "어디서 보낸 요청인가"가 갈림길인 규칙. 아래 "요청 장면" 참고 |
+| 변환 줄 | `pipe`, `pipe-row`, `pipe-val`, `pipe-fn`, `pipe-label`, `pipe-note` | 값이 함수(해시, 암호화, 서명)를 지나 어떻게 바뀌는지. 아래 "변환 줄" 참고 |
+| 해부도 | `anatomy`, `part`, `anatomy-caption` | URL, 쿠키 값, 토큰처럼 한 값을 부분으로 나눠 이름 달기. 아래 "해부도" 참고 |
 | 테이블 관계도 | `erd`, `erd-table`, `erd-title`, `erd-constraints`, `erd-mark`, `erd-note` | 테이블을 칸 목록 상자로 그리고 외래 키를 선으로 잇는 ERD. 아래 "테이블 관계도" 참고 |
 | 표 | `table-wrap` | 좁은 화면에서 가로로 스크롤되는 표 |
 | 배지 | `badge` | 표나 문장 안의 짧은 분류 |
@@ -120,6 +123,22 @@
 - 줄마다 `div.tl-row` 안에 `span.tl-label`(줄 이름)과 `div.tl-track`을 둔다. 이름이 길면 `.timeline`에 `style="--tl-label: 9rem"`을 준다.
 - 기간은 `span.tl-bar`에 `style="--from: 0; --to: 7"`, 한 시점의 사건은 `span.tl-event`에 `style="--at: 1.5"`를 준다. 축 끝 가까이의 사건은 `end`를 붙여 글을 선 왼쪽에 둔다.
 - 막대 색은 `blue`, `green`, 대체되거나 지나간 기간은 `faded`(점선)를 붙인다.
+
+요청 장면(`scene`)은 `div.scenes` 안에 장면마다 `div.scene`을 둔다. 그리는 일은 CSS만 하므로 `learn.js`가 필요 없다.
+
+- 장면 안에 차례로 `scene-title`(장면 이름), `scene-browser`(안에 `scene-url` 주소창과 `scene-page` 페이지에서 일어나는 일), `scene-req`(화살표 위 요청), `scene-server`(받는 곳, 보충 설명은 `small`)를 둔다.
+- 주소와 받는 곳에서 비교할 부분은 `b`로 칠한다. 기본은 파랑이다.
+- 장면 테두리와 판정 색은 기본이 초록(허용되는 경우)이고, `cross`는 주황(다른 곳에서 왔지만 정상), `danger`는 빨강(막아야 할 경우)이다. `cross`와 `danger`에서는 주소창의 `b`가 주황으로 바뀐다.
+- 아래 줄 `scene-foot`에 `scene-verdict`(판정 문장, 결론은 `strong`)와 `ul.scene-chips`(설정값마다의 결과, `li.yes`는 ✓, `li.no`는 ✕)를 둔다. ✓/✕가 무엇을 뜻하는지 `data-legend="쿠키가 실리나"`처럼 질문으로 적으면 표시 줄 맨 앞에 보인다. 표시 이름만으로 뜻이 분명하면(`서버에 닿음`, `응답 읽음`) 생략한다. 색과 ✓/✕를 읽는 법을 본문에서 다시 설명하지 않는다. 그림만으로 읽히지 않으면 `data-legend`나 표시 이름을 고친다.
+- 640px보다 좁으면 세로로 쌓인다.
+
+변환 줄(`pipe`)은 줄마다 `div.pipe-row`를 두고 값(`span.pipe-val`)과 함수(`span.pipe-fn`)를 번갈아 적는다. 함수 양옆의 화살표는 CSS가 그린다.
+
+- 줄 이름은 줄 맨 앞의 `span.pipe-label`, 줄 끝의 보충 설명은 `span.pipe-note`, 값 아래 설명은 값 안의 `small`이다.
+- 값 색은 비밀인 값 `secret`(주황), 통과 `ok`(초록), 거절 `bad`(빨강)이다.
+- 함수 색은 기본 파랑, `green`이 있고, 할 수 없는 변환(해시를 거꾸로 돌리기)은 `blocked`(빨간 취소선과 ✕)다.
+
+해부도(`anatomy`)는 값을 `span.part`로 나눠 이어 적고, 부분마다 `data-label`에 이름을 단다. 이름은 부분 아래에 그려진다. 색은 `blue`, `green`, `warn`, 덜 중요한 부분은 `dim`이다. 맨 끝의 `span.anatomy-caption`에 읽는 법을 적는다.
 
 자가 점검 문제는 `quiz`로 쓴다. `quiz-q`에 질문을, `quiz-context`에 어느 절의 무엇을 묻는지를 적고, 바꾸는 코드는 `language-diff` 코드 블록으로, 필요한 데이터는 표로 질문 아래에 둔다. 답만 `<details class="quiz-answer">` 안의 `fold-body`에 접는다. 질문 한 줄만으로 무엇을 묻는지 분명할 때만 클래스 없는 `<details>`를 쓴다. 그 밖에 문단만 접어 둘 때도 클래스 없이 `<details>`를 쓴다. 코드나 표가 든 선택 읽기 내용을 접을 때는 `<details class="fold">` 안에 `<div class="fold-body">`를 두고, 접어도 흐름이 이어지도록 결론은 접기 밖에 적는다.
 

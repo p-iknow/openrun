@@ -20,6 +20,9 @@
           <li><a href="#code">코드</a></li>
           <li><a href="#seq">순서도</a></li>
           <li><a href="#timeline">시간 막대</a></li>
+          <li><a href="#scene">요청 장면</a></li>
+          <li><a href="#pipe">변환 줄</a></li>
+          <li><a href="#anatomy">해부도</a></li>
           <li><a href="#erd">테이블 관계도</a></li>
           <li><a href="#table">표와 배지</a></li>
           <li><a href="#callout">강조 상자</a></li>
@@ -161,6 +164,65 @@
                 <span class="tl-event end" style="--at: 8.5">끝 사건</span>
               </div>
             </div>
+          </div>
+        </section>
+
+        <section id="scene">
+          <h2>요청 장면</h2>
+          <div class="scenes">
+            <div class="scene">
+              <div class="scene-title">① 허용되는 장면</div>
+              <div class="scene-browser">
+                <div class="scene-url">https://<b>example.com</b>/shows</div>
+                <div class="scene-page">페이지에서 일어나는 일</div>
+              </div>
+              <div class="scene-req">GET /me</div>
+              <div class="scene-server"><b>example.com</b><small>받는 곳 설명</small></div>
+              <div class="scene-foot">
+                <span class="scene-verdict">판정 근거 → <strong>결론</strong></span>
+                <ul class="scene-chips"><li class="yes">값 A</li><li class="yes">값 B</li></ul>
+              </div>
+            </div>
+            <div class="scene danger">
+              <div class="scene-title">② 막아야 할 장면</div>
+              <div class="scene-browser">
+                <div class="scene-url">https://<b>evil.com</b></div>
+                <div class="scene-page">페이지에서 일어나는 일</div>
+              </div>
+              <div class="scene-req">POST /auth/sign-out</div>
+              <div class="scene-server"><b>example.com</b><small>받는 곳 설명</small></div>
+              <div class="scene-foot">
+                <span class="scene-verdict">판정 근거 → <strong>결론</strong></span>
+                <ul class="scene-chips"><li class="no">값 A</li><li class="yes">값 B</li></ul>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="pipe">
+          <h2>변환 줄</h2>
+          <div class="pipe">
+            <div class="pipe-row">
+              <span class="pipe-label">한 방향 변환</span>
+              <span class="pipe-val secret">hello<small>입력</small></span>
+              <span class="pipe-fn">SHA-256</span>
+              <span class="pipe-val">2cf24d…<small>출력</small></span>
+            </div>
+            <div class="pipe-row">
+              <span class="pipe-label">거꾸로는 안 된다</span>
+              <span class="pipe-val">2cf24d…</span>
+              <span class="pipe-fn blocked">SHA-256</span>
+              <span class="pipe-val bad">?</span>
+              <span class="pipe-note">보충 설명</span>
+            </div>
+          </div>
+        </section>
+
+        <section id="anatomy">
+          <h2>해부도</h2>
+          <div class="anatomy">
+            <span class="part blue" data-label="스킴">https://</span><span class="part dim" data-label="서브도메인">store.</span><span class="part green" data-label="등록 가능한 도메인">example.com</span><span class="part" data-label="포트">:443</span><span class="part dim" data-label="경로">/shows</span>
+            <span class="anatomy-caption">읽는 법</span>
           </div>
         </section>
 

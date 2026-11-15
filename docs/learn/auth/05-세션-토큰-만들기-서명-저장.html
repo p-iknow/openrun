@@ -126,7 +126,7 @@
                 <tr>
                   <td>원문</td>
                   <td>서버 메모리(요청을 처리하는 동안), 쿠키 값의 앞부분</td>
-                  <td>영숫자 32글자</td>
+                  <td>영문 대소문자와 숫자 32글자</td>
                   <td>원문 그 자체</td>
                 </tr>
                 <tr>
@@ -194,7 +194,7 @@
 
 const TOKEN_ALPHABET =
   'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-// 영숫자 62종에서 32자를 뽑아 약 190비트다(Better Auth와 같음).
+// 영문 대소문자와 숫자 62종에서 32자를 뽑아 약 190비트다(Better Auth와 같음).
 const TOKEN_LENGTH = 32;
 
 /** 세션 토큰을 새로 만든다. randomInt는 모듈로 편향 없이 고르게 뽑는다. */
@@ -260,7 +260,7 @@ const char = TOKEN_ALPHABET[byte % 62];</code></pre>
           </p>
           <div class="callout">
             <p>
-              <strong>Better Auth와 같다.</strong> 영숫자 62종 32글자, 약 190비트라는 토큰 모양을 그대로 가져왔다.
+              <strong>Better Auth와 같다.</strong> 영문 대소문자와 숫자 62종으로 된 32글자, 약 190비트라는 토큰 모양을 그대로 가져왔다.
             </p>
           </div>
         </section>
@@ -331,7 +331,7 @@ export function readSignedSessionToken({
           <ol class="steps blue">
             <li>
               <strong>마지막 <code>.</code>에서 나눈다</strong>
-              토큰 알파벳(영숫자)에도, base64 알파벳(영숫자와 <code>+ / =</code>)에도 <code>.</code>은 없다. 그래서 정상 쿠키에는
+              토큰 알파벳(영문 대소문자와 숫자)에도, base64 알파벳(영문 대소문자, 숫자, <code>+ / =</code>)에도 <code>.</code>은 없다. 그래서 정상 쿠키에는
               <code>.</code>이 정확히 하나 있고 그 자리가 경계다. <code>separator &lt;= 0</code>은 <code>.</code>이 없거나(-1) 맨 앞에
               있어 토큰이 빈 문자열인 경우(0)다. 둘 다 서명을 볼 것도 없이 <code>null</code>이다.
             </li>

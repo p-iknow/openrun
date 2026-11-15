@@ -378,7 +378,7 @@ export async function verifyPassword({
             새로 만든 키(<code>actual</code>)는 늘 64바이트지만, 저장된 키(<code>expected</code>)는 DB 값이 깨졌다면 다를 수 있다.
             예를 들어 hex가 아닌 글자가 섞이면 <code>Buffer.from</code>은 그 앞까지만 읽는다(<code>Buffer.from('12zz', 'hex')</code>는
             1바이트). 길이 검사를 <code>&amp;&amp;</code> 앞에 두면 이런 경우 예외 대신 <code>false</code>가 나와, 로그인 요청이
-            500이 아니라 401로 끝난다. 길이는 비밀이 아니므로(정상이면 늘 64) 길이를 먼저 비교해 시간이 달라져도 새는 정보가 없다.
+            500이 아니라 401로 끝난다. 길이는 비밀이 아니므로(정상이면 늘 64) 길이를 먼저 비교해 시간이 달라져도 드러나는 정보가 없다.
           </p>
         </section>
 

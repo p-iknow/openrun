@@ -286,9 +286,44 @@ where ("users"."email" = $1 and "accounts"."provider" = $2)
         <section id="issue">
           <h2>세션 발급</h2>
           <p>
-            누구인지 확인했으면 <code>SessionManager.issue</code>가 세션을 만든다. 순서는 아래와 같다. 각 단계의 이유는
+            누구인지 확인했으면 <code>SessionManager.issue</code>가 세션을 만든다. 각 단계의 이유는
             <a href="05-세션-토큰-만들기-서명-저장.html">05 문서</a>(토큰)와 <a href="06-SessionManager-발급-확인-연장-폐기.html#issue">06 문서</a>(발급)에 있다.
           </p>
+          <div class="seq">
+            <ol class="seq-actors">
+              <li>브라우저</li>
+              <li>SessionManager</li>
+              <li>DB</li>
+            </ol>
+            <ol class="seq-steps">
+              <li class="seq-note">비밀번호 확인이 끝났다. 이제 <code>issue({ request, response, subjectId, rememberMe })</code></li>
+              <li data-at="2">이전 쿠키가 있나 <small>readToken(request)</small></li>
+              <li data-from="2" data-to="3">이전 세션 행 삭제 <small>deleteByTokenHash(이전 토큰의 해시) · 이전 쿠키가 있을 때만</small></li>
+              <li data-at="2">새 토큰을 만든다 <small>createSessionToken() → aB3xK9pQuNYD…</small></li>
+              <li data-at="2">토큰을 해시한다 <small>hashSessionToken(token) → cfba0e82…</small></li>
+              <li data-from="2" data-to="3">sessions 행 저장 <small>token_hash, user_id, expires_at, remember_me, IP, User-Agent</small></li>
+              <li data-at="2">토큰에 서명한다 <small>signSessionToken({ token, secret }) → aB3xK9pQ….gvaibV…</small></li>
+              <li class="reply" data-from="2" data-to="1">Set-Cookie <small>openrun.session_token=토큰.서명</small></li>
+            </ol>
+          </div>
+          <p>
+            새 토큰 하나가 두 갈래로 나뉜다는 것이 핵심이다. DB에는 해시를, 브라우저에는 서명을 붙인 원문을 보낸다. 아래 값은
+            실제로 계산한 것이다(서명은 예시 비밀키로 만들었다).
+          </p>
+          <div class="pipe">
+            <div class="pipe-row">
+              <span class="pipe-label">DB로 가는 갈래</span>
+              <span class="pipe-val secret">aB3xK9pQuNYDrgTdxQwiH5Ect3qKdnvl<small>createSessionToken()</small></span>
+              <span class="pipe-fn">SHA-256</span>
+              <span class="pipe-val">cfba0e82d48e53b7681546b8376dec3dd98b77c57ca07d136c74f582bb2e9522<small>sessions.token_hash (hex 64자)</small></span>
+            </div>
+            <div class="pipe-row">
+              <span class="pipe-label">브라우저로 가는 갈래</span>
+              <span class="pipe-val secret">aB3xK9pQuNYDrgTdxQwiH5Ect3qKdnvl<small>같은 토큰</small></span>
+              <span class="pipe-fn green">HMAC-SHA256 + AUTH_SECRET</span>
+              <span class="pipe-val ok">aB3xK9pQuNYDrgTdxQwiH5Ect3qKdnvl.gvaibVCtyOHsrg54mOTHnOlmlcBeCOECWmgPMwZhPVk=<small>쿠키 값 = 토큰 + "." + 서명(base64 44자)</small></span>
+            </div>
+          </div>
           <ol class="steps green">
             <li>
               <strong>이전 세션이 있으면 지운다</strong>
@@ -298,7 +333,7 @@ where ("users"."email" = $1 and "accounts"."provider" = $2)
             </li>
             <li>
               <strong>토큰을 새로 만든다</strong>
-              영숫자 32자를 무작위로 뽑는다. 추측할 수 없을 만큼 경우의 수가 많다(약 190비트).
+              영문 대소문자와 숫자(a-z, A-Z, 0-9의 62종) 중에서 32자를 무작위로 뽑는다. 추측할 수 없을 만큼 경우의 수가 많다(약 190비트).
             </li>
             <li>
               <strong>DB에는 토큰의 해시만 넣는다</strong>
@@ -311,37 +346,150 @@ where ("users"."email" = $1 and "accounts"."provider" = $2)
               보기 전에 거를 수 있다.
             </li>
           </ol>
+          <p>실제 코드다. 주석의 번호가 위 단계 번호다.</p>
+          <pre><code class="language-ts">// apps/api/src/auth/session-manager.ts
+async issue({ request, response, subjectId, rememberMe }) {
+  const { store, secret, clock, getPolicy } = this.options;
+
+  // 1. 이전 세션이 있으면 지운다
+  const previousToken = this.readToken(request);
+  if (previousToken) {
+    await store.deleteByTokenHash(hashSessionToken(previousToken));
+  }
+
+  // 2. 토큰을 새로 만든다
+  const token = createSessionToken();
+
+  // 3. DB에는 토큰의 해시만 넣는다
+  const policy = getPolicy({ rememberMe }); // 7일 또는 1일
+  await store.create({
+    tokenHash: hashSessionToken(token),
+    subjectId,
+    expiresAt: new Date(clock.now().getTime() + policy.expiresInMs),
+    rememberMe,
+    ipAddress: request.ip ?? null,
+    userAgent: request.get('user-agent') ?? null,
+  });
+
+  // 4. 쿠키에는 토큰과 서명을 넣는다
+  this.setCookie({
+    response,
+    value: signSessionToken({ token, secret }),
+    policy,
+  });
+}</code></pre>
+          <p>안에서 부르는 세 함수는 각각 한 줄짜리다.</p>
+          <pre><code class="language-ts">// apps/api/src/auth/session-token.ts
+const TOKEN_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+
+// 62종 중 하나를 32번 뽑아 잇는다
+export function createSessionToken() {
+  return Array.from({ length: 32 }, () => TOKEN_ALPHABET[randomInt(62)]).join('');
+}
+
+// SHA-256 해시(hex 64자). DB에 넣고 찾을 때 쓴다
+export function hashSessionToken(token) {
+  return createHash('sha256').update(token).digest('hex');
+}
+
+// "토큰.서명". 서명은 AUTH_SECRET으로 만든 HMAC-SHA256의 base64다
+export function signSessionToken({ token, secret }) {
+  const signature = createHmac('sha256', secret).update(token).digest('base64');
+  return `${token}.${signature}`;
+}</code></pre>
+          <p>
+            읽기 쉽게 타입과 상수 이름을 줄였다. <code>signSessionToken</code>은 실제로는 서명 계산을 <code>getSignature</code>로 나눠 두었다.
+          </p>
+          <h3>발급이 끝나면 남는 것</h3>
+          <p>
+            <code>issue()</code>가 끝나면 서버 메모리에는 토큰이 남지 않는다. 토큰의 흔적은 두 곳에만 있고, 둘은 무게가 다르다.
+            누가 그 값을 훔쳤을 때 무슨 일이 생기는지로 비교하면 차이가 분명하다.
+          </p>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>어디에</th><th>무엇이</th><th>예</th></tr></thead>
+              <thead><tr><th>어디에</th><th>무엇이</th><th>예</th><th>훔치면</th></tr></thead>
               <tbody>
-                <tr><td>브라우저 쿠키</td><td>토큰 원문 + 서명</td><td><code>aB3x…Q9.5Jd…=</code></td></tr>
-                <tr><td>DB <code>sessions.token_hash</code></td><td>토큰의 SHA-256(hex)</td><td><code>9f2c…e1</code> (64자)</td></tr>
+                <tr>
+                  <td>브라우저 쿠키</td><td>토큰 원문 + 서명</td><td><code>aB3xK9pQ….gvaibV…=</code></td>
+                  <td>그대로 쿠키에 넣으면 그 사용자로 로그인된다. 그래서 <a href="07-세션-쿠키-설정.html#httponly">HttpOnly</a>와 <a href="07-세션-쿠키-설정.html#secure">Secure</a>로 쿠키가 새어 나가지 않게 지킨다</td>
+                </tr>
+                <tr>
+                  <td>DB <code>sessions.token_hash</code></td><td>토큰의 SHA-256(hex)</td><td><code>cfba0e82…</code> (64자)</td>
+                  <td>로그인할 수 없다. 해시에서 토큰 원문을 되살릴 수 없고, 서명을 만들 <code>AUTH_SECRET</code>도 DB에 없다</td>
+                </tr>
               </tbody>
             </table>
           </div>
-          <p>둘 중 하나만 손에 넣어서는 로그인할 수 없다. 쿠키는 브라우저에, 해시는 DB에 있다.</p>
+          <p>
+            로그인에 쓸 수 있는 값은 브라우저 쿠키 하나뿐이다. DB가 통째로 유출돼도 세션을 가로챌 수 없게 하려고 원문 대신 해시를
+            저장한다.
+          </p>
         </section>
 
         <section id="response">
           <h2>응답</h2>
           <p>
-            마지막으로 <code>findSessionUser</code>가 사용자 행을 읽어 본문을 만든다. 로컬 개발 환경(<code>http://localhost</code>)의 응답은
-            이렇다.
+            로그인 응답은 헤더의 <code>Set-Cookie</code>와 JSON 본문 두 부분이다. 둘은 서로 다른 코드에서 만들어져 하나의 응답으로
+            합쳐진다. 로컬 개발 환경(<code>http://localhost</code>)에서 실제로 받는 응답은 이렇다.
           </p>
           <pre><code>HTTP/1.1 200 OK
-Set-Cookie: openrun.session_token=&lt;토큰 32자&gt;.&lt;서명&gt;; Max-Age=604800; Path=/; Expires=Sun, 22 Nov 2026 03:00:00 GMT; HttpOnly; SameSite=Lax
+Set-Cookie: openrun.session_token=aB3xK9pQ….gvaibV…%3D; Max-Age=604800; Path=/; Expires=Sun, 22 Nov 2026 03:00:00 GMT; HttpOnly; SameSite=Lax
 Content-Type: application/json; charset=utf-8
 
 {"user": {"id": 1, "email": "kim@example.com", "name": "김오픈", "emailVerified": true}}</code></pre>
+          <h3>두 부분은 어디서 오나</h3>
+          <div class="seq">
+            <ol class="seq-actors">
+              <li>AuthController.signIn</li>
+              <li>SessionManager</li>
+              <li>UsersService</li>
+              <li>Nest와 Express</li>
+            </ol>
+            <ol class="seq-steps">
+              <li data-from="1" data-to="2">issue({ request, response, … })</li>
+              <li data-at="2">response.cookie(이름, 값, 옵션) <small>응답 객체에 Set-Cookie를 얹어 두기만 한다</small></li>
+              <li class="reply" data-from="2" data-to="1">끝</li>
+              <li data-from="1" data-to="3">findSessionUser(userId)</li>
+              <li data-at="3">users 행을 읽어 본문 모양으로 바꾼다</li>
+              <li class="reply" data-from="3" data-to="1">{ id, email, name, emailVerified }</li>
+              <li data-from="1" data-to="4">return { user } <small>@Res({ passthrough: true })라 반환값이 본문이 된다</small></li>
+              <li data-at="4">얹어 둔 헤더 + JSON 본문을 함께 보낸다 <small>200 OK</small></li>
+            </ol>
+          </div>
+          <p>
+            <code>issue()</code>는 쿠키를 응답 객체에 얹어 둘 뿐 응답을 보내지 않는다. 응답은 컨트롤러가 <code>return</code>한 뒤 Nest가
+            한 번에 보낸다. 그래서 쿠키를 얹는 코드와 본문을 만드는 코드가 따로 있어도 하나의 응답이 된다.
+          </p>
+          <h3>Set-Cookie 한 줄 뜯어 보기</h3>
+          <p>헤더의 조각마다 그 값을 정한 코드를 아래에 적었다.</p>
+          <div class="anatomy">
+            <span class="part green" data-label="cookie.name">openrun.session_token</span><span class="part dim" data-label="">=</span><span class="part green" data-label="signSessionToken()">aB3xK9pQ….gvaibV…%3D</span><span class="part dim" data-label="">;&nbsp;</span><span class="part blue" data-label="maxAge (rememberMe일 때만)">Max-Age=604800</span><span class="part dim" data-label="">;&nbsp;</span><span class="part blue" data-label="path: '/'">Path=/</span><span class="part dim" data-label="">;&nbsp;</span><span class="part blue" data-label="Express가 maxAge로 계산">Expires=Sun, 22 Nov 2026 …</span><span class="part dim" data-label="">;&nbsp;</span><span class="part blue" data-label="httpOnly: true">HttpOnly</span><span class="part dim" data-label="">;&nbsp;</span><span class="part blue" data-label="sameSite: 'lax'">SameSite=Lax</span>
+            <span class="anatomy-caption">초록은 쿠키 자체(이름과 값), 파랑은 브라우저에게 주는 보관 규칙이다.</span>
+          </div>
+          <p>이 조각들을 만드는 코드는 <code>SessionManager</code>의 두 메서드다.</p>
+          <pre><code class="language-ts">// apps/api/src/auth/session-manager.ts
+private setCookie({ response, value, policy }) {
+  response.cookie(this.options.cookie.name, value, {
+    ...this.buildCookieOptions(),
+    // rememberMe를 켰을 때만 maxAge를 준다(밀리초). Express가 Max-Age(초)와 Expires로 바꿔 적는다
+    ...(policy.persistentCookie &amp;&amp; { maxAge: policy.expiresInMs }),
+  });
+}
+
+private buildCookieOptions() {
+  const { domain, secure } = this.options.cookie;
+  return {
+    httpOnly: true,
+    sameSite: 'lax',
+    path: '/',
+    secure, // 운영에서만 true
+    ...(domain &amp;&amp; { domain }), // 운영에서만 COOKIE_DOMAIN
+  };
+}</code></pre>
           <ul>
             <li>
-              <code>Max-Age=604800</code>은 7일(초)이다. <code>rememberMe: false</code>면 <code>Max-Age</code>와 <code>Expires</code>가 없어
-              브라우저를 닫을 때 사라지는 쿠키가 된다.
-            </li>
-            <li>
-              <code>HttpOnly</code>라 페이지의 자바스크립트가 이 쿠키를 읽을 수 없다. 로그인 화면은 쿠키 대신 본문의 <code>user</code>로 누가
-              로그인했는지 안다.
+              <code>Max-Age=604800</code>은 7일을 초로 적은 것이다(7 × 24 × 60 × 60). <code>rememberMe: false</code>면
+              <code>maxAge</code>를 주지 않아 <code>Max-Age</code>와 <code>Expires</code>가 빠지고, 브라우저를 닫을 때 사라지는 쿠키가 된다.
             </li>
             <li>
               운영 환경에서는 이름이 <code>__Secure-openrun.session_token</code>이 되고 <code>Secure</code>와 <code>Domain</code>이 붙는다.
@@ -349,10 +497,44 @@ Content-Type: application/json; charset=utf-8
             </li>
             <li>
               서명은 base64라 <code>+</code>, <code>/</code>, <code>=</code>가 섞이는데, Express가 쿠키 값을 URL 인코딩해(<code>%2B</code>,
-              <code>%2F</code>, <code>%3D</code>) 내려보낸다. 다음 요청에서 서버가 쿠키를 읽을 때 다시 디코딩하므로 신경 쓸 일은 없다.
+              <code>%2F</code>, <code>%3D</code>) 내려보낸다. 위 값 끝의 <code>%3D</code>가 <code>=</code>다. 다음 요청에서 서버가 쿠키를
+              읽을 때 다시 디코딩하므로 신경 쓸 일은 없다.
             </li>
           </ul>
-          <p>본문 모양과 <code>emailVerified</code>가 들어간 이유는 <a href="09-인증-API-응답-설계.html#session-dto">09 문서</a>에 있다.</p>
+          <h3>본문 만들기</h3>
+          <p>
+            본문은 <code>findSessionUser</code>가 <code>users</code> 행을 읽어 만든다. DB 칸을 그대로 내보내지 않고, 화면에 필요한 모양으로
+            바꾼다.
+          </p>
+          <div class="pipe">
+            <div class="pipe-row">
+              <span class="pipe-label">DB 행에서 응답 본문으로</span>
+              <span class="pipe-val">email_verified_at: 2026-11-10 09:12<small>users 행 (인증 안 했으면 null)</small></span>
+              <span class="pipe-fn">!== null</span>
+              <span class="pipe-val ok">emailVerified: true<small>응답 본문</small></span>
+            </div>
+          </div>
+          <pre><code class="language-ts">// apps/api/src/users/users.service.ts
+async findSessionUser(userId: number): Promise&lt;SessionUserDto&gt; {
+  const [user] = await this.db
+    .select({ id: users.id, email: users.email, name: users.name, emailVerifiedAt: users.emailVerifiedAt })
+    .from(users)
+    .where(eq(users.id, userId));
+  if (!user?.email) {
+    throw new Error(`세션의 사용자를 찾지 못했습니다: ${userId}`);
+  }
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    emailVerified: user.emailVerifiedAt !== null,
+  };
+}</code></pre>
+          <p>
+            쿠키는 <code>HttpOnly</code>라 페이지의 자바스크립트가 읽을 수 없다. 그래서 로그인 화면은 쿠키가 아니라 이 본문의
+            <code>user</code>로 누가 로그인했는지 안다. 본문 모양과 <code>emailVerified</code>가 들어간 이유는
+            <a href="09-인증-API-응답-설계.html#session-dto">09 문서</a>에 있다.
+          </p>
         </section>
 
         <section id="next-request">

@@ -1017,6 +1017,340 @@ details.fold {
   border-top: 0;
 }
 
+/* 요청 장면: 어떤 페이지에서 어떤 요청이 어디로 가고, 브라우저가 어떻게 판정하는지 */
+.scenes {
+  display: grid;
+  gap: 0.75rem;
+  margin: 1.25rem 0;
+}
+.scene {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 11rem minmax(0, 10rem);
+  align-items: center;
+  gap: 0 0.5rem;
+  padding: 0.85rem;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--green);
+  border-radius: 8px;
+  background: var(--code-bg);
+}
+.scene.cross {
+  border-left-color: var(--warn);
+}
+.scene.danger {
+  border-left-color: var(--accent);
+}
+.scene-title {
+  grid-column: 1 / -1;
+  margin-bottom: 0.6rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.scene-browser {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.scene-url {
+  padding: 0.3rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.scene-url::before {
+  content: "";
+  display: inline-block;
+  margin-right: 0.45rem;
+  width: 2.1rem;
+  height: 0.5rem;
+  background:
+    radial-gradient(circle, #e0605a 0.22rem, transparent 0.24rem) 0 50% / 0.7rem 0.5rem no-repeat,
+    radial-gradient(circle, #e4b23c 0.22rem, transparent 0.24rem) 0.7rem 50% / 0.7rem 0.5rem no-repeat,
+    radial-gradient(circle, #4fb05f 0.22rem, transparent 0.24rem) 1.4rem 50% / 0.7rem 0.5rem no-repeat;
+}
+.scene-page {
+  padding: 0.55rem 0.6rem;
+  font-size: 0.85rem;
+}
+.scene-url b,
+.scene-server b {
+  padding: 0 0.15rem;
+  border-radius: 3px;
+  background: var(--blue-bg);
+  color: var(--blue);
+  font-weight: 600;
+}
+.scene.cross .scene-url b,
+.scene.danger .scene-url b {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+.scene-req {
+  position: relative;
+  padding-bottom: 0.7rem;
+  text-align: center;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.72rem;
+  line-height: 1.3;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.scene-req::after {
+  content: "";
+  position: absolute;
+  left: 0.2rem;
+  right: 0.55rem;
+  bottom: 0.3rem;
+  border-top: 2px solid var(--muted);
+}
+.scene-req::before {
+  content: "";
+  position: absolute;
+  right: 0.2rem;
+  bottom: calc(0.3rem - 4px);
+  border: 5px solid transparent;
+  border-left: 8px solid var(--muted);
+  border-right: 0;
+}
+.scene-server {
+  padding: 0.55rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  text-align: center;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+.scene-server small {
+  display: block;
+  margin-top: 0.15rem;
+  font-family: system-ui, sans-serif;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+.scene-foot {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem 1rem;
+  margin-top: 0.7rem;
+  padding-top: 0.6rem;
+  border-top: 1px dashed var(--border);
+  font-size: 0.85rem;
+}
+.scene-verdict strong {
+  color: var(--green);
+}
+.scene.cross .scene-verdict strong {
+  color: var(--warn);
+}
+.scene.danger .scene-verdict strong {
+  color: var(--accent);
+}
+.scene-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.scene-chips[data-legend]::before {
+  content: attr(data-legend);
+  align-self: center;
+  margin-right: 0.15rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.scene-chips li {
+  margin: 0;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+.scene-chips li.yes {
+  background: var(--green-bg);
+  color: var(--green);
+}
+.scene-chips li.yes::before {
+  content: "✓ ";
+}
+.scene-chips li.no {
+  background: var(--diff-del-bg);
+  color: var(--accent);
+}
+.scene-chips li.no::before {
+  content: "✕ ";
+}
+@media (max-width: 640px) {
+  .scene {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .scene-req {
+    margin: 0.4rem 0;
+  }
+}
+
+/* 변환 줄: 값이 함수를 지나 어떻게 바뀌는지 */
+.pipe {
+  display: grid;
+  gap: 0.6rem;
+  margin: 1.25rem 0;
+  padding: 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--code-bg);
+}
+.pipe-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0;
+}
+.pipe-label {
+  flex-basis: 100%;
+  margin-bottom: 0.1rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+.pipe-val {
+  padding: 0.3rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.pipe-val small {
+  display: block;
+  font-family: system-ui, sans-serif;
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+.pipe-val.secret {
+  border-color: var(--warn);
+  background: var(--warn-bg);
+}
+.pipe-val.ok {
+  border-color: var(--green);
+  background: var(--green-bg);
+}
+.pipe-val.bad {
+  border-color: var(--accent);
+  background: var(--diff-del-bg);
+}
+.pipe-fn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  margin: 0 0.35rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  background: var(--blue-bg);
+  color: var(--blue);
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.pipe-fn::before {
+  content: "→";
+  margin-right: 0.4rem;
+  font-weight: 400;
+}
+.pipe-fn::after {
+  content: "→";
+  margin-left: 0.4rem;
+  font-weight: 400;
+}
+.pipe-fn.blocked {
+  background: var(--diff-del-bg);
+  color: var(--accent);
+  text-decoration: line-through;
+}
+.pipe-fn.blocked::before,
+.pipe-fn.blocked::after {
+  content: "✕";
+  text-decoration: none;
+}
+.pipe-fn.green {
+  background: var(--green-bg);
+  color: var(--green);
+}
+.pipe-note {
+  margin-left: 0.6rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+/* 해부도: 한 값을 부분으로 나누고 부분마다 이름을 단다 */
+.anatomy {
+  display: flex;
+  flex-wrap: wrap;
+  row-gap: 0.4rem;
+  margin: 1.25rem 0;
+  padding: 1rem 0.9rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--code-bg);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9rem;
+}
+.anatomy .part {
+  --part-color: var(--border);
+  display: inline-flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 0.2rem 0.15rem 0;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.anatomy .part::after {
+  content: attr(data-label);
+  margin-top: 0.3rem;
+  padding: 0.3rem 0.25rem 0;
+  border-top: 3px solid var(--part-color);
+  font-family: system-ui, sans-serif;
+  font-size: 0.7rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.anatomy .part[data-label=""]::after {
+  border-top-color: transparent;
+}
+.anatomy .part.blue {
+  --part-color: var(--blue);
+  color: var(--blue);
+}
+.anatomy .part.green {
+  --part-color: var(--green);
+  color: var(--green);
+}
+.anatomy .part.warn {
+  --part-color: var(--warn);
+  color: var(--warn);
+}
+.anatomy .part.dim {
+  color: var(--muted);
+}
+.anatomy-caption {
+  flex-basis: 100%;
+  margin-top: 0.4rem;
+  font-family: system-ui, sans-serif;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
 @media (max-width: 900px) {
   .layout {
     display: block;

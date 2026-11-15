@@ -12,7 +12,7 @@
 
 ## 결론
 
-- **세션은 DB 행이고, 쿠키에는 불투명 토큰만 담는다.** 토큰은 영숫자 62종에서 32자를 뽑은 문자열(약 190비트)이고, **DB에는 해시 없이 원문 그대로** `token` 컬럼(unique)에 저장한다.
+- **세션은 DB 행이고, 쿠키에는 불투명 토큰만 담는다.** 토큰은 영문 대소문자와 숫자 62종에서 32자를 뽑은 문자열(약 190비트)이고, **DB에는 해시 없이 원문 그대로** `token` 컬럼(unique)에 저장한다.
 - **세션 쿠키는 `토큰.HMAC서명` 형식으로 서명한다.** HMAC-SHA256(키는 `BETTER_AUTH_SECRET`), 서명은 base64(패딩 포함 44자), 전체를 URL 인코딩한다. 속성 기본값은 `HttpOnly`, `SameSite=Lax`, `Path=/`, HTTPS면 `Secure`와 `__Secure-` 접두사.
 - **만료는 7일, 슬라이딩 갱신은 하루에 한 번.** 마지막 갱신 뒤 `updateAge`(1일)가 지난 요청에서 `expiresAt`을 `지금 + expiresIn`으로 다시 쓴다. `freshAge`(1일)는 `createdAt` 기준이고 갱신으로 늘지 않으며, 세션 목록 조회와 계정 연결 해제 같은 민감 작업에만 쓴다.
 - **쿠키 캐시는 세션 행과 사용자 행 전체를 서명(또는 암호화)해 두 번째 쿠키(`session_data`)에 넣는다.** 기본은 꺼져 있고, 켜면 기본 `maxAge` 5분, 기본 전략 `compact`(base64url JSON + HMAC-SHA256)다. `jwt`(HS256), `jwe`(A256CBC-HS512 + HKDF)도 있다. 캐시가 유효하면 DB를 조회하지 않는다.
@@ -44,7 +44,7 @@
 - `packages/better-auth/src/db/internal-adapter.ts` `createSession`(553행~)의 603행이 `token: generateId(32)`다.
 - `generateId`(`packages/core/src/utils/id.ts`)는 `createRandomStringGenerator("a-z", "A-Z", "0-9")(32)`다.
 - `@better-auth/utils` v0.5.1 `src/random.ts`는 `crypto.getRandomValues`로 바이트를 뽑고 `maxValid = floor(256/62)*62` 이상인 바이트를 버려 모듈로 편향을 없앤다.
-- 결과: 영숫자 32자, 엔트로피 32 × log2(62) ≈ **190.5비트**. 인코딩은 base64나 hex가 아니라 영숫자 문자열 그 자체다.
+- 결과: 영문 대소문자와 숫자 32자, 엔트로피 32 × log2(62) ≈ **190.5비트**. 인코딩은 base64나 hex가 아니라 영문 대소문자와 숫자로 된 문자열 그 자체다.
 - `ipAddress`는 요청 헤더에서 뽑은 IP(기본 `X-Forwarded-For`), `userAgent`는 `user-agent` 헤더를 그대로 넣는다(같은 함수 590-591행).
 - `rememberMe: false`로 로그인하면 `expiresAt`을 1일로 두고(597-599행) 쿠키를 세션 쿠키(`Max-Age` 없음)로 만든다.
 

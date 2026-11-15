@@ -7,7 +7,7 @@ import {
 
 const TOKEN_ALPHABET =
   'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-// 영숫자 62종에서 32자를 뽑아 약 190비트다(Better Auth와 같음).
+// 영문 대소문자와 숫자 62종에서 32자를 뽑아 약 190비트다(Better Auth와 같음).
 const TOKEN_LENGTH = 32;
 
 /** 세션 토큰을 새로 만든다. randomInt는 모듈로 편향 없이 고르게 뽑는다. */
