@@ -325,6 +325,25 @@ export class LoginGuard implements CanActivate {
               켜질 때 "Nest can't resolve dependencies of the LoginGuard" 오류가 난다.
             </p>
           </div>
+          <h3 id="guard-instance">인스턴스는 모듈마다 하나</h3>
+          <p>
+            가드가 쓰는 쪽 모듈에서 만들어진다면, 다른 프로바이더처럼 앱에 하나만 있는 싱글턴이 아니라 붙일 때마다 새로 만들어지는 걸까?
+            답은 그 중간이다. 붙일 때마다 새로 만들지는 않는다. 모듈이 가드를 등록할 때 가드 클래스를 키로 이미 등록된 것이 있는지 먼저 보고, 있으면 그것을
+            쓴다(<code>injector/module.js</code>의 <code>addInjectable</code>). 그래서 같은 모듈 안에서는 여러 컨트롤러에 붙여도 인스턴스가
+            하나이고, 모듈이 다르면 따로 만들어진다.
+          </p>
+          <pre><code class="language-ts">// OrdersModule
+@UseGuards(LoginGuard) class OrdersController {}  // ┐ OrdersModule의 LoginGuard 하나를
+@UseGuards(LoginGuard) class RefundsController {} // ┘ 함께 쓴다
+
+// ReviewsModule
+@UseGuards(LoginGuard) class ReviewsController {} // ReviewsModule의 LoginGuard (위와 다른 객체)</code></pre>
+          <p>
+            스코프는 가드 클래스의 스코프를 따르므로, 따로 정하지 않으면 그 모듈 안의 싱글턴이다. 요청마다 새로 만드는 것은
+            <code>@Injectable({ scope: Scope.REQUEST })</code>를 붙였을 때뿐이다. 가드 인스턴스가 모듈마다 따로여도, 생성자로 받는
+            프로바이더가 <code>exports</code>로 공유된 것이면 모두 같은 객체를 받는다. 그래서 상태를 가드 필드가 아니라 주입받은
+            프로바이더에 두면 모듈이 달라도 동작이 같다.
+          </p>
         </section>
 
         <section id="param-decorator">

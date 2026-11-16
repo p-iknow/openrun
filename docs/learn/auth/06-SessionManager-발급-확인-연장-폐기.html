@@ -131,61 +131,130 @@
           </p>
           <pre><code class="language-ts">// apps/api/src/auth/session-manager.ts
 /** 세션 하나의 만료와 연장 규칙. */
-export interface SessionPolicy {
+interface SessionPolicyBase {
   expiresInMs: number;
-  /** 마지막 연장 뒤 이만큼 지난 첫 요청에서 만료를 지금부터 expiresInMs로 다시 쓴다. null이면 연장하지 않는다. */
-  updateAgeMs: number | null;
   /** true면 쿠키에 Max-Age(expiresInMs)를 둔다. false면 브라우저를 닫을 때 사라지는 쿠키다. */
   persistentCookie: boolean;
-}</code></pre>
+}
+
+/**
+ * 쓰는 동안 만료를 늦추는 정책(sliding expiration).
+ * 만료가 "마지막으로 쓴 때"를 따라 미끄러지듯 뒤로 밀린다. 예: 유지 기간 7일, 연장 간격 1일이면
+ * 로그인하고 1일이 지난 뒤의 첫 요청에서 만료를 그 요청부터 7일로 다시 정한다. 그래서 계속 쓰면 끝나지 않고,
+ * 마지막으로 쓴 뒤 6~7일 동안 쓰지 않으면 끝난다.
+ */
+export interface SlidingSessionPolicy extends SessionPolicyBase {
+  kind: 'sliding';
+  /** 마지막으로 만료를 정한 뒤 이만큼 지난 첫 요청에서 만료를 지금부터 expiresInMs로 다시 쓴다. */
+  updateAgeMs: number;
+}
+
+/**
+ * 발급할 때 정한 만료를 늦추지 않는 정책(fixed expiration).
+ * 요청을 얼마나 자주 보내든 만료는 "로그인한 때 + 유지 기간"에 고정된다. 예: 유지 기간 1일이면 계속 써도
+ * 로그인하고 1일 뒤에 끝난다.
+ */
+export interface FixedSessionPolicy extends SessionPolicyBase {
+  kind: 'fixed';
+}
+
+/** 세션 하나의 만료와 연장 규칙. */
+export type SessionPolicy = SlidingSessionPolicy | FixedSessionPolicy;</code></pre>
+          <p>
+            연장하는지는 <code>kind</code>로 나눈다. 연장 간격 <code>updateAgeMs</code>는 연장하는 정책(<code>'sliding'</code>)에만
+            있으므로, 연장하지 않는 정책(<code>'fixed'</code>)에 간격을 잘못 적거나 연장하는 정책에서 간격을 빠뜨리면 타입 검사에서
+            걸린다.
+          </p>
           <pre><code class="language-ts">// apps/api/src/users/user-session.ts
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 // 로그인 상태 유지를 켜면 7일 동안 유지하고, 마지막 연장 뒤 1일이 지난 첫 요청에서 다시 7일로 연장한다(Better Auth와 같음).
 const REMEMBERED_POLICY: SessionPolicy = {
+  kind: 'sliding',
   expiresInMs: 7 * DAY_MS,
   updateAgeMs: DAY_MS,
   persistentCookie: true,
 };
 // 끄면 1일 뒤 끝나고 연장하지 않는다. 쿠키에 Max-Age가 없어 브라우저를 닫으면 사라진다.
 const NOT_REMEMBERED_POLICY: SessionPolicy = {
+  kind: 'fixed',
   expiresInMs: DAY_MS,
-  updateAgeMs: null,
   persistentCookie: false,
 };</code></pre>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th></th>
-                  <th>로그인 상태 유지 켬</th>
-                  <th>로그인 상태 유지 끔</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td><code>expiresInMs</code> (유지 기간)</td>
-                  <td>7일</td>
-                  <td>1일</td>
-                </tr>
-                <tr>
-                  <td><code>updateAgeMs</code> (연장 간격)</td>
-                  <td>1일: 마지막 연장 뒤 1일이 지난 첫 요청에서 다시 7일로</td>
-                  <td><code>null</code>: 연장하지 않음</td>
-                </tr>
-                <tr>
-                  <td><code>persistentCookie</code></td>
-                  <td><code>true</code>: 쿠키에 <code>Max-Age</code> 7일</td>
-                  <td><code>false</code>: 브라우저를 닫으면 사라지는 쿠키</td>
-                </tr>
-                <tr>
-                  <td>결과</td>
-                  <td>7일 안에 한 번이라도 쓰면 계속 로그인돼 있다</td>
-                  <td>길어야 1일, 브라우저를 닫으면 그 전에 끝난다</td>
-                </tr>
-              </tbody>
-            </table>
+          <div class="compare">
+            <div class="compare-card blue">
+              <div class="compare-title">로그인 상태 유지 켬<small>REMEMBERED_POLICY</small></div>
+              <dl class="compare-facts">
+                <dt>유지 기간 <code>expiresInMs</code></dt>
+                <dd><strong>7일</strong></dd>
+                <dt>연장 <code>kind: 'sliding'</code>, <code>updateAgeMs</code></dt>
+                <dd>
+                  <strong>1일</strong> 남은 기간이 6일 이하로 줄면 다음 요청에서 다시 7일로 채운다. 요청마다 채우면 요청마다 DB를 써야
+                  해서 하루 한 번 이하로 줄였다(<a href="#sliding">연장</a>)
+                </dd>
+                <dt>쿠키 <code>persistentCookie</code></dt>
+                <dd><strong>Max-Age 7일</strong> 브라우저를 닫아도 남는다</dd>
+              </dl>
+              <p class="compare-result">쓰는 동안은 계속 로그인돼 있다. 마지막으로 쓴 뒤 6~7일 동안 쓰지 않으면 끝난다</p>
+            </div>
+            <div class="compare-card green">
+              <div class="compare-title">로그인 상태 유지 끔<small>NOT_REMEMBERED_POLICY</small></div>
+              <dl class="compare-facts">
+                <dt>유지 기간 <code>expiresInMs</code></dt>
+                <dd><strong>1일</strong></dd>
+                <dt>연장 <code>kind: 'fixed'</code></dt>
+                <dd><strong>없음</strong> 써도 만료가 늦춰지지 않는다</dd>
+                <dt>쿠키 <code>persistentCookie</code></dt>
+                <dd><strong>Max-Age 없음</strong> 브라우저를 닫으면 사라진다</dd>
+              </dl>
+              <p class="compare-result">로그인하고 길어야 1일. 브라우저를 닫으면 그 전에 끝난다</p>
+            </div>
           </div>
+          <p>
+            같은 사용자가 같은 때에 요청을 보내도 두 정책의 결과는 크게 다르다. 0.5일, 1.5일, 2.6일에 요청하고 그 뒤로 쓰지 않는
+            경우다.
+          </p>
+          <div class="timeline" style="--tl-max: 10; --tl-label: 9rem" data-unit="일">
+            <div class="tl-row">
+              <span class="tl-label">요청</span>
+              <div class="tl-track">
+                <span class="tl-event" style="--at: 0">로그인</span>
+                <span class="tl-event" style="--at: 0.5">요청</span>
+                <span class="tl-event" style="--at: 1.5">요청 → 연장</span>
+                <span class="tl-event" style="--at: 2.6">요청 → 연장</span>
+              </div>
+            </div>
+            <div class="tl-row">
+              <span class="tl-label blue">켬: 로그인 때 만료<small>0일 + 7일</small></span>
+              <div class="tl-track">
+                <span class="tl-bar faded" style="--from: 0; --to: 7">0일 ~ 7일 (1.5일에 대체됨)</span>
+              </div>
+            </div>
+            <div class="tl-row">
+              <span class="tl-label blue">켬: 1.5일 연장<small>1.5일 + 7일</small></span>
+              <div class="tl-track">
+                <span class="tl-bar faded" style="--from: 1.5; --to: 8.5">1.5일 ~ 8.5일 (2.6일에 대체됨)</span>
+              </div>
+            </div>
+            <div class="tl-row">
+              <span class="tl-label blue">켬: 2.6일 연장<small>마지막 요청 + 7일</small></span>
+              <div class="tl-track">
+                <span class="tl-bar blue" style="--from: 2.6; --to: 9.6">마지막 요청 2.6일부터 7일 → 9.6일에 만료</span>
+              </div>
+            </div>
+            <div class="tl-row tl-split">
+              <span class="tl-label green">끔<small>연장 없음</small></span>
+              <div class="tl-track">
+                <span class="tl-bar green" style="--from: 0; --to: 1">1일까지</span>
+                <span class="tl-event" style="--at: 1.5">요청 → 401, 다시 로그인</span>
+              </div>
+            </div>
+          </div>
+          <p>
+            켬은 0.5일에는 남은 기간이 6.5일이라 그냥 통과하고, 1.5일(남은 5.5일)과 2.6일(남은 5.9일)에 만료를 "그 요청부터
+            7일"로 다시 정한다. 새 만료가 옛 만료를 대신하므로 막대가 요청마다 오른쪽으로 밀려난다. 2.6일 뒤로 요청이 없으니 마지막
+            요청부터 7일인 9.6일에 끝난다. 끔은 1일에 끝나므로 1.5일 요청부터 로그인하지 않은 요청이 된다.
+          </p>
           <p>
             세션마다 정책이 다르므로 <code>SessionManager</code>는 정책 하나를 받지 않고 <strong>세션을 보고 정책을 고르는 함수
             <code>getPolicy</code></strong>를 받는다. 발급할 때는 요청 본문의 <code>rememberMe</code>로, 확인할 때는 DB 행에
@@ -202,7 +271,7 @@ const NOT_REMEMBERED_POLICY: SessionPolicy = {
             <code>AuthController.signIn</code>이 비밀번호를 확인해 사용자 id를 얻은 뒤 부른다. 여기서 <code>subjectId</code>는
             "이 세션의 주인"이다. 사용자 세션이면 사용자 id, 운영자 세션이면 운영자 id가 된다.
           </p>
-          <pre><code class="language-ts">// apps/api/src/auth/session-manager.ts
+          <pre><code class="language-ts" data-lines="15 21 23 25 34">// apps/api/src/auth/session-manager.ts
   /** 새 세션을 만들고 쿠키를 내린다. 요청에 이전 세션 쿠키가 있으면 그 세션은 지운다. */
   async issue({
     request,
@@ -216,13 +285,17 @@ const NOT_REMEMBERED_POLICY: SessionPolicy = {
     rememberMe: boolean;
   }): Promise&lt;void&gt; {
     const { store, secret, clock, getPolicy } = this.options;
+    // 1. 이전 세션 쿠키가 있으면 그 행을 지운다
     const previousToken = this.readToken(request);
     if (previousToken) {
       await store.deleteByTokenHash(hashSessionToken(previousToken));
     }
 
+    // 2. 새 토큰을 만든다
     const token = createSessionToken();
+    // 3. 정책으로 만료 일시를 정한다
     const policy = getPolicy({ rememberMe });
+    // 4. 행을 저장한다
     await store.create({
       tokenHash: hashSessionToken(token),
       subjectId,
@@ -231,6 +304,7 @@ const NOT_REMEMBERED_POLICY: SessionPolicy = {
       ipAddress: request.ip ?? null,
       userAgent: request.get('user-agent') ?? null,
     });
+    // 5. 서명한 토큰을 쿠키로 굽는다
     this.setCookie({
       response,
       value: signSessionToken({ token, secret }),
@@ -239,29 +313,29 @@ const NOT_REMEMBERED_POLICY: SessionPolicy = {
   }</code></pre>
           <ol class="steps blue">
             <li>
-              <strong>이전 세션 쿠키가 있으면 그 행을 지운다 (92-95행)</strong>
+              <strong>이전 세션 쿠키가 있으면 그 행을 지운다</strong>
               로그인한 채로 다시 로그인하면 브라우저에는 이전 쿠키가 실려 온다. 새 쿠키가 이전 쿠키를 덮어쓰므로, 이전 행을
               그대로 두면 아무도 쓰지 않는 세션이 만료될 때까지 남는다. 그 토큰이 혹시 어딘가로 새어 나갔다면 그것도 계속 유효하다.
               그래서 새 세션을 만들기 전에 지운다. <code>readToken</code>이 서명을 확인하므로 위조한 쿠키로 남의 행을 지울 수는 없다.
             </li>
             <li>
-              <strong>새 토큰을 만든다 (97행)</strong>
+              <strong>새 토큰을 만든다</strong>
               이전 쿠키가 있든 없든 <strong>항상 새 토큰</strong>이다. 이것이
               <a href="01-웹-인증-개념.html#session-fixation">세션 고정 공격</a>을 막는 핵심이다. 공격자가 미리 심어 둔 토큰이 로그인
               뒤에도 쓰이는 일이 없다.
             </li>
             <li>
-              <strong>정책으로 만료 일시를 정한다 (98, 102행)</strong>
+              <strong>정책으로 만료 일시를 정한다</strong>
               <code>지금 + expiresInMs</code>다. 지금 시각은 <code>Date.now()</code>가 아니라 주입받은 <code>clock.now()</code>로
               구한다(<a href="#clock">아래</a>).
             </li>
             <li>
-              <strong>행을 저장한다 (99-106행)</strong>
+              <strong>행을 저장한다</strong>
               토큰 원문이 아니라 <strong>SHA-256 해시</strong>를 저장한다. IP와 User-Agent는 나중에 "로그인한 기기 목록" 같은
               화면에 쓸 수 있도록 함께 남긴다.
             </li>
             <li>
-              <strong>서명한 토큰을 쿠키로 굽는다 (107-111행)</strong>
+              <strong>서명한 토큰을 쿠키로 굽는다</strong>
               쿠키 값은 <code>토큰.서명</code>이다. 정책의 <code>persistentCookie</code>에 따라 <code>Max-Age</code>가 붙거나 빠진다.
             </li>
           </ol>
@@ -347,29 +421,29 @@ describe('다시 로그인', () =&gt; {
                     </li>
                     <li>
                       <div class="tree-row">
-                        <span class="tree-node">④ 연장할 때가 됐다</span>
+                        <span class="tree-node">④ 연장하지 않는 정책이거나 아직 때가 아니다</span>
+                        <span class="tree-note"><span class="badge green">세션</span> 쿠키를 건드리지 않는다</span>
+                      </div>
+                    </li>
+                    <li>
+                      <div class="tree-row">
+                        <span class="tree-node">⑤ 연장할 때가 됐다</span>
                         <span class="tree-note">UPDATE로 만료를 지금 + 유지 기간으로</span>
                       </div>
                       <ul>
                         <li>
                           <div class="tree-row">
-                            <span class="tree-node">⑤ UPDATE된 행 0개</span>
+                            <span class="tree-node">⑥ UPDATE된 행 0개</span>
                             <span class="tree-note"><span class="badge blue">null</span> 그새 로그아웃됐다. 쿠키 지우기</span>
                           </div>
                         </li>
                         <li>
                           <div class="tree-row">
-                            <span class="tree-node">⑥ UPDATE 성공</span>
+                            <span class="tree-node">⑦ UPDATE 성공</span>
                             <span class="tree-note"><span class="badge green">세션</span> 같은 토큰으로 쿠키 다시 굽기</span>
                           </div>
                         </li>
                       </ul>
-                    </li>
-                    <li>
-                      <div class="tree-row">
-                        <span class="tree-node">⑦ 아직 연장할 때가 아니다</span>
-                        <span class="tree-note"><span class="badge green">세션</span> 쿠키를 건드리지 않는다</span>
-                      </div>
                     </li>
                   </ul>
                 </li>
@@ -411,35 +485,34 @@ describe('다시 로그인', () =&gt; {
                   <td><code>null</code></td>
                 </tr>
                 <tr>
-                  <td>⑤ 연장하려는데 행이 사라짐</td>
+                  <td>④ 그냥 통과 (가장 흔함)</td>
+                  <td>1</td>
+                  <td>0</td>
+                  <td>없음</td>
+                  <td>세션</td>
+                </tr>
+                <tr>
+                  <td>⑥ 연장하려는데 행이 사라짐</td>
                   <td>1</td>
                   <td>UPDATE(0행)</td>
                   <td>지우기</td>
                   <td><code>null</code></td>
                 </tr>
                 <tr>
-                  <td>⑥ 연장 성공</td>
+                  <td>⑦ 연장 성공</td>
                   <td>1</td>
                   <td>UPDATE</td>
                   <td>다시 굽기</td>
-                  <td>세션</td>
-                </tr>
-                <tr>
-                  <td>⑦ 그냥 통과 (가장 흔함)</td>
-                  <td>1</td>
-                  <td>0</td>
-                  <td>없음</td>
                   <td>세션</td>
                 </tr>
               </tbody>
             </table>
           </div>
           <p>
-            로그인한 사용자의 요청 대부분은 ⑦이다. SELECT 한 번으로 끝나고 아무것도 쓰지 않는다. 이제 코드를 단계별로 본다.
+            로그인한 사용자의 요청 대부분은 ④다. SELECT 한 번으로 끝나고 아무것도 쓰지 않는다. 코드에서는 각 경우가 번호 주석의 자리에서 갈린다.
           </p>
 
-          <h3>① 쿠키에서 토큰 꺼내기</h3>
-          <pre><code class="language-ts" data-lines="9-13">// apps/api/src/auth/session-manager.ts
+          <pre><code class="language-ts" data-lines="10 15 23 35 46 51 56">// apps/api/src/auth/session-manager.ts
   private async findSession({
     request,
     response,
@@ -448,10 +521,12 @@ describe('다시 로그인', () =&gt; {
     response: Response;
   }): Promise&lt;AuthenticatedSession | null&gt; {
     const { store, secret, clock, getPolicy } = this.options;
+    // 1. 쿠키가 없거나 서명이 틀리면 DB를 보지 않고 끝낸다
     const token = this.readToken(request);
     if (!token) {
       return null;
     }
+    // 2. 행이 없으면 쿠키를 지운다
     const tokenHash = hashSessionToken(token);
     const session = await store.findByTokenHash(tokenHash);
     if (!session) {
@@ -459,6 +534,7 @@ describe('다시 로그인', () =&gt; {
       return null;
     }
 
+    // 3. 만료됐으면 행과 쿠키를 지운다
     const now = clock.now().getTime();
     if (session.expiresAt.getTime() &lt;= now) {
       await store.deleteByTokenHash(tokenHash);
@@ -466,113 +542,193 @@ describe('다시 로그인', () =&gt; {
       return null;
     }
 
+    const authenticated = {
+      sessionId: session.id,
+      subjectId: session.subjectId,
+    };
+    // 4. 연장하지 않는 정책이거나 아직 연장할 때가 아니면 그대로 돌려준다
     const policy = getPolicy(session);
+    if (policy.kind === 'fixed') {
+      return authenticated;
+    }
     // 만료 일시에서 유지 기간을 빼면 마지막으로 만료를 정한(발급하거나 연장한) 시각이다(Better Auth와 같음).
     const lastRefreshedAt = session.expiresAt.getTime() - policy.expiresInMs;
-    if (
-      policy.updateAgeMs !== null &amp;&amp;
-      lastRefreshedAt + policy.updateAgeMs &lt;= now
-    ) {
-      const extended = await store.extend({
-        id: session.id,
-        expiresAt: new Date(now + policy.expiresInMs),
-      });
-      // 확인한 뒤 연장하기 전에 다른 요청(로그아웃)이 행을 지웠다.
-      if (!extended) {
-        this.clearCookie(response);
-        return null;
-      }
-      this.setCookie({
-        response,
-        value: signSessionToken({ token, secret }),
-        policy,
-      });
+    if (lastRefreshedAt + policy.updateAgeMs &gt; now) {
+      return authenticated;
     }
 
-    return { sessionId: session.id, subjectId: session.subjectId };
+    // 5. 연장할 때가 됐으면 만료를 지금 + 유지 기간으로 고쳐 쓴다
+    const extended = await store.extend({
+      id: session.id,
+      expiresAt: new Date(now + policy.expiresInMs),
+    });
+    // 6. 고친 행이 없으면 그새 로그아웃된 것이다. 쿠키를 지운다
+    if (!extended) {
+      this.clearCookie(response);
+      return null;
+    }
+    // 7. 고쳤으면 같은 토큰으로 쿠키를 다시 굽고 세션을 돌려준다
+    this.setCookie({
+      response,
+      value: signSessionToken({ token, secret }),
+      policy,
+    });
+    return authenticated;
   }</code></pre>
-          <p>
-            <code>readToken</code>은 쿠키가 없거나 서명이 틀리면 <code>null</code>을 준다. 이때는 쿠키를 지우지 않는다. 서명이
-            틀린 쿠키는 우리가 구운 것이 아닐 수 있고, 그냥 무시하면 충분하다.
-          </p>
-
-          <h3>② 행이 없으면 쿠키를 지운다</h3>
-          <pre><code class="language-ts" data-lines="3-6">    const tokenHash = hashSessionToken(token);
-    const session = await store.findByTokenHash(tokenHash);
-    if (!session) {
-      this.clearCookie(response);
-      return null;
-    }</code></pre>
-          <p>
-            서명이 맞으니 우리가 구운 쿠키인데 행이 없다. 다른 탭에서 로그아웃했거나, 다시 로그인해 이전 행이 지워졌거나, 탈퇴한
-            경우다. 쓸모없어진 쿠키를 브라우저가 계속 보내지 않도록 지운다.
-          </p>
-
-          <h3>③ 만료됐으면 행과 쿠키를 지운다</h3>
-          <pre><code class="language-ts" data-lines="2-6">    const now = clock.now().getTime();
-    if (session.expiresAt.getTime() &lt;= now) {
-      await store.deleteByTokenHash(tokenHash);
-      this.clearCookie(response);
-      return null;
-    }</code></pre>
-          <p>
-            비교가 <code>&lt;=</code>라는 점을 보자. 만료 일시와 지금이 정확히 같으면 이미 만료다. 7일짜리 세션은 발급 뒤
-            <strong>7일 - 1ms</strong>까지 통하고 정확히 7일에 끝난다. 쿠키의 <code>Max-Age</code>도 7일이라 보통은 브라우저가
-            먼저 쿠키를 버리지만, 서버는 쿠키 수명을 믿지 않고 행의 <code>expires_at</code>으로 판단한다.
-          </p>
-
-          <h3>④~⑦ 연장</h3>
-          <pre><code class="language-ts" data-lines="3-7">    const policy = getPolicy(session);
-    // 만료 일시에서 유지 기간을 빼면 마지막으로 만료를 정한(발급하거나 연장한) 시각이다(Better Auth와 같음).
-    const lastRefreshedAt = session.expiresAt.getTime() - policy.expiresInMs;
-    if (
-      policy.updateAgeMs !== null &amp;&amp;
-      lastRefreshedAt + policy.updateAgeMs &lt;= now
-    ) {
-      const extended = await store.extend({
-        id: session.id,
-        expiresAt: new Date(now + policy.expiresInMs),
-      });
-      // 확인한 뒤 연장하기 전에 다른 요청(로그아웃)이 행을 지웠다.
-      if (!extended) {
-        this.clearCookie(response);
-        return null;
-      }
-      this.setCookie({
-        response,
-        value: signSessionToken({ token, secret }),
-        policy,
-      });
-    }
-
-    return { sessionId: session.id, subjectId: session.subjectId };</code></pre>
-          <p>연장 조건의 계산은 그림이 있어야 이해하기 쉬우므로 다음 절에서 따로 본다.</p>
+          <ol class="steps blue">
+            <li>
+              <strong>쿠키가 없거나 서명이 틀리면 끝낸다</strong>
+              <code>readToken</code>은 쿠키가 없거나 서명이 틀리면 <code>null</code>을 준다. 이때는 쿠키를 지우지 않는다. 서명이
+              틀린 쿠키는 우리가 구운 것이 아닐 수 있고, 그냥 무시하면 충분하다.
+            </li>
+            <li>
+              <strong>행이 없으면 쿠키를 지운다</strong>
+              서명이 맞으니 우리가 구운 쿠키인데 행이 없다. 다른 탭에서 로그아웃했거나, 다시 로그인해 이전 행이 지워졌거나, 탈퇴한
+              경우다. 쓸모없어진 쿠키를 브라우저가 계속 보내지 않도록 지운다.
+            </li>
+            <li>
+              <strong>만료됐으면 행과 쿠키를 지운다</strong>
+              비교가 <code>&lt;=</code>라는 점을 보자. 만료 일시와 지금이 정확히 같으면 이미 만료다. 7일짜리 세션은 발급 뒤
+              <strong>7일 - 1ms</strong>까지 통하고 정확히 7일에 끝난다. 쿠키의 <code>Max-Age</code>도 7일이라 보통은 브라우저가
+              먼저 쿠키를 버리지만, 서버는 쿠키 수명을 믿지 않고 행의 <code>expires_at</code>으로 판단한다.
+            </li>
+            <li>
+              <strong>연장하지 않으면 그대로 돌려준다</strong>
+              로그인 상태 유지를 끈 세션은 정책이 <code>'fixed'</code>라 계산할 것 없이 여기서 끝난다. 켠 세션은
+              마지막으로 만료를 정한 시각에서 1일이 지났는지 본다. 이 계산은 그림이 있어야 이해하기 쉬우므로
+              <a href="#sliding">다음 절</a>에서 따로 본다. 연장할 때가 아니면 DB에도 쿠키에도 쓰지 않는다. 로그인한 사용자의 요청
+              대부분이 여기서 끝난다.
+            </li>
+            <li>
+              <strong>연장할 때가 됐으면 만료를 고쳐 쓴다</strong>
+              만료 일시를 "지금부터 유지 기간"으로 UPDATE한다.
+            </li>
+            <li>
+              <strong>고친 행이 없으면 쿠키를 지운다</strong>
+              확인한 뒤 연장하기 전에 다른 요청(로그아웃)이 행을 지운 경우다. 자세한 순서는 <a href="#race">아래</a>에서 본다.
+            </li>
+            <li>
+              <strong>고쳤으면 쿠키를 다시 굽는다</strong>
+              토큰은 그대로 두고 쿠키만 다시 내린다. 연장은 로그인 상태 유지를 켠 세션에서만 일어나므로, 브라우저의
+              <code>Max-Age</code>도 다시 7일로 늘어난다.
+            </li>
+          </ol>
         </section>
 
         <section id="sliding">
           <h2>연장: 언제, 얼마나</h2>
           <p>
-            로그인 상태 유지를 켠 세션은 "7일 동안 쓰지 않으면 끝나는" 세션이다. 이런 방식을 <strong>슬라이딩 만료</strong>라고
-            부른다. 요청이 올 때마다 만료를 뒤로 미는 것이다. 문제는 "요청마다" 미루면 요청마다 DB에 UPDATE를 하게 된다는 점이다.
-            그래서 <strong>마지막으로 미룬 뒤 1일(<code>updateAgeMs</code>)이 지난 첫 요청에서만</strong> 미룬다. DB 쓰기가 세션당
-            하루 한 번 이하로 줄어든다.
+            로그인 상태 유지를 켠 세션이 지키려는 약속은 "마지막으로 쓴 뒤 일주일쯤 쓰지 않으면 로그아웃된다"이다. 쓰는 동안에는
+            만료가 계속 뒤로 밀린다. 이런 방식을 <strong>슬라이딩 만료(sliding expiration)</strong>라고 부른다.
+          </p>
+          <p>
+            가장 정확한 방법은 요청마다 만료를 "지금 + 7일"로 다시 쓰는 것이다. 하지만 그러면 페이지를 열 때마다, API를 부를 때마다
+            DB에 UPDATE가 나간다. 그래서 하루쯤의 오차를 받아들이고, <strong>남은 기간이 6일 이하로 줄어든 뒤의 첫 요청에서만</strong>
+            만료를 다시 "지금 + 7일"로 채운다. 마지막으로 채운 뒤 1일(<code>updateAgeMs</code>)이 지났다는 말과 같다.
+          </p>
+          <ul>
+            <li>
+              <strong>남은 기간은 늘 6~7일이다.</strong> 휴대폰 배터리를 0%까지 기다리지 않고 85~100% 사이로 계속 채워 두는 것과
+              같다. 그래서 마지막으로 쓴 뒤 6~7일 동안 쓰지 않으면 끝난다.
+            </li>
+            <li>
+              <strong>DB 쓰기는 세션당 하루 한 번 이하다.</strong> 매일 쓰는 사용자는 하루에 한 번, 사흘에 한 번 쓰는 사용자는 쓸
+              때마다 연장된다.
+            </li>
+            <li>
+              <strong>요청이 와야 연장한다.</strong> 서버가 날마다 알아서 늘려 주는 것이 아니다. 요청을 처리하던
+              <code>authenticate</code>가 남은 기간을 보고 그 자리에서 연장한다. 요청이 없으면 연장도 없다.
+            </li>
+            <li>
+              <strong>연장하면 언제나 "그 요청 시각 + 7일"이다.</strong> 몇 번째 연장인지, 로그인한 지 며칠이 지났는지는 계산에
+              들어가지 않는다.
+            </li>
+          </ul>
+
+          <h3>만료가 한참 남았는데 왜 연장하나</h3>
+          <p>
+            로그인하고 1.5일 뒤에는 만료(7일)까지 5.5일이나 남아 있다. 그래도 이때 연장하는 이유는 만료 직전에만 연장하는 방식과
+            견주면 보인다. 1.5일에 마지막으로 쓰고 그 뒤로 쓰지 않는 사용자를 보자.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>방식</th>
+                  <th>1.5일 요청에서</th>
+                  <th>만료</th>
+                  <th>마지막으로 쓴 뒤 유지된 기간</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>만료 직전(남은 기간 1일 이하)에만 연장</td>
+                  <td>5.5일 남았으므로 연장하지 않는다</td>
+                  <td>7일</td>
+                  <td>5.5일</td>
+                </tr>
+                <tr>
+                  <td>이 저장소(남은 기간 6일 이하면 연장)</td>
+                  <td>7일로 다시 채운다</td>
+                  <td>8.5일</td>
+                  <td><strong>7일</strong></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            만료 직전에만 연장하면, 마지막으로 쓴 뒤 유지되는 기간이 언제 썼느냐에 따라 1~7일로 들쭉날쭉하다. 로그인 직후에 쓰고
+            말면 7일 가까이 가지만, 만료를 하루 남짓 앞두고 쓰면 하루 남짓 만에 끝난다. 남은 기간을 늘 6~7일로 채워 두면 언제
+            썼든 "마지막으로 쓴 뒤 6~7일"이라는 약속 하나가 된다.
           </p>
 
-          <h3>"마지막으로 미룬 시각"을 저장하지 않고 구한다</h3>
+          <h3>"마지막으로 채운 시각"을 저장하지 않고 구한다</h3>
           <p>
-            마지막 연장 시각을 따로 칸에 두지 않는다. 만료 일시는 늘 <code>마지막으로 정한 시각 + expiresInMs</code>로 정해지므로,
-            거꾸로 빼면 된다.
+            코드는 남은 기간 대신 "마지막으로 만료를 정한 시각"으로 조건을 쓴다(Better Auth와 같다). 그 시각을 따로 칸에 두지
+            않는다. 만료 일시는 늘 <code>마지막으로 정한 시각 + expiresInMs</code>로 정해지므로, 거꾸로 빼면 된다.
           </p>
-          <pre><code class="language-ts">lastRefreshedAt = expiresAt - expiresInMs      // 발급했거나 마지막으로 연장한 시각
-연장할 때인가    = lastRefreshedAt + updateAgeMs &lt;= now</code></pre>
+          <pre><code class="language-ts">// 만료 일시에서 유지 기간을 빼면 마지막으로 만료를 정한(발급하거나 연장한) 시각이다.
+const lastRefreshedAt = session.expiresAt.getTime() - policy.expiresInMs;
+// 그때부터 updateAgeMs(1일)가 지나지 않았으면 연장하지 않고 돌려준다.
+if (lastRefreshedAt + policy.updateAgeMs &gt; now) {
+  return authenticated;
+}</code></pre>
+          <p>
+            이 <code>if</code>를 뒤집은 것, 곧 연장하는 조건은 앞에서 말한 "남은 기간이 6일 이하인가"와 같다.
+            <code>lastRefreshedAt</code>을 풀어 쓰고 항을 옮기면 이렇게 바뀐다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>식</th><th>한 일</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td><code>lastRefreshedAt + updateAgeMs &lt;= now</code></td>
+                  <td>연장하는 조건 (코드의 <code>if</code>를 뒤집은 것)</td>
+                </tr>
+                <tr>
+                  <td><code>(expiresAt - expiresInMs) + updateAgeMs &lt;= now</code></td>
+                  <td><code>lastRefreshedAt</code>을 풀어 쓴다</td>
+                </tr>
+                <tr>
+                  <td><code>expiresAt - now &lt;= expiresInMs - updateAgeMs</code></td>
+                  <td><code>now</code>를 왼쪽으로, <code>expiresInMs</code>와 <code>updateAgeMs</code>를 오른쪽으로 옮긴다</td>
+                </tr>
+                <tr>
+                  <td>남은 기간 &lt;= 7일 - 1일 = <strong>6일</strong></td>
+                  <td>왼쪽은 남은 기간, 오른쪽은 정책 값이다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>아래는 같은 조건을 요청마다 따라간 것이다.</p>
           <div class="table-wrap">
             <table>
               <thead>
                 <tr>
                   <th>요청 시각</th>
                   <th><code>expiresAt</code></th>
-                  <th><code>lastRefreshedAt</code> (= expiresAt - 7일)</th>
-                  <th>+ 1일 ≤ 지금?</th>
+                  <th>남은 기간 (<code>expiresAt</code> - 요청 시각)</th>
+                  <th>6일 이하?</th>
                   <th>결과</th>
                 </tr>
               </thead>
@@ -587,30 +743,30 @@ describe('다시 로그인', () =&gt; {
                 <tr>
                   <td>0.5일</td>
                   <td>7일</td>
-                  <td>0일</td>
-                  <td>1일 ≤ 0.5일? 아니다</td>
-                  <td>⑦ 그냥 통과</td>
+                  <td>6.5일</td>
+                  <td>아니다</td>
+                  <td>④ 그냥 통과</td>
                 </tr>
                 <tr>
                   <td>1.5일</td>
                   <td>7일</td>
-                  <td>0일</td>
-                  <td>1일 ≤ 1.5일? 그렇다</td>
-                  <td>⑥ 연장: <code>expiresAt</code> = 1.5 + 7 = <strong>8.5일</strong></td>
+                  <td>5.5일</td>
+                  <td>그렇다</td>
+                  <td>⑦ 연장: <code>expiresAt</code> = 1.5 + 7 = <strong>8.5일</strong>, 남은 기간이 다시 7일</td>
                 </tr>
                 <tr>
                   <td>2일</td>
                   <td>8.5일</td>
-                  <td>1.5일</td>
-                  <td>2.5일 ≤ 2일? 아니다</td>
-                  <td>⑦ 그냥 통과</td>
+                  <td>6.5일</td>
+                  <td>아니다</td>
+                  <td>④ 그냥 통과</td>
                 </tr>
                 <tr>
                   <td>8.5일 (그 사이 요청 없음)</td>
                   <td>8.5일</td>
+                  <td>0일</td>
                   <td>-</td>
-                  <td>-</td>
-                  <td>③ 만료</td>
+                  <td>③ 만료. 마지막으로 쓴 2일부터 6.5일 뒤</td>
                 </tr>
               </tbody>
             </table>
@@ -640,7 +796,7 @@ describe('다시 로그인', () =&gt; {
               </div>
             </div>
             <div class="tl-row">
-              <span class="tl-label">연장하지 않는 구간<small>마지막 연장 뒤 1일</small></span>
+              <span class="tl-label">연장하지 않는 구간<small>남은 기간이 6일보다 많은 동안</small></span>
               <div class="tl-track">
                 <span class="tl-bar green" style="--from: 0; --to: 1"></span>
                 <span class="tl-bar green" style="--from: 1.5; --to: 2.5"></span>
@@ -648,10 +804,11 @@ describe('다시 로그인', () =&gt; {
             </div>
           </div>
           <p>
-            0.5일 요청은 초록 구간 안이라 연장하지 않는다. 1.5일 요청은 초록 구간을 벗어났으므로 연장한다. 2일 요청은 새 초록
-            구간(1.5~2.5일) 안이라 다시 그냥 통과한다. 2일 뒤로 요청이 없으면 8.5일에 만료된다.
+            0.5일 요청은 남은 기간이 6.5일이라(초록 구간 안) 연장하지 않는다. 1.5일 요청은 남은 기간이 5.5일로 줄었으므로 7일로
+            채운다. 2일 요청은 방금 채운 뒤라 남은 기간이 6.5일이고(새 초록 구간 1.5~2.5일 안) 그냥 통과한다. 2일 뒤로 요청이 없으면
+            8.5일에 만료된다. 마지막으로 쓴 2일부터 6.5일 뒤다.
           </p>
-          <p>로그인 상태 유지를 끈 세션은 훨씬 단순하다. <code>updateAgeMs</code>가 <code>null</code>이라 연장 조건을 아예 보지 않는다.</p>
+          <p>로그인 상태 유지를 끈 세션은 훨씬 단순하다. 정책이 <code>'fixed'</code>라 연장 조건을 아예 보지 않는다.</p>
           <div class="timeline" style="--tl-max: 3; --tl-label: 9rem" data-unit="일" data-tick="0.5">
             <div class="tl-row">
               <span class="tl-label">요청</span>
@@ -670,7 +827,8 @@ describe('다시 로그인', () =&gt; {
           </div>
           <div class="callout">
             <p>
-              <strong>상한이 없다.</strong> 로그인 상태 유지를 켜고 7일 안에 한 번씩만 쓰면 세션은 끝없이 이어진다. "로그인한 지
+              <strong>상한이 없다.</strong> 연장은 몇 번째든 "그 요청 시각 + 7일"이라, 로그인 상태 유지를 켜고 6일 안에 한 번씩만
+              쓰면 세션은 끝없이 이어진다. "로그인한 지
               30일이 지나면 무조건 다시 로그인" 같은 절대 만료는 지금 없다. Better Auth도 기본 세션에는 절대 만료를 두지 않고, 민감한
               작업에만 "로그인한 지 얼마나 됐나(<code>freshAge</code>)"를 따로 본다.
             </p>
@@ -778,7 +936,7 @@ describe('다시 로그인', () =&gt; {
           </ul>
           <div class="callout warn">
             <p>
-              <strong>모든 겹침을 막지는 않는다.</strong> ⑦(연장 없이 통과)인 요청이 B의 DELETE 직전에 행을 읽었다면, 그 요청 하나는
+              <strong>모든 겹침을 막지는 않는다.</strong> ④(연장 없이 통과)인 요청이 B의 DELETE 직전에 행을 읽었다면, 그 요청 하나는
               로그인한 채로 끝난다. 이미 판단을 마친 요청을 되돌릴 방법은 없고, 그다음 요청부터 막히면 충분하다고 본다. 연장 경로만
               확인하는 이유는 그 경로가 <strong>쿠키를 새로 굽는</strong> 유일한 확인 경로이기 때문이다.
             </p>
@@ -831,9 +989,12 @@ export class SessionManager {
             </li>
             <li>
               <strong>Map이 아니라 WeakMap이다</strong>
-              키가 요청 객체다. 일반 <code>Map</code>은 키를 꽉 붙잡고 있어서, 요청이 끝나도 요청 객체와 결과가 메모리에서 사라지지
-              않는다. 요청이 쌓일수록 메모리가 샌다. <code>WeakMap</code>은 키를 약하게 붙잡아서, 요청 객체를 아무도 쓰지 않으면
-              항목도 함께 사라진다.
+              <code>SessionManager</code>는 서버가 켜질 때 한 번 만들어져 프로세스가 끝날 때까지 산다. Nest 프로바이더의 기본
+              스코프가 싱글턴이라, 모든 요청이 같은 인스턴스를 쓴다. 그 필드인 이 저장소도 서버만큼 오래 산다. 키는 요청 객체다. 일반
+              <code>Map</code>은 키를 꽉 붙잡고 있어서, 요청이 끝나도 요청 객체와 결과가 메모리에서 사라지지 않는다. 요청이 쌓일수록
+              메모리가 샌다. <code>WeakMap</code>은 키를 약하게 붙잡아서, 요청 객체를 아무도 쓰지 않으면 항목도 함께 사라진다.
+              매니저를 요청마다 새로 만들면(<code>Scope.REQUEST</code>) 일반 필드로도 충분하지만, 요청마다 매니저와 그것에 기대는
+              객체를 새로 만들어야 해서 느려진다.
             </li>
           </ol>
           <pre><code class="language-ts">// 프론트엔드에 비유하면 "같은 요청 안에서만 유효한 캐시"다. React의 cache()가 렌더 한 번 안에서만 결과를 나누는 것과 비슷하다.
@@ -844,6 +1005,27 @@ const b = authenticate(req); // 저장된 같은 Promise를 돌려줌
 a === b;                     // true
 
 // 요청이 끝나 req를 아무도 참조하지 않으면 WeakMap의 항목도 가비지 컬렉션 대상이 된다.</code></pre>
+          <p>
+            가비지 컬렉터가 언제 항목을 거둘지는 정해져 있지 않다. 그래도 문제가 되지 않는다.
+          </p>
+          <ul>
+            <li>
+              <strong>결과가 다른 요청으로 새지 않는다.</strong> 요청마다 새 요청 객체가 만들어지고, 항목은 그 객체로만 찾는다.
+              아직 거둬지지 않은 지난 항목이 남아 있어도 새 요청이 그 항목을 찾을 길이 없다. 그러니 언제 거둬지든 동작은 같다.
+            </li>
+            <li>
+              <strong>남아 있는 동안의 메모리는 작다.</strong> 저장하는 값은 세션 id와 사용자 id를 담은 Promise 하나다. 요청 객체가
+              필요 없어진 뒤 다음 수집 때까지만 남는다.
+            </li>
+            <li>
+              <strong>값이 키를 가리켜도 새지 않는다.</strong> <code>findSession</code>은 끝나기 전까지 <code>request</code>를 붙잡고
+              있다. 그래도 <code>WeakMap</code>은 키에 다른 곳에서 닿을 수 없으면, 값이 키를 가리키더라도 항목을 함께 거둔다.
+            </li>
+          </ul>
+          <p>
+            요청 객체가 오래 남으면 항목도 그만큼 남는다. 예를 들어 다른 코드가 요청 객체를 전역 배열에 넣어 두면 그렇다. 이때 새는
+            원인은 요청 객체를 붙잡은 쪽이고, 이 저장소는 그만큼만 따라 남는다.
+          </p>
           <p>
             결과를 요청 객체의 속성(<code>request.session = ...</code>)에 붙이지 않은 것도 이유가 있다. <code>SessionManager</code>는
             사용자용과 운영자용이 따로 만들어지고, 각자 자기 <code>WeakMap</code>을 가진다. 한 요청에서 두 매니저가 확인해도 결과가
@@ -872,7 +1054,7 @@ a === b;                     // true
             토큰이 있으면 그 해시로 행을 지우고, 쿠키는 <strong>무조건</strong> 지운다. 행이 이미 없거나, 쿠키가 없거나, 서명이
             틀려도 오류를 내지 않는다. 로그아웃의 목적은 "이 브라우저가 로그인돼 있지 않은 상태"이고, 이미 그 상태라면 성공으로 보면
             된다. 이런 성질을 <strong>멱등성</strong>(몇 번 해도 결과가 같음)이라고 한다. 그래서 <code>POST /auth/sign-out</code>은
-            두 번 불러도, 쿠키 없이 불러도 204다(<a href="09-인증-API-응답-설계.html">09 문서</a>).
+            두 번 불러도, 쿠키 없이 불러도 <strong>204 No Content</strong>(성공했고 돌려줄 본문은 없다는 HTTP 상태 코드)다(<a href="09-인증-API-응답-설계.html#sign-out-idempotent">09 문서</a>).
           </p>
           <p>
             세션은 "행 삭제"로 끝난다. <code>revoked_at</code> 같은 칸을 두고 표시만 하지 않는다. 행이 없으면 ②로 걸리므로, 지우는
@@ -1041,7 +1223,7 @@ export interface SessionManagerOptions {
             </table>
           </div>
           <p>
-            30분 동안 요청이 없으면 끝나는 "유휴 만료"도 새 코드가 아니다. 위의 슬라이딩 만료에 숫자만 30분과 5분으로 넣으면 된다.
+            요청이 끊기면 30분쯤 뒤에 끝나는 "유휴 만료"도 새 코드가 아니다. 위의 슬라이딩 만료에 숫자만 30분과 5분으로 넣으면 된다. 남은 기간이 25분 이하로 줄면 다시 30분으로 채우므로, 마지막 요청 뒤 25~30분이면 끝난다.
           </p>
           <h3>소셜 로그인(1.4b)도 issue를 그대로 쓴다</h3>
           <p>
@@ -1160,7 +1342,8 @@ beforeEach(async () =&gt; {
           <div class="callout">
             <p>
               <strong>Better Auth와 다르게 정한 것:</strong> 토큰은 해시로 저장한다. DB와 비밀키가 함께 유출돼도 저장된 값으로 쿠키를
-              만들 수 없게 하기 위해서다. 로그인 상태 유지 여부는 쿠키가 아니라 세션 행에 둔다. 쿠키 캐시는 세션 조회가 느리다는
+              만들 수 없게 하기 위해서다. 로그인 상태 유지 여부는 쿠키가 아니라 세션 행에 둔다. 세션의 정책을 정하는 값이라 세션과 같은 곳에 두고, 서버가 판단에 쓰는 값을
+              브라우저에 맡기지 않기 위해서다(<a href="03-사용자-계정-세션-테이블.html#remember-me">03 문서</a>). 쿠키 캐시는 세션 조회가 느리다는
               측정 근거가 생기는 9단계에서 전후를 측정하며 도입한다(ADR 0009).
             </p>
           </div>
@@ -1208,9 +1391,10 @@ beforeEach(async () =&gt; {
               <summary>답 보기</summary>
               <div class="fold-body">
                 <p>
-                  <strong>8.2일.</strong> 0.9일은 마지막 연장(0일) 뒤 1일이 안 됐으므로 그냥 통과한다. 1.2일은 1일이 지났으므로 연장해
-                  만료가 1.2 + 7 = 8.2일이 된다. 2.1일은 마지막 연장(1.2일) 뒤 0.9일이라 연장하지 않는다. 그 뒤 요청이 없으니 8.2일에
-                  끝난다. 2.1일의 요청이 만료를 늘려 주지 않았다는 점이 핵심이다.
+                  <strong>8.2일.</strong> 0.9일은 남은 기간이 6.1일이라(마지막 연장 0일 뒤 1일이 안 됨) 그냥 통과한다. 1.2일은 남은
+                  기간이 5.8일로 6일 이하이므로 연장해 만료가 1.2 + 7 = 8.2일이 된다. 2.1일은 남은 기간이 6.1일이라(마지막 연장 1.2일
+                  뒤 0.9일) 연장하지 않는다. 그 뒤 요청이 없으니 8.2일에 끝난다. 마지막으로 쓴 2.1일부터 6.1일 뒤다. 2.1일의 요청이
+                  만료를 늘려 주지 않았다는 점이 핵심이다. 그래서 유지 기간은 "마지막으로 쓴 뒤 7일"이 아니라 "6~7일"이다.
                 </p>
               </div>
             </details>
@@ -1220,8 +1404,9 @@ beforeEach(async () =&gt; {
             <p class="quiz-q">2. 로그인 상태 유지를 끈 정책에도 연장을 켜면 어떻게 될까?</p>
             <p class="quiz-context"><code>users/user-session.ts</code>의 정책을 아래처럼 바꾼다. 유지 기간과 연장 간격이 둘 다 1일이다.</p>
             <pre><code class="language-diff"> const NOT_REMEMBERED_POLICY: SessionPolicy = {
+-  kind: 'fixed',
++  kind: 'sliding',
    expiresInMs: DAY_MS,
--  updateAgeMs: null,
 +  updateAgeMs: DAY_MS,
    persistentCookie: false,
  };</code></pre>

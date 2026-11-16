@@ -159,18 +159,21 @@ Content-Type: application/json
             요청이 컨트롤러 메서드에 닿기 전에 검증 파이프가 본문을 <code>signInBodySchema</code>로 검사하고 다듬는다. 파이프가 무엇이고 언제
             실행되는지는 <a href="../nest/05-파이프와-검증.html#lifecycle">nest 05 문서</a>에 있다.
           </p>
-          <pre><code class="language-ts" data-lines="5-6 13">// apps/api/src/users/sign-in-body.ts
+          <pre><code class="language-ts" data-lines="5 8 15">// apps/api/src/users/sign-in-body.ts
 export const signInBodySchema = z.object({
   email: z
     .string(EMAIL_MESSAGE)
+    // 1. 앞뒤 공백을 지우고 소문자로 바꾼다
     .trim()
     .toLowerCase()
+    // 2. 비어 있지만 않으면 된다. 이메일 형식은 검사하지 않는다
     .min(1, EMAIL_MESSAGE)
     .meta({ description: '이메일', example: 'user@example.com' }),
   password: z
     .string(PASSWORD_MESSAGE)
     .min(1, PASSWORD_MESSAGE)
     .meta({ description: '비밀번호' }),
+  // 3. 기본값이 없으므로 빠뜨리면 400이다
   rememberMe: z.boolean('true나 false여야 합니다.').meta({
     description:
       '로그인 상태 유지. 켜면 세션이 7일 동안 유지되고 쓰는 동안 연장된다. 끄면 1일 뒤 끝나고 브라우저를 닫으면 쿠키가 사라진다.',

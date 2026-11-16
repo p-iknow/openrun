@@ -532,7 +532,7 @@ document.cookie; // 'theme=dark'  ← sid는 보이지 않는다</code></pre>
             </table>
           </div>
           <p>
-            이 선택은 <code>apps/api/src/config/env.ts</code>의 <code>readUseSecureCookies</code>가 정한다. 이름 앞의
+            이 선택은 <code>apps/api/src/config/env.ts</code>의 <code>shouldUseSecureCookies</code>가 정한다. 이름 앞의
             <code>__Secure-</code>는 <a href="#cookie-prefix">쿠키 이름 접두사</a>에서 다룬다.
           </p>
         </section>
@@ -1556,7 +1556,7 @@ scrypt('password1', salt, 64, { N: 16384, r: 16, p: 1, maxmem: 64 * 1024 * 1024 
             값은 시도 횟수 제한과 짧은 만료로 함께 지켜야 한다.
           </p>
 
-          <h3>모듈로 편향</h3>
+          <h3>모듈로 편향(modulo bias)</h3>
           <p>
             무작위 바이트(0~255)를 62로 나눈 나머지로 글자를 고르면 고르지 않다. 256은 62로 나누어떨어지지 않아서, 나머지
             0~7이 다른 값보다 한 번씩 더 나온다. <code>crypto.randomInt(62)</code>는 이런 편향 없이 0~61을 고르게 뽑는다.

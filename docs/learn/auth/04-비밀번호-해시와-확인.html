@@ -100,6 +100,34 @@ export async function hashPassword(password: string): Promise&lt;string&gt; {
   const key = await deriveKey({ password, salt });
   return `${salt}:${key.toString('hex')}`;
 }</code></pre>
+          <p>
+            비밀번호 <code>pw1234!</code>가 저장할 문자열이 되기까지를 그리면 이렇다. 번호는 아래 단계 설명과 같고, 값은 이
+            저장소와 같은 파라미터로 실제로 계산했다.
+          </p>
+          <div class="pipe">
+            <div class="pipe-row">
+              <span class="pipe-label">① 솔트를 뽑는다</span>
+              <span class="pipe-val">운영체제 암호용 난수</span>
+              <span class="pipe-fn">randomBytes(16) → hex</span>
+              <span class="pipe-val">3f9a0c1e5b7d2a4c6e8f0a1b2c3d4e5f<small>솔트, 16바이트 = hex 32글자</small></span>
+            </div>
+            <div class="pipe-row">
+              <span class="pipe-label">② scrypt로 키를 유도한다</span>
+              <span class="pipe-val secret">pw1234!<small>비밀번호</small></span>
+              <span class="pipe-note">+</span>
+              <span class="pipe-val">3f9a0c…4e5f<small>①의 솔트</small></span>
+              <span class="pipe-fn">NFKC → scrypt</span>
+              <span class="pipe-val">dd9861ad…671b10<small>키, 64바이트 = hex 128글자</small></span>
+            </div>
+            <div class="pipe-row">
+              <span class="pipe-label">③ 솔트와 키를 콜론으로 잇는다</span>
+              <span class="pipe-val">3f9a0c…4e5f<small>솔트</small></span>
+              <span class="pipe-note">+</span>
+              <span class="pipe-val">dd9861ad…671b10<small>키</small></span>
+              <span class="pipe-fn">솔트 + ":" + 키</span>
+              <span class="pipe-val ok">3f9a0c…4e5f:dd9861ad…671b10<small>accounts.password_hash에 저장</small></span>
+            </div>
+          </div>
           <ol class="steps blue">
             <li>
               <strong>솔트를 뽑는다</strong>
@@ -118,8 +146,48 @@ export async function hashPassword(password: string): Promise&lt;string&gt; {
               솔트는 "같은 비밀번호라도 결과가 달라지게" 하는 역할만 한다.
             </li>
           </ol>
-          <p><code>deriveKey</code>는 Node의 콜백 방식 <code>scrypt</code>를 Promise로 감싼 것이다.</p>
-          <pre><code class="language-ts" data-lines="8-15">function deriveKey({
+          <p>솔트가 하는 일은 두 사용자가 같은 비밀번호로 가입했을 때 보인다. 솔트만 달라도 키가 완전히 달라진다.</p>
+          <div class="pipe">
+            <div class="pipe-row">
+              <span class="pipe-label">사용자 A</span>
+              <span class="pipe-val secret">pw1234!</span>
+              <span class="pipe-note">+</span>
+              <span class="pipe-val">3f9a0c…4e5f<small>A의 솔트</small></span>
+              <span class="pipe-fn">NFKC → scrypt</span>
+              <span class="pipe-val">dd9861ad…671b10</span>
+            </div>
+            <div class="pipe-row">
+              <span class="pipe-label">사용자 B</span>
+              <span class="pipe-val secret">pw1234!</span>
+              <span class="pipe-note">+</span>
+              <span class="pipe-val">f9a0cc…a97c<small>B의 솔트</small></span>
+              <span class="pipe-fn">NFKC → scrypt</span>
+              <span class="pipe-val">cc44e707…daf3cd</span>
+              <span class="pipe-note">DB를 봐도 두 사람의 비밀번호가 같은지 알 수 없다</span>
+            </div>
+          </div>
+          <p>
+            <code>scrypt</code>는 비밀번호와 솔트를 받아 정해진 길이의 키를 만드는 키 유도 함수(KDF)다. 같은 재료를 넣으면 늘 같은
+            키가 나오지만, 키에서 비밀번호를 되돌려 낼 수는 없다. SHA-256 같은 일반 해시와 달리 일부러 느리고 메모리를 많이 쓰게
+            설계해서, DB를 훔친 공격자가 비밀번호 후보를 빠르게 대입해 보지 못하게 한다(<a href="01-웹-인증-개념.html#kdf">01 문서</a>).
+          </p>
+          <p>
+            <code>deriveKey</code>는 Node의 콜백 방식 <code>scrypt</code>를 Promise로 감싼 것이다. 넷째 인자 <code>KEY_LENGTH</code>는
+            만들 키의 길이(64바이트)이고, 다섯째 인자 <code>SCRYPT_OPTIONS</code>는 얼마나 느리고 메모리를 많이 쓸지 정하는 비용
+            파라미터다. 각 값의 뜻은 <a href="#params">scrypt 파라미터와 메모리</a> 절에서, 비밀번호를 넣기 전에
+            <code>normalize('NFKC')</code>를 거치는 이유는 <a href="#nfkc">NFKC 정규화</a> 절에서 본다.
+          </p>
+          <pre><code class="language-ts" data-lines="2-9 23-24">// Better Auth와 같은 scrypt 파라미터다. 해시 하나에 약 128 × N × r = 32MiB를 쓴다.
+const SCRYPT_OPTIONS = {
+  N: 16384,
+  r: 16,
+  p: 1,
+  // Node의 기본 메모리 한도(32MiB)에 딱 걸려 오류가 나므로 두 배로 넉넉히 준다.
+  maxmem: 128 * 16384 * 16 * 2,
+} satisfies ScryptOptions;
+const KEY_LENGTH = 64;
+...
+function deriveKey({
   password,
   salt,
 }: {
@@ -149,7 +217,7 @@ export async function hashPassword(password: string): Promise&lt;string&gt; {
         <section id="stored-shape">
           <h2>저장된 값의 모양</h2>
           <p><code>accounts.password_hash</code> 칸에 들어가는 값은 이렇게 생겼다(값은 예시).</p>
-          <pre><code>3f9a0c1e5b7d2a4c6e8f0a1b2c3d4e5f:9c2e…(128글자)…41ab</code></pre>
+          <pre><code>3f9a0c1e5b7d2a4c6e8f0a1b2c3d4e5f:dd9861ad…(128글자)…671b10</code></pre>
           <div class="table-wrap">
             <table>
               <thead>
@@ -201,7 +269,7 @@ export async function hashPassword(password: string): Promise&lt;string&gt; {
 
         <section id="params">
           <h2>scrypt 파라미터와 메모리</h2>
-          <pre><code class="language-ts" data-lines="3-6">// Better Auth와 같은 scrypt 파라미터다. 해시 하나에 약 128 × N × r = 32MiB를 쓴다.
+          <pre><code class="language-ts" data-lines="3-7">// Better Auth와 같은 scrypt 파라미터다. 해시 하나에 약 128 × N × r = 32MiB를 쓴다.
 const SCRYPT_OPTIONS = {
   N: 16384,
   r: 16,
@@ -270,6 +338,18 @@ const SALT_BYTES = 16;</code></pre>
               Better Auth에서 그대로 가져왔다. 나중에 Better Auth로 옮기거나 비교할 때 해시를 그대로 쓸 수 있다.
             </p>
           </div>
+          <div class="callout warn">
+            <p>
+              <strong>OWASP 권장값보다 약하다.</strong>
+              <a href="https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html#scrypt">OWASP Password Storage
+              Cheat Sheet</a>는 scrypt에 N=2<sup>17</sup>, r=8, p=1(128MiB)을 권하고, 메모리를 줄이려면 그만큼 p를 올린 조합을 쓰라고
+              한다(32MiB라면 N=2<sup>15</sup>, r=8, p=3). 계산량은 대략 N × r × p에 비례하는데, 이렇게 견주면 이 저장소의 값은 그
+              조합들의 1/4~1/3 수준이다. 그래도 Better Auth와 해시를 호환되게 두려고 이 값을 쓴다. 파라미터를 올리면 한 번에 걸리는
+              시간만큼 서버 하나가 처리하는 로그인 수가 줄고, 이미 저장된 해시를 옮길 방법도 필요하다. 지금 <code>솔트:키</code>
+              형식에는 파라미터가 적혀 있지 않으므로, 해시에 파라미터를 함께 적고 로그인에 성공할 때 새 값으로 다시 해시해 저장하는
+              식으로 옮겨야 한다.
+            </p>
+          </div>
         </section>
 
         <section id="nfkc">
@@ -309,6 +389,38 @@ const SALT_BYTES = 16;</code></pre>
             않는다.
           </p>
           <p>
+            NFKC는 Normalization Form KC의 줄임말로, 유니코드 표준(UAX #15)이 정한 정규화 방식 네 가지 중 하나다. 정규화는 같은
+            글자를 여러 방식으로 쓸 수 있을 때 한 가지 방식으로 맞추는 일이다. 네 방식은 두 가지 선택을 조합한 것이다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>합친다 (C, Composition)</th>
+                  <th>나눈다 (D, Decomposition)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>같은 글자만 맞춘다</td>
+                  <td><code>NFC</code></td>
+                  <td><code>NFD</code></td>
+                </tr>
+                <tr>
+                  <td>호환 문자까지 맞춘다 (K, Compatibility)</td>
+                  <td><code>NFKC</code></td>
+                  <td><code>NFKD</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            C는 조합형 <code>ᄒ + ᅡ + ᆫ</code>을 완성형 <code>한</code>으로 합치고, D는 거꾸로 나눈다. 호환(Compatibility)을 K로 적는
+            것은 Composition의 C와 헷갈리지 않게 하려는 것이다(<a href="https://unicode.org/reports/tr15/">UAX #15</a>에 그렇게
+            적혀 있다). 비밀번호는 완성형으로 맞추는 NFKC를 쓴다.
+          </p>
+          <p>
             NFKC의 K(호환)는 모양이 비슷한 호환 문자도 기본 문자로 바꾼다. 예를 들어 전각 <code>Ａ</code>는 <code>A</code>로,
             <code>①</code>은 <code>1</code>로 바뀐다(직접 실행해 확인). 비밀번호의 가짓수는 아주 조금 줄지만, 같은 글자를 쳤는데
             로그인이 안 되는 문제를 막는 쪽을 택한 것이다.
@@ -333,6 +445,27 @@ export async function verifyPassword({
   const actual = await deriveKey({ password, salt });
   return expected.length === actual.length &amp;&amp; timingSafeEqual(expected, actual);
 }</code></pre>
+          <p>
+            위에서 저장한 <code>3f9a0c…4e5f:dd9861ad…671b10</code>을 확인하는 흐름이다. 관문을 하나라도 통과하지 못하면 예외 없이
+            <code>false</code>로 끝난다. 관문 1은 아래 1~2단계, 관문 2는 3~4단계, 관문 3은 5단계다.
+          </p>
+          <ol class="gates">
+            <li>
+              <div class="gate-check"><strong>솔트와 키로 나눈다</strong><small>split(':') → 솔트 3f9a0c…4e5f / 키 dd9861ad…671b10</small></div>
+              <div class="gate-fail"><strong>한쪽이 비었다 → false</strong>':abc', 'abc:'처럼 확인할 재료가 없다. scrypt는 계산하지 않는다</div>
+            </li>
+            <li>
+              <div class="gate-check"><strong>키를 다시 만들고 길이를 본다</strong><small>expected = 저장된 키를 바이트로, 64바이트 · actual = 입력한 비밀번호 + 솔트로 scrypt, 64바이트</small></div>
+              <div class="gate-fail"><strong>길이가 다르다 → false</strong>저장된 키가 망가졌다</div>
+            </li>
+            <li>
+              <div class="gate-check"><strong>내용을 비교한다</strong><small>timingSafeEqual(expected, actual): 64바이트를 끝까지 비교</small></div>
+              <div class="gate-fail"><strong>다르다 → false</strong>비밀번호가 틀렸다</div>
+            </li>
+            <li class="pass">
+              <div class="gate-check"><strong>true</strong><small>비밀번호가 맞다</small></div>
+            </li>
+          </ol>
           <ol class="steps green">
             <li>
               <strong>솔트와 키를 나눈다</strong>
@@ -356,6 +489,26 @@ export async function verifyPassword({
               길이가 같은지 먼저 보고, 같을 때만 <code>timingSafeEqual</code>로 내용을 비교한다. 순서가 중요한 이유는 다음 절에 있다.
             </li>
           </ol>
+          <p>4단계에서 같은 솔트로 다시 만든 키가 비밀번호에 따라 어떻게 달라지는지 보면 이렇다. 값은 실제로 계산했다.</p>
+          <div class="pipe">
+            <div class="pipe-row">
+              <span class="pipe-label">맞는 비밀번호</span>
+              <span class="pipe-val secret">pw1234!<small>입력</small></span>
+              <span class="pipe-note">+</span>
+              <span class="pipe-val">3f9a0c…4e5f<small>저장된 솔트</small></span>
+              <span class="pipe-fn">NFKC → scrypt</span>
+              <span class="pipe-val ok">dd9861ad…671b10<small>저장된 키와 같다 → true</small></span>
+            </div>
+            <div class="pipe-row">
+              <span class="pipe-label">한 글자 틀린 비밀번호</span>
+              <span class="pipe-val secret">pw1235!<small>입력</small></span>
+              <span class="pipe-note">+</span>
+              <span class="pipe-val">3f9a0c…4e5f<small>저장된 솔트</small></span>
+              <span class="pipe-fn">NFKC → scrypt</span>
+              <span class="pipe-val bad">b9bbc46a…dc0c02<small>저장된 키와 다르다 → false</small></span>
+              <span class="pipe-note">한 글자만 달라도 키 전체가 달라진다</span>
+            </div>
+          </div>
         </section>
 
         <section id="compare">

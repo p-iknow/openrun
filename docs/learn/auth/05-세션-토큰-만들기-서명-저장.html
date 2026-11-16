@@ -218,18 +218,27 @@ export function createSessionToken(): string {
             맞혀 보는 공격을 걱정하지 않아도 된다. 난수와 엔트로피의 일반 개념은 <a href="01-웹-인증-개념.html#random">01 문서의 난수</a>
             절에 있다.
           </p>
-          <h3>randomInt를 쓰는 이유: 모듈로 편향</h3>
+          <h3>randomInt를 쓰는 이유: 모듈로 편향(modulo bias)</h3>
           <p>
             <code>Math.random()</code>은 예측할 수 있는 의사 난수라 보안 값에 쓰면 안 된다. 그렇다면 암호용 난수 바이트를 뽑아 나머지
             연산으로 글자를 고르면 어떨까?
           </p>
           <pre><code class="language-ts">// 이렇게 하면 안 된다
 const byte = randomBytes(1)[0]; // 0~255, 256가지
-const char = TOKEN_ALPHABET[byte % 62];</code></pre>
+const biasedChar = TOKEN_ALPHABET[byte % 62]; // A~H가 조금 더 자주 나온다
+
+// 이렇게 써야 한다(createSessionToken이 쓰는 방식)
+const uniformChar = TOKEN_ALPHABET[randomInt(62)]; // 0~61이 같은 확률로 나온다</code></pre>
           <p>
             256은 62로 나누어떨어지지 않는다(256 = 62 × 4 + 8). 0~247은 각 글자에 정확히 4번씩 대응하지만, 남는 248~255의 8개는
             <code>0~7</code>번 글자(<code>A</code>~<code>H</code>)에 한 번씩 더 붙는다.
           </p>
+          <div class="modgrid" data-total="256" data-labels="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789" data-rest="extra" data-rest-note="248~255 → A~H에 한 번 더">
+            <p class="modgrid-caption">
+              바이트 0~255를 62칸씩 접은 그림이다. 한 줄이 한 바퀴이고, 칸 하나가 바이트 하나다. 네 바퀴(0~247)는 모든 글자를 한 번씩
+              채우지만, 남는 8칸(248~255)은 A~H 아래에만 쌓인다. 맨 아래 줄이 글자마다 대응하는 바이트 수다.
+            </p>
+          </div>
           <div class="table-wrap">
             <table>
               <thead>
@@ -254,10 +263,16 @@ const char = TOKEN_ALPHABET[byte % 62];</code></pre>
             </table>
           </div>
           <p>
-            이렇게 특정 값이 더 자주 나오는 것을 <strong>모듈로 편향</strong>이라고 한다. 편향이 있으면 실제 엔트로피가 계산보다
+            이렇게 특정 값이 더 자주 나오는 것을 <strong>모듈로 편향(modulo bias)</strong>이라고 한다. 편향이 있으면 실제 엔트로피가 계산보다
             줄어든다. <code>crypto.randomInt(62)</code>는 범위에 맞지 않는 난수가 나오면 버리고 다시 뽑는 방식(거부 샘플링)으로
             0~61을 정확히 같은 확률로 돌려준다. 그래서 글자마다 확률이 1/62로 같고, 190비트 계산이 그대로 성립한다.
           </p>
+          <div class="modgrid" data-total="256" data-labels="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789" data-rest="reject" data-rest-note="248~255가 나오면 버리고 다시 뽑는다">
+            <p class="modgrid-caption">
+              같은 그림에서 남는 8칸을 버린 것이다. 네 바퀴만 남으므로 모든 글자가 정확히 4번씩 대응한다. 원리를 보이려고 바이트
+              하나로 그렸다. 실제 <code>randomInt</code>는 48비트 난수를 뽑고, 62의 배수로 떨어지지 않는 맨 위 구간을 버린다.
+            </p>
+          </div>
           <div class="callout">
             <p>
               <strong>Better Auth와 같다.</strong> 영문 대소문자와 숫자 62종으로 된 32글자, 약 190비트라는 토큰 모양을 그대로 가져왔다.
@@ -304,8 +319,8 @@ export function signSessionToken({
 
         <section id="read">
           <h2>readSignedSessionToken: 서명 확인</h2>
-          <p>요청의 쿠키 값에서 토큰을 꺼내되, 서명이 맞을 때만 꺼낸다.</p>
-          <pre><code class="language-ts" data-lines="9-12 14-21">/** 쿠키 값의 서명이 맞으면 토큰을, 아니면 null을 돌려준다. 서명이 틀린 쿠키는 DB를 조회하기 전에 거른다. */
+          <p>요청의 쿠키 값에서 토큰을 꺼내되, 서명이 맞을 때만 꺼낸다. 코드 주석의 번호가 아래 단계 번호다.</p>
+          <pre><code class="language-ts" data-lines="9 16 18 25">/** 쿠키 값의 서명이 맞으면 토큰을, 아니면 null을 돌려준다. 서명이 틀린 쿠키는 DB를 조회하기 전에 거른다. */
 export function readSignedSessionToken({
   value,
   secret,
@@ -313,19 +328,23 @@ export function readSignedSessionToken({
   value: string;
   secret: string;
 }): string | null {
+  // 1. 마지막 "."에서 나눈다
   const separator = value.lastIndexOf('.');
   if (separator &lt;= 0) {
     return null;
   }
   const token = value.slice(0, separator);
   const signature = Buffer.from(value.slice(separator + 1));
+  // 2. 앞부분으로 서명을 다시 계산한다
   const expected = Buffer.from(getSignature({ token, secret }));
+  // 3. 길이를 먼저, 그다음 timingSafeEqual
   if (
     signature.length !== expected.length ||
     !timingSafeEqual(signature, expected)
   ) {
     return null;
   }
+  // 4. 여기까지 오면 서명이 맞으므로 토큰을 돌려준다. 틀리면 위에서 null
   return token;
 }</code></pre>
           <ol class="steps blue">
@@ -483,42 +502,85 @@ export function readAuthSecret(
         <section id="why-both">
           <h2>서명이 막는 것, 해시가 막는 것</h2>
           <p>
-            서명과 해시는 서로 다른 위험을 맡는다. 상황별로 공격자가 무엇을 가졌을 때 남의 세션을 쓸 수 있는지 보자.
+            서명과 해시는 서로 다른 위험을 맡는다. 남의 세션을 쓰려면 보낸 쿠키가 확인 두 개를 모두 통과해야 한다.
+          </p>
+          <ul>
+            <li>
+              <strong>서명 확인</strong>: 쿠키의 서명이 맞아야 한다. 서명을 만들려면 <code>AUTH_SECRET</code>이 있어야 한다. 진짜
+              쿠키를 통째로 가졌다면 맞는 서명이 이미 붙어 있다.
+            </li>
+            <li>
+              <strong>해시로 세션 행 찾기</strong>: 쿠키 앞부분(토큰 원문)의 SHA-256이 DB의 <code>token_hash</code>와 같아야 한다.
+              그러려면 <strong>토큰 원문</strong>이 있어야 한다.
+            </li>
+          </ul>
+          <p>
+            토큰 원문은 <strong>브라우저 쿠키에만</strong> 있다(<a href="#three-forms">원문, 쿠키 값, DB 값</a>). 서버는 요청을 처리하는
+            동안만 메모리에 들고 있다가 버리고, DB에는 되돌릴 수 없는 해시만 있다. 그래서 공격자가 어디를 털었는지에 따라 가진 것이
+            다르다. 상황별로 보면 이렇다.
           </p>
           <div class="table-wrap">
-            <table>
+            <table class="breach">
               <thead>
                 <tr>
-                  <th>공격자가 가진 것</th>
-                  <th>이 저장소 (서명 + 해시 저장)</th>
-                  <th>막는 장치</th>
+                  <th rowspan="2">상황</th>
+                  <th class="group-start" colspan="3">공격자가 가진 것</th>
+                  <th class="group-start" colspan="2">통과할 수 있나</th>
+                  <th class="group-start" rowspan="2">결과<small>막는 장치</small></th>
+                </tr>
+                <tr>
+                  <th class="group-start">토큰 원문<small>브라우저 쿠키에만</small></th>
+                  <th><code>AUTH_SECRET</code><small>API 서버 환경 변수</small></th>
+                  <th><code>token_hash</code><small>DB</small></th>
+                  <th class="group-start">서명 확인<small>비밀키 또는 진짜 쿠키</small></th>
+                  <th>세션 행 찾기<small>토큰 원문 필요</small></th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
-                  <td>아무것도 없음. 쿠키 값을 지어내 대량으로 보냄</td>
-                  <td>서명이 틀려 메모리에서 바로 거른다. DB 조회도 일어나지 않는다</td>
-                  <td><span class="badge blue">서명</span></td>
+                  <td>아무것도 없음<small>쿠키 값을 지어내 대량으로 보낸다</small></td>
+                  <td class="lacks group-start">없음</td>
+                  <td class="lacks">없음</td>
+                  <td class="lacks">없음</td>
+                  <td class="fail group-start">막힘</td>
+                  <td class="fail">막힘</td>
+                  <td class="safe group-start">못 쓴다<small><span class="badge blue">서명</span> 메모리에서 바로 거르고 DB는 조회하지 않는다</small></td>
                 </tr>
                 <tr>
-                  <td>DB 내용 (백업 유출, SQL 인젝션)</td>
-                  <td><code>token_hash</code>에서 원문을 되돌릴 수 없어 쿠키를 만들 수 없다</td>
-                  <td><span class="badge green">해시</span></td>
+                  <td>DB 내용<small>백업 유출, SQL 인젝션</small></td>
+                  <td class="lacks group-start">없음</td>
+                  <td class="lacks">없음</td>
+                  <td class="has">가짐</td>
+                  <td class="fail group-start">막힘</td>
+                  <td class="fail">막힘</td>
+                  <td class="safe group-start">못 쓴다<small><span class="badge green">해시</span> 해시에서 원문을 되돌릴 수 없다</small></td>
                 </tr>
                 <tr>
-                  <td>DB 내용 + <code>AUTH_SECRET</code> (서버 전체 유출)</td>
-                  <td>서명은 만들 수 있지만 서명할 원문을 모른다. 여전히 쓸 수 없다</td>
-                  <td><span class="badge green">해시</span></td>
+                  <td>DB 내용 + <code>AUTH_SECRET</code><small>서버 전체 유출</small></td>
+                  <td class="lacks group-start">없음</td>
+                  <td class="has">가짐</td>
+                  <td class="has">가짐</td>
+                  <td class="pass group-start">통과</td>
+                  <td class="fail">막힘</td>
+                  <td class="safe group-start">못 쓴다<small><span class="badge green">해시</span> 서명은 만들 수 있지만 서명할 원문을 모른다</small></td>
                 </tr>
                 <tr>
-                  <td><code>AUTH_SECRET</code>만</td>
-                  <td>서명 관문은 통과하지만, DB에 있는 토큰을 모르므로 쓸 수 없다</td>
-                  <td><span class="badge green">토큰의 190비트</span></td>
+                  <td><code>AUTH_SECRET</code>만<small>설정 파일 유출</small></td>
+                  <td class="lacks group-start">없음</td>
+                  <td class="has">가짐</td>
+                  <td class="lacks">없음</td>
+                  <td class="pass group-start">통과</td>
+                  <td class="fail">막힘</td>
+                  <td class="safe group-start">못 쓴다<small><span class="badge green">토큰의 190비트</span> DB에 있는 토큰을 맞힐 수 없다</small></td>
                 </tr>
                 <tr>
-                  <td>피해자 브라우저의 쿠키 값 자체</td>
-                  <td>쓸 수 있다. 서명도 해시도 막지 못한다</td>
-                  <td>HttpOnly, Secure 쿠키(<a href="07-세션-쿠키-설정.html">07 문서</a>), 만료, 로그아웃</td>
+                  <td>피해자의 쿠키 값<small>쿠키를 통째로 빼앗김</small></td>
+                  <td class="has group-start">가짐</td>
+                  <td class="lacks">없음</td>
+                  <td class="lacks">없음</td>
+                  <td class="pass group-start">통과</td>
+                  <td class="pass">통과</td>
+                  <td class="bad group-start">쓸 수 있다<small>서명도 해시도 막지 못한다. HttpOnly, Secure 쿠키(<a href="07-세션-쿠키-설정.html">07 문서</a>), 만료, 로그아웃으로 줄인다</small></td>
                 </tr>
               </tbody>
             </table>
