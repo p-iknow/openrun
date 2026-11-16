@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 
+// 로그인한 사용자. 로그인 응답, 현재 세션, 내 정보가 같은 모양으로 돌려준다.
 export class SessionUserDto {
   @ApiProperty({ type: 'integer', description: '사용자 ID' })
   id: number;
@@ -12,10 +13,4 @@ export class SessionUserDto {
 
   @ApiProperty({ type: Boolean, description: '이메일 인증을 마쳤는지' })
   emailVerified: boolean;
-}
-
-// 현재 세션. 로그인 직후 무엇을 보여 줄지 정하는 값을 모아 둔다.
-export class SessionDto {
-  @ApiProperty({ type: SessionUserDto, description: '로그인한 사용자' })
-  user: SessionUserDto;
 }

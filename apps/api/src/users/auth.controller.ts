@@ -17,7 +17,7 @@ import {
 import type { Request, Response } from 'express';
 import type { SessionManager } from '../auth/session-manager.js';
 import { type SignInBody, signInBodySchema } from './sign-in-body.js';
-import { SessionDto } from './session.dto.js';
+import { SessionUserDto } from './session.dto.js';
 import { USER_SESSION_MANAGER } from './user-session.js';
 import { UsersService } from './users.service.js';
 
@@ -31,12 +31,12 @@ export class AuthController {
 
   @Post('sign-in')
   @HttpCode(HttpStatus.OK)
-  @ApiOkResponse({ type: SessionDto, description: '로그인한 세션' })
+  @ApiOkResponse({ type: SessionUserDto, description: '로그인한 사용자' })
   async signIn(
     @Body({ schema: signInBodySchema }) body: SignInBody,
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
-  ): Promise<SessionDto> {
+  ): Promise<SessionUserDto> {
     const userId = await this.usersService.verifyCredentials(body);
     await this.sessionManager.issue({
       request,
@@ -44,7 +44,7 @@ export class AuthController {
       subjectId: userId,
       rememberMe: body.rememberMe,
     });
-    return { user: await this.usersService.findSessionUser(userId) };
+    return this.usersService.findSessionUser(userId);
   }
 
   @Post('sign-out')
@@ -63,8 +63,11 @@ export class AuthController {
   // Nest는 핸들러가 null을 돌려주면 빈 본문을 보내므로, JSON null을 직접 쓴다.
   @Get('session')
   @ApiOkResponse({
-    description: '현재 세션. 로그인하지 않았으면 null이다.',
-    schema: { nullable: true, allOf: [{ $ref: getSchemaPath(SessionDto) }] },
+    description: '현재 세션의 사용자. 로그인하지 않았으면 null이다.',
+    schema: {
+      nullable: true,
+      allOf: [{ $ref: getSchemaPath(SessionUserDto) }],
+    },
   })
   async getSession(
     @Req() request: Request,
@@ -74,9 +77,8 @@ export class AuthController {
       request,
       response,
     });
-    const body: SessionDto | null = session && {
-      user: await this.usersService.findSessionUser(session.subjectId),
-    };
+    const body: SessionUserDto | null =
+      session && (await this.usersService.findSessionUser(session.subjectId));
     response.json(body);
   }
 }

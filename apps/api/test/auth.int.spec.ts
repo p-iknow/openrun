@@ -133,16 +133,16 @@ describe('POST /auth/sign-in', () => {
     expect(signIn.headers['set-cookie']?.[0]).toMatch(
       new RegExp(`^${SESSION_COOKIE}=[A-Za-z0-9]{32}\\.`),
     );
+    const user = {
+      id: userId,
+      email: 'kim@example.com',
+      name: '김오픈',
+      emailVerified: true,
+    };
+    expect(signIn.body).toEqual(user);
     const session = await agent.get('/auth/session');
     expect(session.status).toBe(200);
-    expect(session.body).toEqual({
-      user: {
-        id: userId,
-        email: 'kim@example.com',
-        name: '김오픈',
-        emailVerified: true,
-      },
-    });
+    expect(session.body).toEqual(user);
   });
 });
 
