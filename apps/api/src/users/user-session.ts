@@ -13,14 +13,15 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 // 로그인 상태 유지를 켜면 7일 동안 유지하고, 마지막 연장 뒤 1일이 지난 첫 요청에서 다시 7일로 연장한다(Better Auth와 같음).
 const REMEMBERED_POLICY: SessionPolicy = {
+  kind: 'sliding',
   expiresInMs: 7 * DAY_MS,
   updateAgeMs: DAY_MS,
   persistentCookie: true,
 };
 // 끄면 1일 뒤 끝나고 연장하지 않는다. 쿠키에 Max-Age가 없어 브라우저를 닫으면 사라진다.
 const NOT_REMEMBERED_POLICY: SessionPolicy = {
+  kind: 'fixed',
   expiresInMs: DAY_MS,
-  updateAgeMs: null,
   persistentCookie: false,
 };
 

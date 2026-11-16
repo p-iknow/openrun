@@ -35,14 +35,35 @@ export interface SessionStore {
   deleteByTokenHash(tokenHash: string): Promise<void>;
 }
 
-/** 세션 하나의 만료와 연장 규칙. */
-export interface SessionPolicy {
+interface SessionPolicyBase {
   expiresInMs: number;
-  /** 마지막 연장 뒤 이만큼 지난 첫 요청에서 만료를 지금부터 expiresInMs로 다시 쓴다. null이면 연장하지 않는다. */
-  updateAgeMs: number | null;
   /** true면 쿠키에 Max-Age(expiresInMs)를 둔다. false면 브라우저를 닫을 때 사라지는 쿠키다. */
   persistentCookie: boolean;
 }
+
+/**
+ * 쓰는 동안 만료를 늦추는 정책(sliding expiration).
+ * 만료가 "마지막으로 쓴 때"를 따라 미끄러지듯 뒤로 밀린다. 예: 유지 기간 7일, 연장 간격 1일이면
+ * 로그인하고 1일이 지난 뒤의 첫 요청에서 만료를 그 요청부터 7일로 다시 정한다. 그래서 계속 쓰면 끝나지 않고,
+ * 마지막으로 쓴 뒤 6~7일 동안 쓰지 않으면 끝난다.
+ */
+export interface SlidingSessionPolicy extends SessionPolicyBase {
+  kind: 'sliding';
+  /** 마지막으로 만료를 정한 뒤 이만큼 지난 첫 요청에서 만료를 지금부터 expiresInMs로 다시 쓴다. */
+  updateAgeMs: number;
+}
+
+/**
+ * 발급할 때 정한 만료를 늦추지 않는 정책(fixed expiration).
+ * 요청을 얼마나 자주 보내든 만료는 "로그인한 때 + 유지 기간"에 고정된다. 예: 유지 기간 1일이면 계속 써도
+ * 로그인하고 1일 뒤에 끝난다.
+ */
+export interface FixedSessionPolicy extends SessionPolicyBase {
+  kind: 'fixed';
+}
+
+/** 세션 하나의 만료와 연장 규칙. */
+export type SessionPolicy = SlidingSessionPolicy | FixedSessionPolicy;
 
 export interface SessionCookieSettings {
   name: string;
@@ -171,30 +192,35 @@ export class SessionManager {
       return null;
     }
 
+    const authenticated = {
+      sessionId: session.id,
+      subjectId: session.subjectId,
+    };
     const policy = getPolicy(session);
+    if (policy.kind === 'fixed') {
+      return authenticated;
+    }
     // 만료 일시에서 유지 기간을 빼면 마지막으로 만료를 정한(발급하거나 연장한) 시각이다(Better Auth와 같음).
     const lastRefreshedAt = session.expiresAt.getTime() - policy.expiresInMs;
-    if (
-      policy.updateAgeMs !== null &&
-      lastRefreshedAt + policy.updateAgeMs <= now
-    ) {
-      const extended = await store.extend({
-        id: session.id,
-        expiresAt: new Date(now + policy.expiresInMs),
-      });
-      // 확인한 뒤 연장하기 전에 다른 요청(로그아웃)이 행을 지웠다.
-      if (!extended) {
-        this.clearCookie(response);
-        return null;
-      }
-      this.setCookie({
-        response,
-        value: signSessionToken({ token, secret }),
-        policy,
-      });
+    if (lastRefreshedAt + policy.updateAgeMs > now) {
+      return authenticated;
     }
 
-    return { sessionId: session.id, subjectId: session.subjectId };
+    const extended = await store.extend({
+      id: session.id,
+      expiresAt: new Date(now + policy.expiresInMs),
+    });
+    // 확인한 뒤 연장하기 전에 다른 요청(로그아웃)이 행을 지웠다.
+    if (!extended) {
+      this.clearCookie(response);
+      return null;
+    }
+    this.setCookie({
+      response,
+      value: signSessionToken({ token, secret }),
+      policy,
+    });
+    return authenticated;
   }
 
   // 서명이 맞는 쿠키의 토큰만 돌려준다. 서명이 틀리면 DB를 조회하지 않고 없는 것으로 다룬다.
