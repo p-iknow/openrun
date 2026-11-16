@@ -87,6 +87,7 @@
 | 요청 장면 | `scenes`, `scene`, `scene-url`, `scene-req`, `scene-server`, `scene-chips` | 사용자가 보고 있는 페이지에서 어떤 요청이 어디로 가고, 브라우저가 어떻게 판정하는지. SameSite, CORS처럼 "어디서 보낸 요청인가"가 갈림길인 규칙. 아래 "요청 장면" 참고 |
 | 변환 줄 | `pipe`, `pipe-row`, `pipe-val`, `pipe-fn`, `pipe-label`, `pipe-note` | 값이 함수(해시, 암호화, 서명)를 지나 어떻게 바뀌는지. 아래 "변환 줄" 참고 |
 | 해부도 | `anatomy`, `part`, `anatomy-caption` | URL, 쿠키 값, 토큰처럼 한 값을 부분으로 나눠 이름 달기. 아래 "해부도" 참고 |
+| 관문 | `gates`, `gate-check`, `gate-fail`, `pass` | 차례로 확인하다 하나라도 걸리면 옆으로 빠지는 흐름(가드, 검증). 아래 "관문" 참고 |
 | 테이블 관계도 | `erd`, `erd-table`, `erd-title`, `erd-constraints`, `erd-mark`, `erd-note` | 테이블을 칸 목록 상자로 그리고 외래 키를 선으로 잇는 ERD. 아래 "테이블 관계도" 참고 |
 | 표 | `table-wrap` | 좁은 화면에서 가로로 스크롤되는 표 |
 | 배지 | `badge` | 표나 문장 안의 짧은 분류 |
@@ -139,6 +140,8 @@
 - 함수 색은 기본 파랑, `green`이 있고, 할 수 없는 변환(해시를 거꾸로 돌리기)은 `blocked`(빨간 취소선과 ✕)다.
 
 해부도(`anatomy`)는 값을 `span.part`로 나눠 이어 적고, 부분마다 `data-label`에 이름을 단다. 이름은 부분 아래에 그려진다. 색은 `blue`, `green`, `warn`, 덜 중요한 부분은 `dim`이다. 맨 끝의 `span.anatomy-caption`에 읽는 법을 적는다.
+
+관문(`gates`)은 `ol.gates` 안에 확인 하나마다 `li`를 둔다. `li` 안에 `div.gate-check`(확인할 내용, 예시 값은 `small`)와 `div.gate-fail`(걸렸을 때 일어나는 일, 결과는 `strong`)을 둔다. 번호와 "↓ 통과" 화살표는 CSS가 그린다. 마지막 통과 단계는 `li.pass`로 두고 `gate-fail`을 생략한다.
 
 자가 점검 문제는 `quiz`로 쓴다. `quiz-q`에 질문을, `quiz-context`에 어느 절의 무엇을 묻는지를 적고, 바꾸는 코드는 `language-diff` 코드 블록으로, 필요한 데이터는 표로 질문 아래에 둔다. 답만 `<details class="quiz-answer">` 안의 `fold-body`에 접는다. 질문 한 줄만으로 무엇을 묻는지 분명할 때만 클래스 없는 `<details>`를 쓴다. 그 밖에 문단만 접어 둘 때도 클래스 없이 `<details>`를 쓴다. 코드나 표가 든 선택 읽기 내용을 접을 때는 `<details class="fold">` 안에 `<div class="fold-body">`를 두고, 접어도 흐름이 이어지도록 결론은 접기 밖에 적는다.
 
