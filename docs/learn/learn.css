@@ -764,6 +764,19 @@ td.muted {
   color: var(--muted);
   font-weight: 400;
 }
+/* 막대 색과 같은 색의 이름표로 여러 줄을 한 묶음으로 보인다. */
+.tl-label.blue {
+  color: var(--blue);
+}
+.tl-label.green {
+  color: var(--green);
+}
+/* 다른 묶음이 시작하는 줄. 위에 선을 그어 앞 묶음과 나눈다. */
+.tl-row.tl-split {
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px dashed var(--muted);
+}
 .tl-track {
   position: relative;
   height: 2.75rem;
@@ -831,6 +844,18 @@ td.muted {
 }
 .tl-event.lower {
   padding-top: 0.85rem;
+}
+/* 사건 글은 다른 사건의 선보다 위에 그린다. 배경색 테두리를 둘러, 선이 글자를 지나가도 글이 먼저 보이게 한다. learn.js가 감싼다. */
+.tl-event-label {
+  position: relative;
+  z-index: 1;
+  text-shadow:
+    1px 0 0 var(--code-bg),
+    -1px 0 0 var(--code-bg),
+    0 1px 0 var(--code-bg),
+    0 -1px 0 var(--code-bg),
+    2px 0 0 var(--code-bg),
+    -2px 0 0 var(--code-bg);
 }
 /* 막대가 좁아 글이 잘리면 learn.js가 글을 막대 오른쪽 바깥으로 뺀다. */
 .tl-bar.label-outside {
@@ -1348,6 +1373,221 @@ details.fold {
   flex-basis: 100%;
   margin-top: 0.4rem;
   font-family: system-ui, sans-serif;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+/* 비교 카드: 같은 항목을 가진 선택지 두세 개를 나란히 놓고 항목별로 견준다. */
+.compare {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 0.9rem;
+  margin: 1.25rem 0;
+}
+.compare-card {
+  display: flex;
+  flex-direction: column;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border);
+  border-top: 4px solid var(--muted);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.compare-card.blue {
+  border-top-color: var(--blue);
+}
+.compare-card.green {
+  border-top-color: var(--green);
+}
+.compare-title {
+  margin-bottom: 0.6rem;
+  font-weight: 700;
+}
+.compare-card.blue .compare-title {
+  color: var(--blue);
+}
+.compare-card.green .compare-title {
+  color: var(--green);
+}
+.compare-title small {
+  display: block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.72rem;
+  font-weight: 400;
+  color: var(--muted);
+}
+.compare-facts {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0 0 0.8rem;
+}
+.compare-facts dt {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.compare-facts dd {
+  margin: 0.05rem 0 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.compare-facts dd strong {
+  font-size: 1.05rem;
+}
+.compare-result {
+  margin: 0;
+  padding: 0.5rem 0.65rem;
+  border-radius: 6px;
+  background: var(--code-bg);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+/* 카드 높이가 달라도 결과는 카드 맨 아래에 맞춘다. */
+.compare-facts + .compare-result {
+  margin-top: auto;
+}
+
+/* 유출 표: 상황마다 공격자가 가진 것(●/○)과, 그것으로 통과할 수 있는 확인(✓/✕), 결과를 한 줄로 보인다. */
+table.breach th,
+table.breach td {
+  padding: 0.5rem 0.45rem;
+  vertical-align: middle;
+}
+table.breach th small,
+table.breach td small {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 400;
+  color: var(--muted);
+  white-space: normal;
+}
+/* 그룹(가진 것, 확인, 결과)의 첫 열 앞에 굵은 선을 둔다. */
+table.breach .group-start {
+  border-left: 2px solid var(--muted);
+}
+table.breach td.has,
+table.breach td.lacks,
+table.breach td.pass,
+table.breach td.fail {
+  text-align: center;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+table.breach td.has::before,
+table.breach td.lacks::before,
+table.breach td.pass::before,
+table.breach td.fail::before {
+  display: block;
+  font-size: 1.05rem;
+  line-height: 1.2;
+}
+table.breach td.has {
+  background: var(--warn-bg);
+  color: var(--warn);
+  font-weight: 600;
+}
+table.breach td.has::before {
+  content: "●";
+}
+table.breach td.lacks {
+  color: var(--muted);
+}
+table.breach td.lacks::before {
+  content: "○";
+}
+table.breach td.pass {
+  background: var(--diff-del-bg);
+  color: var(--accent);
+  font-weight: 600;
+}
+table.breach td.pass::before {
+  content: "✓";
+}
+table.breach td.fail {
+  color: var(--green);
+}
+table.breach td.fail::before {
+  content: "✕";
+}
+/* 결과 칸: 결과는 한 줄로 두고, 막는 장치는 아래 small에 적는다. */
+table.breach td.bad,
+table.breach td.safe {
+  min-width: 10rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+table.breach td.bad {
+  background: var(--diff-del-bg);
+  color: var(--accent);
+}
+table.breach td.safe {
+  color: var(--green);
+}
+table.breach td.bad small,
+table.breach td.safe small {
+  margin-top: 0.2rem;
+}
+
+/* 나머지 격자: 값의 범위를 나머지(%)로 접어, 결과마다 몇 번 대응하는지 보인다. 칸은 learn.js가 그린다. */
+.modgrid {
+  margin: 1.25rem 0;
+  padding: 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--code-bg);
+  overflow-x: auto;
+}
+.modgrid-grid {
+  display: grid;
+  grid-template-columns: 4.6rem repeat(var(--modgrid-cols), minmax(0.55rem, 1fr));
+  align-items: center;
+  gap: 1px;
+}
+.modgrid-row-label {
+  padding-right: 0.4rem;
+  font-size: 0.7rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.modgrid-head,
+.modgrid-count {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.6rem;
+  line-height: 1.6;
+  text-align: center;
+  color: var(--muted);
+}
+.modgrid-count.more {
+  color: var(--warn);
+  font-weight: 700;
+}
+.modgrid-cell {
+  height: 0.9rem;
+  border: 1px solid var(--blue);
+  border-radius: 2px;
+  background: var(--blue-bg);
+}
+/* 남는 구간: 앞쪽 결과에 한 번 더 붙는 칸(extra)과 버리는 칸(reject) */
+.modgrid-cell.extra {
+  border-color: var(--warn);
+  background: var(--warn-bg);
+}
+.modgrid-cell.reject {
+  border: 1px dashed var(--accent);
+  background: var(--diff-del-bg);
+}
+.modgrid-rest-note {
+  padding-left: 0.5rem;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+.modgrid-rest-note.extra {
+  color: var(--warn);
+}
+.modgrid-rest-note.reject {
+  color: var(--accent);
+}
+.modgrid-caption {
+  margin: 0.6rem 0 0;
   font-size: 0.8rem;
   color: var(--muted);
 }

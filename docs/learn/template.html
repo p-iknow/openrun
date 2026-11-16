@@ -24,6 +24,9 @@
           <li><a href="#pipe">변환 줄</a></li>
           <li><a href="#anatomy">해부도</a></li>
           <li><a href="#gates">관문</a></li>
+          <li><a href="#compare">비교 카드</a></li>
+          <li><a href="#breach">유출 표</a></li>
+          <li><a href="#modgrid">나머지 격자</a></li>
           <li><a href="#erd">테이블 관계도</a></li>
           <li><a href="#table">표와 배지</a></li>
           <li><a href="#callout">강조 상자</a></li>
@@ -165,6 +168,12 @@
                 <span class="tl-event end" style="--at: 8.5">끝 사건</span>
               </div>
             </div>
+            <div class="tl-row tl-split">
+              <span class="tl-label green">다른 묶음<small>tl-split, 색 이름표</small></span>
+              <div class="tl-track">
+                <span class="tl-bar green" style="--from: 0; --to: 1">초록 묶음</span>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -238,6 +247,79 @@
               <div class="gate-check">모두 통과<small>결과 값</small></div>
             </li>
           </ol>
+        </section>
+
+        <section id="compare">
+          <h2>비교 카드</h2>
+          <div class="compare">
+            <div class="compare-card blue">
+              <div class="compare-title">선택지 A<small>CODE_NAME_A</small></div>
+              <dl class="compare-facts">
+                <dt>항목 1 <code>option</code></dt>
+                <dd><strong>값</strong> 짧은 설명</dd>
+                <dt>항목 2</dt>
+                <dd>값</dd>
+              </dl>
+              <p class="compare-result">고르면 생기는 일</p>
+            </div>
+            <div class="compare-card green">
+              <div class="compare-title">선택지 B<small>CODE_NAME_B</small></div>
+              <dl class="compare-facts">
+                <dt>항목 1 <code>option</code></dt>
+                <dd><strong>값</strong></dd>
+                <dt>항목 2</dt>
+                <dd>값</dd>
+              </dl>
+              <p class="compare-result">고르면 생기는 일</p>
+            </div>
+          </div>
+        </section>
+
+        <section id="breach">
+          <h2>유출 표</h2>
+          <div class="table-wrap">
+            <table class="breach">
+              <thead>
+                <tr>
+                  <th rowspan="2">상황</th>
+                  <th class="group-start" colspan="2">공격자가 가진 것</th>
+                  <th class="group-start">필요한 확인</th>
+                  <th class="group-start" rowspan="2">결과</th>
+                </tr>
+                <tr>
+                  <th class="group-start">값 A<small>있는 곳</small></th>
+                  <th>값 B<small>있는 곳</small></th>
+                  <th class="group-start">확인 1<small>값 A 필요</small></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>상황 1<small>예</small></td>
+                  <td class="has group-start">가짐</td>
+                  <td class="lacks">없음</td>
+                  <td class="pass group-start">통과</td>
+                  <td class="bad group-start">뚫린다</td>
+                </tr>
+                <tr>
+                  <td>상황 2<small>예</small></td>
+                  <td class="lacks group-start">없음</td>
+                  <td class="has">가짐</td>
+                  <td class="fail group-start">막힘</td>
+                  <td class="safe group-start">막힌다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="modgrid">
+          <h2>나머지 격자</h2>
+          <div class="modgrid" data-total="20" data-labels="ABCDEF" data-rest="extra" data-rest-note="A, B에 한 번 더">
+            <p class="modgrid-caption">읽는 법</p>
+          </div>
+          <div class="modgrid" data-total="20" data-labels="ABCDEF" data-rest="reject" data-rest-note="버리고 다시 뽑는다">
+            <p class="modgrid-caption">읽는 법</p>
+          </div>
         </section>
 
         <section id="erd">

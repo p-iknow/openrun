@@ -514,6 +514,12 @@ function setUpTimeline(timeline) {
     );
     if (blocked || box.right > timeline.getBoundingClientRect().right) label.remove();
   }
+  // 사건 글을 span으로 감싸 다른 사건의 선보다 위에 그린다.
+  for (const event of timeline.querySelectorAll('.tl-event')) {
+    const label = element('span', 'tl-event-label');
+    label.append(...event.childNodes);
+    event.append(label);
+  }
   // 같은 줄의 사건 글이 앞 사건 글과 겹치면 한 줄 아래로 내린다.
   const textBox = (node) => {
     const range = document.createRange();
@@ -538,6 +544,53 @@ function renderTimelines() {
   document.querySelectorAll('.timeline').forEach(setUpTimeline);
 }
 
+// 0~(data-total - 1)의 값을 data-labels의 글자 수로 접어, 한 바퀴를 한 줄로 그린다.
+// 마지막 줄의 남는 칸은 data-rest가 extra면 앞쪽 글자에 한 번 더 붙는 칸, reject면 버리는 칸으로 칠한다.
+function setUpModGrid(modgrid) {
+  const labels = [...modgrid.dataset.labels];
+  const total = Number(modgrid.dataset.total);
+  const rest = modgrid.dataset.rest;
+  const cols = labels.length;
+  const usable = rest === 'reject' ? total - (total % cols) : total;
+  const grid = element('div', 'modgrid-grid');
+  grid.style.setProperty('--modgrid-cols', cols);
+  grid.setAttribute('aria-hidden', 'true');
+
+  grid.append(element('span', 'modgrid-row-label', '글자'));
+  for (const label of labels) grid.append(element('span', 'modgrid-head', label));
+  for (let start = 0; start < total; start += cols) {
+    const end = Math.min(start + cols, total) - 1;
+    const isRest = end - start + 1 < cols;
+    grid.append(element('span', 'modgrid-row-label', `${start}~${end}`));
+    for (let value = start; value <= end; value += 1) {
+      const cell = element('span', isRest ? `modgrid-cell ${rest}` : 'modgrid-cell');
+      cell.title = value < usable ? `${value} → ${labels[value % cols]}` : `${value} → 버림`;
+      grid.append(cell);
+    }
+    if (isRest) {
+      const note = element('span', `modgrid-rest-note ${rest}`, modgrid.dataset.restNote ?? '');
+      note.style.gridColumn = `span ${cols - (end - start + 1)}`;
+      grid.append(note);
+    }
+  }
+
+  grid.append(element('span', 'modgrid-row-label', '대응 수'));
+  const counts = labels.map((_, column) => {
+    let count = 0;
+    for (let value = column; value < usable; value += cols) count += 1;
+    return count;
+  });
+  const fewest = Math.min(...counts);
+  for (const count of counts) {
+    grid.append(element('span', count > fewest ? 'modgrid-count more' : 'modgrid-count', String(count)));
+  }
+  modgrid.prepend(grid);
+}
+
+function renderModGrids() {
+  document.querySelectorAll('.modgrid').forEach(setUpModGrid);
+}
+
 renderTags();
 renderDocumentNav();
 renderDocumentIndex();
@@ -545,3 +598,4 @@ highlightCode();
 renderErds();
 renderSequences();
 renderTimelines();
+renderModGrids();
