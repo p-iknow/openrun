@@ -20,7 +20,7 @@
           <li><a href="#me">GET /me</a></li>
           <li><a href="#codes">401 두 가지와 403</a></li>
           <li><a href="#problem">오류 본문: Problem Details</a></li>
-          <li><a href="#session-dto">SessionDto의 모양</a></li>
+          <li><a href="#session-dto">SessionUserDto의 모양</a></li>
           <li><a href="#openapi">OpenAPI 명세</a></li>
           <li><a href="#check">스스로 확인하기</a></li>
         </ol>
@@ -41,9 +41,9 @@
             <table>
               <thead><tr><th>API</th><th>하는 일</th><th>로그인 가드</th><th>성공</th><th>실패</th></tr></thead>
               <tbody>
-                <tr><td><code>POST /auth/sign-in</code></td><td>로그인</td><td>없음</td><td>200 + <code>SessionDto</code> + 쿠키</td><td>400 <code>VALIDATION_FAILED</code>, 401 <code>INVALID_CREDENTIALS</code></td></tr>
+                <tr><td><code>POST /auth/sign-in</code></td><td>로그인</td><td>없음</td><td>200 + <code>SessionUserDto</code> + 쿠키</td><td>400 <code>VALIDATION_FAILED</code>, 401 <code>INVALID_CREDENTIALS</code></td></tr>
                 <tr><td><code>POST /auth/sign-out</code></td><td>로그아웃</td><td>없음</td><td>204 + 쿠키 지우기</td><td>없음(늘 204)</td></tr>
-                <tr><td><code>GET /auth/session</code></td><td>지금 누가 로그인해 있나</td><td>없음</td><td>200 + <code>SessionDto</code> 또는 <code>null</code></td><td>없음(로그인하지 않아도 200)</td></tr>
+                <tr><td><code>GET /auth/session</code></td><td>지금 누가 로그인해 있나</td><td>없음</td><td>200 + <code>SessionUserDto</code> 또는 <code>null</code></td><td>없음(로그인하지 않아도 200)</td></tr>
                 <tr><td><code>GET /me</code></td><td>내 정보</td><td><code>UserSessionGuard</code></td><td>200 + <code>SessionUserDto</code></td><td>401 <code>AUTHENTICATION_REQUIRED</code></td></tr>
               </tbody>
             </table>
@@ -61,7 +61,7 @@
 Set-Cookie: openrun.session_token=&lt;토큰&gt;.&lt;서명&gt;; Max-Age=604800; Path=/; Expires=…; HttpOnly; SameSite=Lax
 Content-Type: application/json; charset=utf-8
 
-{"user": {"id": 1, "email": "kim@example.com", "name": "김오픈", "emailVerified": true}}</code></pre>
+{"id": 1, "email": "kim@example.com", "name": "김오픈", "emailVerified": true}</code></pre>
           <ul>
             <li>
               <strong>201이 아니라 200이다.</strong> Nest는 <code>POST</code>에 201(Created)을 기본으로 붙인다. 세션 행이 새로 생기기는 하지만
@@ -69,7 +69,7 @@ Content-Type: application/json; charset=utf-8
               200을 준다.
             </li>
             <li>
-              <strong>본문은 <code>GET /auth/session</code>과 같은 <code>SessionDto</code>다.</strong> 로그인 화면은 응답으로 누가 로그인했는지 알아
+              <strong>본문은 <code>GET /auth/session</code>, <code>GET /me</code>와 같은 사용자(<code>SessionUserDto</code>)다.</strong> 로그인 화면은 응답으로 누가 로그인했는지 알아
               헤더를 바로 그린다. 같은 모양을 주면 로그인 직후와 새로 고침 뒤를 같은 코드로 처리할 수 있다.
             </li>
             <li>
@@ -192,7 +192,7 @@ Set-Cookie: openrun.session_token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GM
               <li data-from="1" data-to="2">GET /auth/session <small>Cookie: 토큰.서명</small></li>
               <li data-from="2" data-to="3">세션 행, 사용자 행 읽기</li>
               <li class="reply" data-from="3" data-to="2">행</li>
-              <li class="reply" data-from="2" data-to="1">200 { user }</li>
+              <li class="reply" data-from="2" data-to="1">200 { id, name, … }</li>
               <li data-at="1">"김오픈님 · 로그아웃"</li>
             </ol>
           </div>
@@ -218,12 +218,15 @@ Set-Cookie: openrun.session_token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GM
           </p>
 
           <h3 id="session-json-null">null을 직접 JSON으로 쓰는 이유</h3>
-          <pre><code class="language-ts" data-lines="1-2 6 10 19">  // 헤더를 그릴 때마다 부르므로, 로그인하지 않았으면 오류가 아니라 null로 응답한다.
+          <pre><code class="language-ts" data-lines="1-2 7 14 21">  // 헤더를 그릴 때마다 부르므로, 로그인하지 않았으면 오류가 아니라 null로 응답한다.
   // Nest는 핸들러가 null을 돌려주면 빈 본문을 보내므로, JSON null을 직접 쓴다.
   @Get('session')
   @ApiOkResponse({
-    description: '현재 세션. 로그인하지 않았으면 null이다.',
-    schema: { nullable: true, allOf: [{ $ref: getSchemaPath(SessionDto) }] },
+    description: '현재 세션의 사용자. 로그인하지 않았으면 null이다.',
+    schema: {
+      nullable: true,
+      allOf: [{ $ref: getSchemaPath(SessionUserDto) }],
+    },
   })
   async getSession(
     @Req() request: Request,
@@ -233,9 +236,8 @@ Set-Cookie: openrun.session_token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GM
       request,
       response,
     });
-    const body: SessionDto | null = session &amp;&amp; {
-      user: await this.usersService.findSessionUser(session.subjectId),
-    };
+    const body: SessionUserDto | null =
+      session &amp;&amp; (await this.usersService.findSessionUser(session.subjectId));
     response.json(body);
   }</code></pre>
           <p>
@@ -300,7 +302,7 @@ Content-Type: application/problem+json; charset=utf-8
                 <tr><td>묻는 것</td><td>지금 누가 로그인해 있나</td><td>로그인한 나의 정보</td></tr>
                 <tr><td>로그인하지 않았으면</td><td>200 <code>null</code></td><td>401 <code>AUTHENTICATION_REQUIRED</code></td></tr>
                 <tr><td>로그인 확인</td><td>핸들러가 <code>authenticate</code>를 직접 부른다</td><td>가드가 한다</td></tr>
-                <tr><td>본문</td><td><code>{ user }</code>(<code>SessionDto</code>)</td><td>사용자(<code>SessionUserDto</code>)</td></tr>
+                <tr><td>본문</td><td>사용자(<code>SessionUserDto</code>) 또는 <code>null</code></td><td>사용자(<code>SessionUserDto</code>)</td></tr>
                 <tr><td>부르는 곳</td><td>모든 페이지의 헤더</td><td>로그인이 필요한 화면</td></tr>
               </tbody>
             </table>
@@ -376,8 +378,9 @@ export function createAuthenticationRequiredException(): ProblemException {
         </section>
 
         <section id="session-dto">
-          <h2>SessionDto의 모양</h2>
-          <pre><code class="language-ts" data-lines="12-13 16-19">// apps/api/src/users/session.dto.ts
+          <h2>SessionUserDto의 모양</h2>
+          <pre><code class="language-ts" data-lines="13-14">// apps/api/src/users/session.dto.ts
+// 로그인한 사용자. 로그인 응답, 현재 세션, 내 정보가 같은 모양으로 돌려준다.
 export class SessionUserDto {
   @ApiProperty({ type: 'integer', description: '사용자 ID' })
   id: number;
@@ -390,12 +393,6 @@ export class SessionUserDto {
 
   @ApiProperty({ type: Boolean, description: '이메일 인증을 마쳤는지' })
   emailVerified: boolean;
-}
-
-// 현재 세션. 로그인 직후 무엇을 보여 줄지 정하는 값을 모아 둔다.
-export class SessionDto {
-  @ApiProperty({ type: SessionUserDto, description: '로그인한 사용자' })
-  user: SessionUserDto;
 }</code></pre>
 
           <h3 id="email-verified">emailVerified가 들어간 이유</h3>
@@ -412,27 +409,16 @@ export class SessionDto {
           <pre><code class="language-ts">// apps/api/src/users/users.service.ts
       emailVerified: user.emailVerifiedAt !== null,</code></pre>
 
-          <h3 id="wrapper">사용자를 user로 한 번 감싼 이유</h3>
+          <h3 id="wrapper">사용자를 감싸지 않고 그대로 내보내는 이유</h3>
           <p>
-            본문을 사용자 객체 그대로(<code>{ id, email, … }</code>)가 아니라 <code>{ user: { … } }</code>로 한 겹 감쌌다. <code>SessionDto</code>는
-            "현재 세션"을 나타내고, 사용자는 그 세션의 주인이다. 지금 정해진 칸은 <code>user</code> 하나뿐이지만, 세션 만료 일시처럼 사용자가 아닌
-            세션의 값을 더할 일이 생기면 <code>user</code> 옆에 두면 된다. 감싸 두면 그때도 기존 코드가 깨지지 않고, 사용자의 칸과 세션의 칸이 섞이지 않는다.
-            감싸는 비용은 클라이언트가 <code>.user</code>를 한 번 더 쓰는 것뿐이다.
+            본문은 <code>{ user: { … } }</code>처럼 한 겹 감싸지 않고 사용자 객체 그대로다. 감싸 두면 나중에 세션 만료 일시 같은 세션의 값을
+            <code>user</code> 옆에 더하기 쉽지만, 지금 그런 값을 쓸 화면은 없다. 쓰이지 않는 자리를 미리 만들지 않는다.
           </p>
-          <div class="flow">
-            <div class="lane blue">
-              <div class="lane-title">지금</div>
-              <ol class="chain">
-                <li><span>{ user }</span></li>
-              </ol>
-            </div>
-            <div class="lane green">
-              <div class="lane-title">세션 값이 늘면</div>
-              <ol class="chain">
-                <li><span>{ user, expiresAt }</span></li>
-              </ol>
-            </div>
-          </div>
+          <ul>
+            <li><strong>세 API가 같은 타입이다.</strong> 로그인 응답, <code>GET /auth/session</code>, <code>GET /me</code>가 모두 <code>SessionUserDto</code>라
+              스토어는 타입 하나로 받고, <code>.user</code>를 한 번 더 꺼낼 일이 없다.</li>
+            <li><strong>세션의 값이 필요해지면 그때 바꾼다.</strong> 본문 모양이 바뀌면 생성된 클라이언트 타입이 바뀌어, 고칠 곳을 타입 검사가 모두 알려 준다.</li>
+          </ul>
           <p>
             <code>email</code>은 DB에서 <code>NULL</code>을 허용하지만(탈퇴) 응답에서는 <code>string</code>이다. 탈퇴할 때 세션도 함께 지우므로 세션이 있는
             사용자는 늘 이메일이 있다. <code>findSessionUser</code>는 이 전제가 깨지면 500으로 드러나도록 오류를 던진다.
@@ -451,13 +437,13 @@ export class SessionDto {
     "operationId": "AuthController_getSession",
     "responses": {
       "200": {
-        "description": "현재 세션. 로그인하지 않았으면 null이다.",
+        "description": "현재 세션의 사용자. 로그인하지 않았으면 null이다.",
         "content": {
           "application/json": {
             "schema": {
               "nullable": true,
               "allOf": [
-                { "$ref": "#/components/schemas/SessionDto" }
+                { "$ref": "#/components/schemas/SessionUserDto" }
               ]
             }
           }
@@ -476,7 +462,7 @@ export class SessionDto {
 }</code></pre>
           <p>
             <code>"$ref"</code>만 쓰면 옆에 <code>nullable</code>을 붙일 수 없어서(OpenAPI 3.0에서 <code>$ref</code> 옆의 다른 키는 무시된다)
-            <code>allOf</code>로 한 번 감싸고 <code>nullable: true</code>를 붙였다. 이 명세로 만든 타입에서 이 응답은 <code>SessionDto | null</code>이 되어,
+            <code>allOf</code>로 한 번 감싸고 <code>nullable: true</code>를 붙였다. 이 명세로 만든 타입에서 이 응답은 <code>SessionUserDto | null</code>이 되어,
             스토어 코드가 <code>null</code> 처리를 빠뜨리면 타입 검사에서 걸린다.
           </p>
           <p>
@@ -497,7 +483,7 @@ export class SessionDto {
 -    @Res() response: Response,
 -  ): Promise&lt;void&gt; {
 +    @Res({ passthrough: true }) response: Response,
-+  ): Promise&lt;SessionDto | null&gt; {
++  ): Promise&lt;SessionUserDto | null&gt; {
      …
 -    response.json(body);
 +    return body;
@@ -544,14 +530,14 @@ export class SessionDto {
           </div>
 
           <div class="quiz">
-            <p class="quiz-q">4. 세션 만료 일시를 세션 응답에 더할 때, 지금 본문이 <code>{ user }</code>가 아니라 사용자 객체 그대로였다면 무엇이 불편했을까?</p>
-            <p class="quiz-context"><a href="#wrapper">사용자를 user로 한 번 감싼 이유</a> 절.</p>
+            <p class="quiz-q">4. 세션 응답에 세션 만료 일시를 보여 줄 화면이 생겼다. 본문을 어떻게 바꾸고, 스토어의 어디를 고쳐야 하는지 어떻게 찾는가?</p>
+            <p class="quiz-context"><a href="#wrapper">사용자를 감싸지 않고 그대로 내보내는 이유</a> 절.</p>
             <details class="quiz-answer">
               <summary>답 보기</summary>
               <div class="fold-body">
                 <p>
-                  사용자 칸(<code>id</code>, <code>email</code>, …) 옆에 세션의 값을 섞어 넣거나, 본문 모양을 <code>{ user, … }</code>로 바꿔 기존 클라이언트
-                  코드를 모두 고쳐야 했다. 처음부터 감싸 두었기 때문에 <code>user</code> 옆에 새 칸을 더하기만 하면 된다.
+                  사용자 칸 옆에 세션 값을 섞지 않도록 본문을 <code>{ user, expiresAt }</code>처럼 감싼다. 응답 타입이 바뀌므로 생성된 클라이언트로
+                  타입 검사를 돌리면 사용자 객체를 그대로 받던 곳이 모두 오류로 드러난다. 쓰일 때 바꾸는 비용이 이 정도라서 미리 감싸 두지 않았다.
                 </p>
               </div>
             </details>

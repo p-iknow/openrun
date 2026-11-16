@@ -387,7 +387,7 @@ private buildCookieOptions() {
             <ol class="seq-steps">
               <li data-from="1" data-to="2">fetch('/auth/session', { credentials: 'include' }) <small>토큰을 모른 채 부른다</small></li>
               <li data-from="2" data-to="3">GET /auth/session <small>Cookie: openrun.session_token=aB3x… (브라우저가 싣는다)</small></li>
-              <li class="reply" data-from="3" data-to="2">200 <small>{ "user": { "id": 1, "name": "김오픈", … } }</small></li>
+              <li class="reply" data-from="3" data-to="2">200 <small>{ "id": 1, "name": "김오픈", … }</small></li>
               <li class="reply" data-from="2" data-to="1">본문만 건넨다 <small>누가 로그인했는지 안다. 토큰은 끝까지 모른다</small></li>
             </ol>
           </div>
@@ -608,7 +608,7 @@ private buildCookieOptions() {
               <li class="seq-note">Domain=openrun.example.com 이라서</li>
               <li data-from="1" data-to="2">GET openrun.example.com/shows/12 <small>Cookie: __Secure-openrun.session_token=…</small></li>
               <li data-from="2" data-to="3">GET /auth/session <small>받은 쿠키를 그대로 실어 보낸다</small></li>
-              <li class="reply" data-from="3" data-to="2">{ user: { name: '김오픈', … } }</li>
+              <li class="reply" data-from="3" data-to="2">{ name: '김오픈', … }</li>
               <li class="reply" data-from="2" data-to="1">로그인한 헤더가 그려진 HTML</li>
               <li class="seq-note">Domain이 없었다면</li>
               <li class="stop" data-from="1" data-to="2">GET openrun.example.com/shows/12 <small>쿠키 없음. api. 호스트 전용이라 실리지 않는다</small></li>

@@ -73,7 +73,7 @@
               <li data-at="2">토큰 만들기 <small>32자 난수</small></li>
               <li data-from="2" data-to="3">세션 행 INSERT <small>토큰의 SHA-256 해시만</small></li>
               <li data-at="2">쿠키 값 = 토큰.HMAC 서명</li>
-              <li class="reply" data-from="2" data-to="1">200 + Set-Cookie <small>본문: { user }</small></li>
+              <li class="reply" data-from="2" data-to="1">200 + Set-Cookie <small>본문: 사용자</small></li>
               <li class="seq-note">다음 요청</li>
               <li data-from="1" data-to="2">GET /me <small>Cookie: 토큰.서명</small></li>
               <li data-at="2">가드: 서명 확인</li>
@@ -204,12 +204,12 @@ export const signInBodySchema = z.object({
           <pre><code class="language-ts" data-lines="6 10-17">// apps/api/src/users/auth.controller.ts
   @Post('sign-in')
   @HttpCode(HttpStatus.OK)
-  @ApiOkResponse({ type: SessionDto, description: '로그인한 세션' })
+  @ApiOkResponse({ type: SessionUserDto, description: '로그인한 사용자' })
   async signIn(
     @Body({ schema: signInBodySchema }) body: SignInBody,
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
-  ): Promise&lt;SessionDto&gt; {
+  ): Promise&lt;SessionUserDto&gt; {
     const userId = await this.usersService.verifyCredentials(body);
     await this.sessionManager.issue({
       request,
@@ -217,7 +217,7 @@ export const signInBodySchema = z.object({
       subjectId: userId,
       rememberMe: body.rememberMe,
     });
-    return { user: await this.usersService.findSessionUser(userId) };
+    return this.usersService.findSessionUser(userId);
   }</code></pre>
           <div class="flow">
             <div class="lane blue">
@@ -443,7 +443,7 @@ export function signSessionToken({ token, secret }) {
 Set-Cookie: openrun.session_token=aB3xK9pQ….gvaibV…%3D; Max-Age=604800; Path=/; Expires=Sun, 22 Nov 2026 03:00:00 GMT; HttpOnly; SameSite=Lax
 Content-Type: application/json; charset=utf-8
 
-{"user": {"id": 1, "email": "kim@example.com", "name": "김오픈", "emailVerified": true}}</code></pre>
+{"id": 1, "email": "kim@example.com", "name": "김오픈", "emailVerified": true}</code></pre>
           <h3>두 부분은 어디서 오나</h3>
           <div class="seq">
             <ol class="seq-actors">
@@ -459,7 +459,7 @@ Content-Type: application/json; charset=utf-8
               <li data-from="1" data-to="3">findSessionUser(userId)</li>
               <li data-at="3">users 행을 읽어 본문 모양으로 바꾼다</li>
               <li class="reply" data-from="3" data-to="1">{ id, email, name, emailVerified }</li>
-              <li data-from="1" data-to="4">return { user } <small>@Res({ passthrough: true })라 반환값이 본문이 된다</small></li>
+              <li data-from="1" data-to="4">return 사용자 <small>@Res({ passthrough: true })라 반환값이 본문이 된다</small></li>
               <li data-at="4">얹어 둔 헤더 + JSON 본문을 함께 보낸다 <small>200 OK</small></li>
             </ol>
           </div>
