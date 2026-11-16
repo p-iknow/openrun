@@ -157,8 +157,13 @@ export const users = pgTable('users', {
           <p>
             "이메일 인증을 마쳤는가"는 참/거짓이지만 <code>boolean</code> 대신 일시를 둔다. <code>NULL</code>이면 아직, 값이 있으면 그때
             마쳤다. 칸 하나로 "했는지"와 "언제 했는지"를 함께 남긴다. API 응답에서는 <code>emailVerified: user.emailVerifiedAt !== null</code>로
-            참/거짓만 내보낸다(<a href="09-인증-API-응답-설계.html#session-dto">09 문서</a>). 인증 메일과 이 칸을 채우는 API는
-            <a href="https://github.com/p-iknow/openrun/issues/76">#76</a>에서 만든다.
+            참/거짓만 내보낸다(<a href="09-인증-API-응답-설계.html#session-dto">09 문서</a>).
+          </p>
+          <p>
+            이메일 가입은 가입 화면 안에서 인증번호로 이메일을 인증해야 끝나므로(<a href="https://github.com/p-iknow/openrun/issues/76">#76</a>,
+            <a href="https://github.com/p-iknow/openrun/issues/74">#74</a>), 가입할 때 이 칸을 채운다. 이메일 가입자에게는 <code>NULL</code>이 없다.
+            그래도 <code>NULL</code>을 허용하는 것은 1.4b 소셜 가입에서 제공자가 인증해 주지 않은 이메일을 받을 수 있어서다. 가입 전의 인증 시도는
+            사용자가 아직 없으므로 이 테이블이 아니라 <code>email_verifications</code> 테이블(#76)에 두고, 가입하면 그 행을 지운다.
           </p>
           <p>
             <code>users</code>에는 비밀번호가 없다. 이 문서에서 가장 중요한 결정이라 다음 절에서 따로 본다.
@@ -511,8 +516,9 @@ CREATE INDEX "sessions_user_id_index" ON "sessions" USING btree ("user_id");</co
             </li>
             <li>
               <strong>이미 같은 이메일로 가입한 사람</strong>
-              카카오 계정의 이메일이 기존 사용자와 같을 때 자동으로 연결할지, 막고 안내할지는 1.4b에서 실제 서비스의 방식을 조사해 정한다.
-              어느 쪽이든 결과는 <code>accounts</code>에 행을 더하거나 더하지 않는 일이라 스키마는 바뀌지 않는다.
+              카카오 계정의 이메일이 기존 사용자와 같을 때 어떻게 할지는 1.4b에서 정한다. 조사 메모
+              (<code>docs/research/social-signup-email.md</code>)는 제공자가 인증한 이메일이면 자동으로 연결하고, 이메일이 없거나 인증되지 않았으면
+              가입 화면에서 받아 #76의 인증번호로 인증하는 쪽을 권한다. 구글은 gmail과 Workspace 주소만 인증을 보장한다. 어느 쪽이든 결과는 <code>accounts</code>에 행을 더하거나 더하지 않는 일이라 스키마는 바뀌지 않는다.
             </li>
           </ol>
           <p>

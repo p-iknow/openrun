@@ -110,8 +110,8 @@
             <div class="lane blue">
               <div class="lane-title">1.4a 이메일 계정</div>
               <ol class="chain">
-                <li><span>회원가입 #74 · 화면 #75</span></li>
-                <li><span>인증 메일과 이메일 인증 #76 · 화면 #77</span></li>
+                <li><span>가입 화면 안에서 인증번호로 이메일 인증 #76 · 화면 #77</span></li>
+                <li><span>인증한 이메일로 회원가입 #74 · 화면 #75</span></li>
                 <li><span>로그인 #71 ✓</span></li>
                 <li><span>세션 발급·확인·연장·로그아웃 #71 ✓</span></li>
                 <li><span>로그인 가드 #71 ✓</span></li>
@@ -176,9 +176,9 @@
                   <td>로그인 가드가 붙는 첫 API</td>
                 </tr>
                 <tr>
-                  <td>회원가입, 이메일 인증</td>
+                  <td>이메일 인증, 회원가입</td>
                   <td><span class="badge blue">예정</span></td>
-                  <td>#74, #76</td>
+                  <td>#76, #74. 가입 화면 안에서 6자리 인증번호로 이메일을 인증하고, 인증한 이메일로만 가입한다</td>
                 </tr>
                 <tr>
                   <td>CSRF 방어(<code>Origin</code> 검사)와 CORS</td>
@@ -520,14 +520,14 @@
               </thead>
               <tbody>
                 <tr>
-                  <td>회원가입과 비밀번호 규칙</td>
-                  <td>#74</td>
-                  <td>사용자와 credential 계정을 한 트랜잭션으로 만들기, 이메일 중복, 비밀번호 규칙</td>
+                  <td>이메일 인증번호</td>
+                  <td>#76</td>
+                  <td>가입 전 이메일의 6자리 인증번호, HMAC으로 저장하기, 10분 만료, 다시 받으면 이전 번호 무효, 5번 틀리면 더 못 씀</td>
                 </tr>
                 <tr>
-                  <td>이메일 인증 토큰</td>
-                  <td>#76</td>
-                  <td>한 번 쓰고 버리는 토큰, 만료, 인증 메일 링크</td>
+                  <td>회원가입과 비밀번호 규칙</td>
+                  <td>#74</td>
+                  <td>인증한 지 30분 안의 이메일만 받기, 사용자와 credential 계정을 한 트랜잭션으로 만들기, 이메일 중복, 비밀번호 규칙</td>
                 </tr>
                 <tr>
                   <td>CSRF 방어와 CORS</td>
