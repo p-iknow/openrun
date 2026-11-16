@@ -5,7 +5,7 @@ import { Clock } from '../clock/clock.module.js';
 import {
   readAuthSecret,
   readCookieDomain,
-  readUseSecureCookies,
+  shouldUseSecureCookies,
 } from '../config/env.js';
 import { UserSessionStore } from './user-session-store.js';
 
@@ -39,15 +39,17 @@ export const userSessionManagerProvider: FactoryProvider<SessionManager> = {
   provide: USER_SESSION_MANAGER,
   inject: [UserSessionStore, Clock],
   useFactory: (store: UserSessionStore, clock: Clock) => {
-    const secure = readUseSecureCookies();
+    const useSecureCookies = shouldUseSecureCookies();
     return new SessionManager({
       store,
       clock,
       secret: readAuthSecret(),
       cookie: {
-        name: secure ? `${SECURE_COOKIE_PREFIX}${COOKIE_NAME}` : COOKIE_NAME,
+        name: useSecureCookies
+          ? `${SECURE_COOKIE_PREFIX}${COOKIE_NAME}`
+          : COOKIE_NAME,
         domain: readCookieDomain(),
-        secure,
+        secure: useSecureCookies,
       },
       getPolicy: ({ rememberMe }) =>
         rememberMe ? REMEMBERED_POLICY : NOT_REMEMBERED_POLICY,

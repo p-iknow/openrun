@@ -38,7 +38,7 @@ export function readCookieDomain(
 }
 
 /** 쿠키에 Secure 속성과 `__Secure-` 접두사를 붙일지. 운영 환경(NODE_ENV=production)은 HTTPS로만 서비스하고, 로컬은 http://localhost라 Secure 쿠키를 쓸 수 없다. */
-export function readUseSecureCookies(
+export function shouldUseSecureCookies(
   source: NodeJS.ProcessEnv = process.env,
 ): boolean {
   return source.NODE_ENV === 'production';
