@@ -506,7 +506,7 @@ export function createAuthenticationRequiredException(): ProblemException {
                 <tr>
                   <td><span class="badge green">403</span> Forbidden</td>
                   <td>누군지 알지만 이 일은 허락하지 않는다</td>
-                  <td>앞으로: 재동의가 필요한 약관이 있음, Origin 검사 실패 등</td>
+                  <td>앞으로: Origin 검사 실패(#72) 등</td>
                 </tr>
               </tbody>
             </table>
@@ -553,12 +553,6 @@ export function createAuthenticationRequiredException(): ProblemException {
                   <td>운영자 세션이 있는가. 사용자 세션으로는 <code>/admin/*</code>에 못 들어온다</td>
                   <td>같은 <code>createSessionGuard</code>에 운영자 토큰</td>
                   <td><span class="badge blue">#82 예정</span></td>
-                </tr>
-                <tr>
-                  <td>약관 재동의</td>
-                  <td>지금 다시 동의해야 하는 약관이 있는가. 있으면 403 <code>TERMS_CONSENT_REQUIRED</code></td>
-                  <td>스펙 #70: 로그인이 필요한 API의 가드</td>
-                  <td><span class="badge blue">#79 예정</span></td>
                 </tr>
                 <tr>
                   <td>내 것인가 (IDOR 방어)</td>
