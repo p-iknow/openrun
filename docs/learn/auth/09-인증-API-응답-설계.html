@@ -1,0 +1,563 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>09 인증 API 응답 설계</title>
+    <link rel="stylesheet" href="../learn.css" />
+    <script src="../vendor/highlightjs/highlight.min.js" defer></script>
+    <script src="../learn.js" defer></script>
+  </head>
+  <body>
+    <div class="layout">
+      <nav aria-label="목차">
+        <strong>목차</strong>
+        <ol>
+          <li><a href="#overview">API 네 개 한눈에 보기</a></li>
+          <li><a href="#sign-in">POST /auth/sign-in</a></li>
+          <li><a href="#sign-out">POST /auth/sign-out</a></li>
+          <li><a href="#session">GET /auth/session</a></li>
+          <li><a href="#me">GET /me</a></li>
+          <li><a href="#codes">401 두 가지와 403</a></li>
+          <li><a href="#problem">오류 본문: Problem Details</a></li>
+          <li><a href="#session-dto">SessionUserDto의 모양</a></li>
+          <li><a href="#openapi">OpenAPI 명세</a></li>
+          <li><a href="#check">스스로 확인하기</a></li>
+        </ol>
+      </nav>
+
+      <main>
+        <h1>09 인증 API 응답 설계</h1>
+        <p class="lead">
+          인증 API 네 개(<code>POST /auth/sign-in</code>, <code>POST /auth/sign-out</code>, <code>GET /auth/session</code>, <code>GET /me</code>)가
+          어떤 상태 코드와 본문으로 응답하는지, 왜 그렇게 정했는지 본다. "로그인하지 않았으면 401"이 늘 정답은 아니라는 것, 같은 401이라도
+          오류 코드로 뜻을 나누는 방법이 이 문서의 중심이다. 요청이 서버 안을 지나가는 순서는
+          <a href="02-로그인-요청-한-번-따라가기.html">02 문서</a>에 있다.
+        </p>
+
+        <section id="overview">
+          <h2>API 네 개 한눈에 보기</h2>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>API</th><th>하는 일</th><th>로그인 가드</th><th>성공</th><th>실패</th></tr></thead>
+              <tbody>
+                <tr><td><code>POST /auth/sign-in</code></td><td>로그인</td><td>없음</td><td>200 + <code>SessionUserDto</code> + 쿠키</td><td>400 <code>VALIDATION_FAILED</code>, 401 <code>INVALID_CREDENTIALS</code></td></tr>
+                <tr><td><code>POST /auth/sign-out</code></td><td>로그아웃</td><td>없음</td><td>204 + 쿠키 지우기</td><td>없음(늘 204)</td></tr>
+                <tr><td><code>GET /auth/session</code></td><td>지금 누가 로그인해 있나</td><td>없음</td><td>200 + <code>SessionUserDto</code> 또는 <code>null</code></td><td>없음(로그인하지 않아도 200)</td></tr>
+                <tr><td><code>GET /me</code></td><td>내 정보</td><td><code>UserSessionGuard</code></td><td>200 + <code>SessionUserDto</code></td><td>401 <code>AUTHENTICATION_REQUIRED</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            로그인 가드가 붙은 곳은 <code>/me</code> 하나다. 나머지 셋은 로그인하지 않은 사람도 부를 수 있어야 하는 API라서 가드가 없다. 로그인
+            API에 "로그인해야 들어올 수 있다"는 가드를 붙일 수는 없고, 로그아웃과 현재 세션 조회는 로그인하지 않은 상태에서도 뜻 있는 답이 있다.
+          </p>
+        </section>
+
+        <section id="sign-in">
+          <h2>POST /auth/sign-in</h2>
+          <h3 id="sign-in-ok">성공: 200과 세션</h3>
+          <pre><code>HTTP/1.1 200 OK
+Set-Cookie: openrun.session_token=&lt;토큰&gt;.&lt;서명&gt;; Max-Age=604800; Path=/; Expires=…; HttpOnly; SameSite=Lax
+Content-Type: application/json; charset=utf-8
+
+{"id": 1, "email": "kim@example.com", "name": "김오픈", "emailVerified": true}</code></pre>
+          <ul>
+            <li>
+              <strong>201이 아니라 200이다.</strong> Nest는 <code>POST</code>에 201(Created)을 기본으로 붙인다. 세션 행이 새로 생기기는 하지만
+              클라이언트가 그 자원을 주소로 다시 가리킬 일이 없고, 응답이 돌려주는 것은 "로그인한 지금의 세션"이라 <code>@HttpCode(HttpStatus.OK)</code>로
+              200을 준다.
+            </li>
+            <li>
+              <strong>본문은 <code>GET /auth/session</code>, <code>GET /me</code>와 같은 사용자(<code>SessionUserDto</code>)다.</strong> 로그인 화면은 응답으로 누가 로그인했는지 알아
+              헤더를 바로 그린다. 같은 모양을 주면 로그인 직후와 새로 고침 뒤를 같은 코드로 처리할 수 있다.
+            </li>
+            <li>
+              <strong>쿠키는 헤더로만 간다.</strong> 토큰은 본문에 없다. <code>HttpOnly</code> 쿠키라 자바스크립트가 토큰을 만질 일이 없다
+              (<a href="07-세션-쿠키-설정.html">07 문서</a>).
+            </li>
+          </ul>
+
+          <h3 id="remember-me-required">rememberMe는 필수 값이다</h3>
+          <p>본문에서 <code>rememberMe</code>를 빠뜨리면 기본값으로 채우지 않고 400으로 거절한다.</p>
+          <pre><code>HTTP/1.1 400 Bad Request
+Content-Type: application/problem+json; charset=utf-8
+
+{
+  "type": "about:blank",
+  "title": "Bad Request",
+  "status": 400,
+  "detail": "요청 값이 올바르지 않습니다.",
+  "code": "VALIDATION_FAILED",
+  "errors": [{ "field": "rememberMe", "detail": "true나 false여야 합니다." }]
+}</code></pre>
+          <div class="callout">
+            <p>
+              <strong>Better Auth와 다른 점:</strong> Better Auth는 <code>rememberMe</code>를 생략하면 켠 것으로 본다. 이 저장소는 세션을 7일 둘지
+              1일 둘지 정하는 값을 API의 기본값에 숨기지 않고, 스토어가 사용자가 고른 값을 늘 보내게 했다(ADR 0009). 기본값이 있으면 스토어가
+              체크박스 값을 빠뜨리는 실수를 해도 조용히 7일 세션이 생긴다.
+            </p>
+          </div>
+
+          <h3 id="invalid-credentials">실패: 없는 이메일과 틀린 비밀번호는 같은 401</h3>
+          <pre><code>HTTP/1.1 401 Unauthorized
+Content-Type: application/problem+json; charset=utf-8
+
+{
+  "type": "about:blank",
+  "title": "Unauthorized",
+  "status": 401,
+  "detail": "이메일 또는 비밀번호가 올바르지 않습니다.",
+  "code": "INVALID_CREDENTIALS"
+}</code></pre>
+          <pre><code class="language-ts" data-lines="2 6-7">// apps/api/src/users/invalid-credentials.ts
+// 없는 이메일과 틀린 비밀번호에 같은 응답을 보내, 어느 쪽이 틀렸는지로 가입 여부를 알 수 없게 한다.
+export function createInvalidCredentialsException(): ProblemException {
+  return new ProblemException({
+    status: HttpStatus.UNAUTHORIZED,
+    code: 'INVALID_CREDENTIALS',
+    detail: '이메일 또는 비밀번호가 올바르지 않습니다.',
+  });
+}</code></pre>
+          <p>
+            "가입하지 않은 이메일입니다"와 "비밀번호가 틀렸습니다"를 나눠 주면 사용자에게는 친절하지만, 공격자는 이메일 목록을 넣어 보며 어떤 이메일이
+            우리 서비스에 가입했는지 알아낼 수 있다(<a href="01-웹-인증-개념.html#enumeration">계정 존재 여부 노출</a>). 그래서 두 경우는 상태, 본문,
+            응답 시간까지 같게 만든다. 응답 시간을 같게 하는 방법은 <a href="04-비밀번호-해시와-확인.html">04 문서</a>에 있다.
+          </p>
+          <div class="callout warn">
+            <p>
+              가입(<a href="https://github.com/p-iknow/openrun/issues/74">#74</a>)에서는 "이미 가입된 이메일"을 알려 주기로 했다(스펙 #70 사용자 스토리 12).
+              가입 쪽에서 존재 여부가 드러나는 만큼 로그인 쪽을 막는 효과는 줄어들지만, 로그인은
+              비밀번호를 대입하는 공격의 입구라 로그인 응답에서 "이 이메일은 있다"를 확인해 주지 않는 일은 여전히 뜻이 있다. 요청 속도 제한은 10단계에서
+              Redis와 함께 넣는다(ADR 0009).
+            </p>
+          </div>
+        </section>
+
+        <section id="sign-out">
+          <h2>POST /auth/sign-out</h2>
+          <pre><code class="language-ts">// apps/api/src/users/auth.controller.ts
+  @Post('sign-out')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiNoContentResponse({
+    description: '로그아웃했다. 세션이 이미 끊겼어도 같다.',
+  })
+  async signOut(
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise&lt;void&gt; {
+    await this.sessionManager.revoke({ request, response });
+  }</code></pre>
+          <pre><code>HTTP/1.1 204 No Content
+Set-Cookie: openrun.session_token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax</code></pre>
+          <p>
+            로그아웃은 세션 행을 지우고, 이미 지난 만료 일시로 같은 이름의 쿠키를 다시 내려 브라우저가 쿠키를 버리게 한다. 돌려줄 내용이 없으므로
+            204(No Content)다.
+          </p>
+          <h3 id="sign-out-idempotent">이미 끊겨 있어도 204</h3>
+          <p>쿠키가 없거나, 세션이 만료됐거나, 다른 탭에서 이미 로그아웃했어도 결과는 같은 204다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>요청할 때 상태</th><th>서버가 하는 일</th><th>응답</th></tr></thead>
+              <tbody>
+                <tr><td>살아 있는 세션</td><td>행 삭제, 쿠키 지우기</td><td>204</td></tr>
+                <tr><td>이미 지워진 세션의 쿠키</td><td>지울 행이 없다, 쿠키 지우기</td><td>204</td></tr>
+                <tr><td>쿠키 없음</td><td>쿠키 지우기</td><td>204</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            사용자가 로그아웃 버튼을 누르는 이유는 "이 브라우저에서 로그인돼 있지 않은 상태"가 되는 것이다. 이미 그 상태라면 목적은 이루어졌으니 오류가
+            아니다. 여기서 401을 주면 스토어는 로그아웃 버튼 하나에 "이미 로그아웃됐을 때"라는 오류 처리를 따로 짜야 한다. 같은 요청을 여러 번 보내도
+            결과가 같은 성질을 <strong>멱등성</strong>이라고 한다. 로그아웃이 멱등이면 네트워크가 끊겨 다시 보내도 안전하다.
+          </p>
+        </section>
+
+        <section id="session">
+          <h2>GET /auth/session</h2>
+          <p>스토어 헤더가 "로그인 · 회원가입"을 그릴지 "김오픈님 · 로그아웃"을 그릴지 정할 때 부르는 API다.</p>
+          <div class="seq">
+            <ol class="seq-actors">
+              <li>스토어 헤더</li>
+              <li>API 서버</li>
+              <li>DB</li>
+            </ol>
+            <ol class="seq-steps">
+              <li class="seq-note">로그인하지 않은 방문자</li>
+              <li data-from="1" data-to="2">GET /auth/session <small>쿠키 없음</small></li>
+              <li data-at="2">authenticate → null</li>
+              <li class="reply" data-from="2" data-to="1">200 null</li>
+              <li data-at="1">"로그인 · 회원가입"</li>
+              <li class="seq-note">로그인한 사용자</li>
+              <li data-from="1" data-to="2">GET /auth/session <small>Cookie: 토큰.서명</small></li>
+              <li data-from="2" data-to="3">세션 행, 사용자 행 읽기</li>
+              <li class="reply" data-from="3" data-to="2">행</li>
+              <li class="reply" data-from="2" data-to="1">200 { id, name, … }</li>
+              <li data-at="1">"김오픈님 · 로그아웃"</li>
+            </ol>
+          </div>
+
+          <h3 id="session-null">로그인하지 않았으면 401이 아니라 200과 null</h3>
+          <p>
+            이 API가 묻는 것은 "지금 로그인한 사람은 누구인가"다. "아무도 없다"는 오류가 아니라 정상적인 답이다. 401은 "이 요청은 로그인해야 들어올 수
+            있는데 하지 않았다"는 뜻인데, 이 API는 로그인하지 않은 사람도 들어올 수 있다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th></th><th>로그인하지 않으면 401</th><th>로그인하지 않으면 200 <code>null</code> (선택)</th></tr></thead>
+              <tbody>
+                <tr><td>스토어 코드</td><td>방문자마다 오류 처리 갈래를 탄다. 진짜 오류(서버 장애)와 구분하는 코드가 필요하다</td><td><code>data === null</code> 하나로 갈린다</td></tr>
+                <tr><td>브라우저 콘솔과 모니터링</td><td>방문자가 페이지를 열 때마다 401이 빨갛게 찍힌다</td><td>조용하다</td></tr>
+                <tr><td>공통 오류 처리</td><td>"401이면 로그인 화면으로" 규칙에 걸려 둘러보기만 하려던 방문자가 로그인 화면으로 끌려갈 수 있다</td><td>걸리지 않는다</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            Better Auth의 <code>getSession</code>도 같은 방식으로 로그인하지 않았으면 <code>null</code>을 돌려준다. 반대로 <code>/me</code>처럼
+            로그인해야 뜻이 있는 API는 401을 준다(<a href="#me">아래</a>).
+          </p>
+
+          <h3 id="session-json-null">null을 직접 JSON으로 쓰는 이유</h3>
+          <pre><code class="language-ts" data-lines="1-2 7 14 21">  // 헤더를 그릴 때마다 부르므로, 로그인하지 않았으면 오류가 아니라 null로 응답한다.
+  // Nest는 핸들러가 null을 돌려주면 빈 본문을 보내므로, JSON null을 직접 쓴다.
+  @Get('session')
+  @ApiOkResponse({
+    description: '현재 세션의 사용자. 로그인하지 않았으면 null이다.',
+    schema: {
+      nullable: true,
+      allOf: [{ $ref: getSchemaPath(SessionUserDto) }],
+    },
+  })
+  async getSession(
+    @Req() request: Request,
+    @Res() response: Response,
+  ): Promise&lt;void&gt; {
+    const session = await this.sessionManager.authenticate({
+      request,
+      response,
+    });
+    const body: SessionUserDto | null =
+      session &amp;&amp; (await this.usersService.findSessionUser(session.subjectId));
+    response.json(body);
+  }</code></pre>
+          <p>
+            다른 핸들러처럼 <code>return body</code>로 끝내면 로그인했을 때는 잘 되지만, <code>null</code>일 때 문제가 생긴다. Nest의 Express 어댑터는
+            핸들러가 돌려준 값이 <code>null</code>이나 <code>undefined</code>면 본문 없이 응답을 끝낸다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>쓴 코드</th><th>응답 본문</th><th>클라이언트의 <code>response.json()</code></th></tr></thead>
+              <tbody>
+                <tr><td><code>return null</code></td><td>(비어 있음, 0바이트)</td><td>JSON을 읽다가 오류</td></tr>
+                <tr><td><code>response.json(null)</code></td><td><code>null</code> (4바이트)</td><td><code>null</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            그래서 <code>@Res()</code>를 <code>passthrough</code> 없이 받아 응답을 직접 보낸다. <code>passthrough</code>가 없으면 Nest는 응답을 보내지
+            않고 기다리므로, 이 핸들러는 반드시 <code>response.json</code>으로 끝내야 한다. 로그인한 경우도 같은 줄로 보내므로 두 갈래가 한 줄로 모인다.
+          </p>
+          <p>
+            이 API에도 <code>authenticate</code>가 쓰이므로, 세션을 연장할 때가 된 요청이면 연장한 쿠키가, 만료된 쿠키를 들고 온 요청이면 쿠키를 지우는
+            <code>Set-Cookie</code>가 함께 나간다. 헤더가 자주 부르는 API라 연장이 자연스럽게 일어나는 곳이기도 하다
+            (<a href="06-SessionManager-발급-확인-연장-폐기.html">06 문서</a>).
+          </p>
+        </section>
+
+        <section id="me">
+          <h2>GET /me</h2>
+          <pre><code class="language-ts">// apps/api/src/users/me.controller.ts
+// 내 정보. 로그인 가드가 붙는 첫 API이고, 1.8에서 넓힌다.
+@Controller('me')
+@UseGuards(UserSessionGuard)
+export class MeController {
+  constructor(private readonly usersService: UsersService) {}
+
+  @Get()
+  @ApiOkResponse({ type: SessionUserDto })
+  findMe(
+    @CurrentSession() session: AuthenticatedSession,
+  ): Promise&lt;SessionUserDto&gt; {
+    return this.usersService.findSessionUser(session.subjectId);
+  }
+}</code></pre>
+          <p>
+            <code>/me</code>는 "내" 정보라 로그인하지 않았으면 대답할 내용이 없다. 가드가 핸들러 앞에서 막고 401을 보낸다. 지금은 사용자 정보만 돌려주지만,
+            1.8에서 내 정보 화면이 생기면 넓힌다. 1.4a에서는 로그인 가드가 실제로 붙는 첫 API, 즉 "로그인이 필요한 API는 이렇게 막힌다"를 보여 주는 자리다.
+          </p>
+          <pre><code>HTTP/1.1 401 Unauthorized
+Content-Type: application/problem+json; charset=utf-8
+
+{
+  "type": "about:blank",
+  "title": "Unauthorized",
+  "status": 401,
+  "detail": "로그인이 필요합니다.",
+  "code": "AUTHENTICATION_REQUIRED"
+}</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th></th><th><code>GET /auth/session</code></th><th><code>GET /me</code></th></tr></thead>
+              <tbody>
+                <tr><td>묻는 것</td><td>지금 누가 로그인해 있나</td><td>로그인한 나의 정보</td></tr>
+                <tr><td>로그인하지 않았으면</td><td>200 <code>null</code></td><td>401 <code>AUTHENTICATION_REQUIRED</code></td></tr>
+                <tr><td>로그인 확인</td><td>핸들러가 <code>authenticate</code>를 직접 부른다</td><td>가드가 한다</td></tr>
+                <tr><td>본문</td><td>사용자(<code>SessionUserDto</code>) 또는 <code>null</code></td><td>사용자(<code>SessionUserDto</code>)</td></tr>
+                <tr><td>부르는 곳</td><td>모든 페이지의 헤더</td><td>로그인이 필요한 화면</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="codes">
+          <h2>401 두 가지와 403</h2>
+          <p>
+            상태 코드는 HTTP가 정한 큰 분류이고, 앱 오류 코드(<code>code</code>)는 그 안에서 클라이언트가 무엇을 해야 하는지 나누는 이름이다. 인증 API의
+            401은 둘이다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>code</th><th>언제</th><th>스토어가 할 일</th></tr></thead>
+              <tbody>
+                <tr><td><code>INVALID_CREDENTIALS</code></td><td>로그인하려고 낸 이메일·비밀번호가 맞지 않다</td><td>로그인 화면에 그대로 머물며 안내 문구를 보인다</td></tr>
+                <tr><td><code>AUTHENTICATION_REQUIRED</code></td><td>로그인이 필요한 API인데 세션이 없거나 만료됐다</td><td>로그인 화면으로 보내고, 로그인한 뒤 원래 화면으로 돌아온다</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            상태 코드만 보고 "401이면 로그인 화면으로"라고 처리하면, 로그인 화면에서 비밀번호를 틀렸을 때 로그인 화면으로 다시 이동하는 어색한 일이 생긴다.
+            <code>code</code>로 나누면 두 경우를 정확히 다르게 처리할 수 있다.
+          </p>
+          <div class="callout">
+            <p>
+              <strong>401은 인증, 403은 인가다.</strong> 401(Unauthorized)은 이름과 달리 "누구인지 모른다"(인증 실패)는 뜻이고, 403(Forbidden)은
+              "누구인지는 아는데 이 일은 할 수 없다"(인가 실패)는 뜻이다. 1.4a에서는 허용하지 않은 출처(<code>Origin</code>)에서 온 변경 요청을 403으로 막는
+              검사가 들어온다(<a href="https://github.com/p-iknow/openrun/issues/72">#72</a>, 예정). 로그인했더라도 그 출처에서는 할 수 없는 일이라 인가 실패다.
+              인증과 인가의 차이는 <a href="00-인증과-인가-큰-그림.html">00 문서</a>에 있다.
+            </p>
+          </div>
+          <p>오류 객체는 상태와 코드, 문구를 한곳에 두는 작은 함수로 만든다. 같은 오류를 여러 곳에서 던져도 응답이 늘 같다.</p>
+          <pre><code class="language-ts">// apps/api/src/auth/authentication-required.ts
+// 로그인이 필요한데 세션이 없거나 만료됐다. 스토어는 code를 보고 로그인 화면으로 보낸다.
+export function createAuthenticationRequiredException(): ProblemException {
+  return new ProblemException({
+    status: HttpStatus.UNAUTHORIZED,
+    code: 'AUTHENTICATION_REQUIRED',
+    detail: '로그인이 필요합니다.',
+  });
+}</code></pre>
+          <p>
+            <code>AUTHENTICATION_REQUIRED</code>는 사용자와 운영자가 함께 쓰는 가드 팩토리(<a href="08-로그인-가드와-CurrentSession.html">08 문서</a>)가 던지므로 공용 폴더(<code>auth/</code>)에, <code>INVALID_CREDENTIALS</code>는
+            사용자 로그인에서만 쓰므로 <code>users/</code>에 있다.
+          </p>
+        </section>
+
+        <section id="problem">
+          <h2>오류 본문: Problem Details</h2>
+          <p>
+            위의 오류 응답은 모두 같은 모양이다. API의 모든 오류는 RFC 9457 Problem Details 형식(<code>application/problem+json</code>)으로 보낸다
+            (ADR 0007). 인증 오류도 따로 형식을 만들지 않고 이 틀에 <code>code</code>만 바꿔 싣는다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>필드</th><th>예</th><th>뜻</th></tr></thead>
+              <tbody>
+                <tr><td><code>type</code></td><td><code>about:blank</code></td><td>오류 종류를 설명하는 문서 주소. 따로 없으므로 표준의 기본값</td></tr>
+                <tr><td><code>title</code></td><td><code>Unauthorized</code></td><td>상태 코드의 이름</td></tr>
+                <tr><td><code>status</code></td><td><code>401</code></td><td>HTTP 상태 코드</td></tr>
+                <tr><td><code>detail</code></td><td>로그인이 필요합니다.</td><td>사람이 읽는 설명</td></tr>
+                <tr><td><code>code</code></td><td><code>AUTHENTICATION_REQUIRED</code></td><td>앱이 더한 오류 코드. 클라이언트는 이 값으로 갈린다</td></tr>
+                <tr><td><code>errors</code></td><td><code>[{ field, detail }]</code></td><td>검증 오류일 때만. 필드별 오류</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            컨트롤러와 가드는 <code>ProblemException</code>을 던지기만 하고, 이 본문을 만드는 일은 전역 예외 필터가 맡는다. 필터가 예외를 본문으로 바꾸는
+            과정은 <a href="../nest/04-예외-필터와-APP_FILTER.html#to-problem">nest 04 문서</a>에 있다.
+          </p>
+        </section>
+
+        <section id="session-dto">
+          <h2>SessionUserDto의 모양</h2>
+          <pre><code class="language-ts" data-lines="13-14">// apps/api/src/users/session.dto.ts
+// 로그인한 사용자. 로그인 응답, 현재 세션, 내 정보가 같은 모양으로 돌려준다.
+export class SessionUserDto {
+  @ApiProperty({ type: 'integer', description: '사용자 ID' })
+  id: number;
+
+  @ApiProperty({ type: String, description: '이메일' })
+  email: string;
+
+  @ApiProperty({ type: String, description: '이름' })
+  name: string;
+
+  @ApiProperty({ type: Boolean, description: '이메일 인증을 마쳤는지' })
+  emailVerified: boolean;
+}</code></pre>
+
+          <h3 id="email-verified">emailVerified가 들어간 이유</h3>
+          <p>
+            이메일 가입은 가입 화면 안에서 이메일을 인증해야 끝나므로(<a href="https://github.com/p-iknow/openrun/issues/76">#76</a>,
+            <a href="https://github.com/p-iknow/openrun/issues/74">#74</a>), 이메일 가입자는 항상 <code>true</code>다. 미인증 안내나 가입 뒤 인증 메일
+            다시 보내기 같은 화면은 없다. 그래도 스펙 #70은 세션 응답에 이메일 인증 여부를 두기로 했다. 1.4b 소셜 가입에서는 제공자가 인증해 주지 않은
+            이메일이 들어올 수 있어, 그때 스토어가 로그인 직후 요청을 더 하지 않고 이 값으로 화면을 정할 수 있다.
+          </p>
+          <p>
+            DB에는 <code>email_verified_at</code>(일시)이 있지만 응답에는 참/거짓만 내보낸다. 클라이언트에게 필요한 것은 "했는가"이고, 언제 했는지는
+            내부 기록이다(<a href="03-사용자-계정-세션-테이블.html#email-verified-at">03 문서</a>).
+          </p>
+          <pre><code class="language-ts">// apps/api/src/users/users.service.ts
+      emailVerified: user.emailVerifiedAt !== null,</code></pre>
+
+          <h3 id="wrapper">사용자를 감싸지 않고 그대로 내보내는 이유</h3>
+          <p>
+            본문은 <code>{ user: { … } }</code>처럼 한 겹 감싸지 않고 사용자 객체 그대로다. 감싸 두면 나중에 세션 만료 일시 같은 세션의 값을
+            <code>user</code> 옆에 더하기 쉽지만, 지금 그런 값을 쓸 화면은 없다. 쓰이지 않는 자리를 미리 만들지 않는다.
+          </p>
+          <ul>
+            <li><strong>세 API가 같은 타입이다.</strong> 로그인 응답, <code>GET /auth/session</code>, <code>GET /me</code>가 모두 <code>SessionUserDto</code>라
+              스토어는 타입 하나로 받고, <code>.user</code>를 한 번 더 꺼낼 일이 없다.</li>
+            <li><strong>세션의 값이 필요해지면 그때 바꾼다.</strong> 본문 모양이 바뀌면 생성된 클라이언트 타입이 바뀌어, 고칠 곳을 타입 검사가 모두 알려 준다.</li>
+          </ul>
+          <p>
+            <code>email</code>은 DB에서 <code>NULL</code>을 허용하지만(탈퇴) 응답에서는 <code>string</code>이다. 탈퇴할 때 세션도 함께 지우므로 세션이 있는
+            사용자는 늘 이메일이 있다. <code>findSessionUser</code>는 이 전제가 깨지면 500으로 드러나도록 오류를 던진다.
+          </p>
+        </section>
+
+        <section id="openapi">
+          <h2>OpenAPI 명세</h2>
+          <p>
+            컨트롤러의 <code>@ApiOkResponse</code>와 DTO의 <code>@ApiProperty</code>, 본문의 zod 스키마에서 <code>apps/api/openapi.json</code>이 만들어지고,
+            스토어는 이 명세로 만든 타입과 클라이언트로 API를 부른다(<a href="../react-next/01-openapi-fetch로-API-호출과-오류-처리.html">react-next 01 문서</a>).
+            <code>GET /auth/session</code>의 응답은 이렇게 적힌다(<code>parameters</code>와 <code>tags</code>는 뺐다).
+          </p>
+          <pre><code class="language-json" data-lines="9-14">"/auth/session": {
+  "get": {
+    "operationId": "AuthController_getSession",
+    "responses": {
+      "200": {
+        "description": "현재 세션의 사용자. 로그인하지 않았으면 null이다.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "nullable": true,
+              "allOf": [
+                { "$ref": "#/components/schemas/SessionUserDto" }
+              ]
+            }
+          }
+        }
+      },
+      "default": {
+        "description": "오류(Problem Details)",
+        "content": {
+          "application/problem+json": {
+            "schema": { "$ref": "#/components/schemas/ProblemDetailsDto" }
+          }
+        }
+      }
+    }
+  }
+}</code></pre>
+          <p>
+            <code>"$ref"</code>만 쓰면 옆에 <code>nullable</code>을 붙일 수 없어서(OpenAPI 3.0에서 <code>$ref</code> 옆의 다른 키는 무시된다)
+            <code>allOf</code>로 한 번 감싸고 <code>nullable: true</code>를 붙였다. 이 명세로 만든 타입에서 이 응답은 <code>SessionUserDto | null</code>이 되어,
+            스토어 코드가 <code>null</code> 처리를 빠뜨리면 타입 검사에서 걸린다.
+          </p>
+          <p>
+            <code>/auth/sign-in</code>의 요청 본문은 <code>signInBodySchema</code>(zod)의 <code>.meta()</code> 설명이 그대로 명세에 들어가고, 세 값이 모두
+            <code>required</code>로 적힌다. 명세의 <code>default</code> 응답은 모든 API에 붙는 Problem Details 오류다.
+          </p>
+          <p>스토어가 이 응답들로 헤더와 로그인 화면을 그리는 방법은 <a href="https://github.com/p-iknow/openrun/issues/73">#73</a>에서 다룬다(예정).</p>
+        </section>
+
+        <section id="check">
+          <h2>스스로 확인하기</h2>
+
+          <div class="quiz">
+            <p class="quiz-q">1. <code>GET /auth/session</code>을 아래처럼 바꾸면 로그인하지 않은 방문자에게 어떤 응답이 가고, 스토어에서 무슨 일이 생기는가?</p>
+            <p class="quiz-context"><a href="#session-json-null">null을 직접 JSON으로 쓰는 이유</a> 절의 핸들러를 바꾼다. 스토어는 응답 본문을 JSON으로 읽는다.</p>
+            <pre><code class="language-diff">   async getSession(
+     @Req() request: Request,
+-    @Res() response: Response,
+-  ): Promise&lt;void&gt; {
++    @Res({ passthrough: true }) response: Response,
++  ): Promise&lt;SessionUserDto | null&gt; {
+     …
+-    response.json(body);
++    return body;
+   }</code></pre>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  로그인했을 때는 그대로 동작하지만, 방문자에게는 200과 빈 본문이 간다. Nest가 <code>null</code> 반환을 "보낼 본문 없음"으로 처리하기
+                  때문이다. 스토어가 빈 본문을 JSON으로 읽으면 파싱 오류가 나서, 방문자의 헤더가 오류 상태가 된다. 명세에는 <code>null</code>이라고
+                  적혀 있는데 실제 응답이 다르게 되는 셈이다.
+                </p>
+              </div>
+            </details>
+          </div>
+
+          <div class="quiz">
+            <p class="quiz-q">2. 스토어의 공통 오류 처리가 "응답이 401이면 로그인 화면으로 보낸다"로만 되어 있다. 로그인 화면에서 비밀번호를 틀리면 무슨 일이 생기고, 어떻게 고쳐야 하는가?</p>
+            <p class="quiz-context"><a href="#codes">401 두 가지와 403</a> 절.</p>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  <code>INVALID_CREDENTIALS</code>도 401이라 로그인 화면이 로그인 화면으로 다시 이동하고, "이메일 또는 비밀번호가 올바르지 않습니다"
+                  안내를 보여 줄 기회를 잃는다. 상태 코드가 아니라 <code>code</code>를 보고, <code>AUTHENTICATION_REQUIRED</code>일 때만 로그인 화면으로
+                  보내야 한다.
+                </p>
+              </div>
+            </details>
+          </div>
+
+          <div class="quiz">
+            <p class="quiz-q">3. 로그아웃을 두 번 연달아 누르면 두 번째 요청의 응답은 무엇이고, 왜 그렇게 정했는가?</p>
+            <p class="quiz-context"><a href="#sign-out-idempotent">이미 끊겨 있어도 204</a> 절.</p>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  204다. 로그아웃의 목적은 "로그인돼 있지 않은 상태"이고 이미 그 상태이므로 오류가 아니다. 같은 요청을 몇 번 보내도 결과가 같으면(멱등)
+                  네트워크 재시도나 여러 탭에서 누른 경우를 클라이언트가 따로 처리할 필요가 없다.
+                </p>
+              </div>
+            </details>
+          </div>
+
+          <div class="quiz">
+            <p class="quiz-q">4. 세션 응답에 세션 만료 일시를 보여 줄 화면이 생겼다. 본문을 어떻게 바꾸고, 스토어의 어디를 고쳐야 하는지 어떻게 찾는가?</p>
+            <p class="quiz-context"><a href="#wrapper">사용자를 감싸지 않고 그대로 내보내는 이유</a> 절.</p>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  사용자 칸 옆에 세션 값을 섞지 않도록 본문을 <code>{ user, expiresAt }</code>처럼 감싼다. 응답 타입이 바뀌므로 생성된 클라이언트로
+                  타입 검사를 돌리면 사용자 객체를 그대로 받던 곳이 모두 오류로 드러난다. 쓰일 때 바꾸는 비용이 이 정도라서 미리 감싸 두지 않았다.
+                </p>
+              </div>
+            </details>
+          </div>
+
+          <div class="quiz">
+            <p class="quiz-q">5. Origin 검사(#72)가 들어오면, 로그인한 사용자의 쿠키를 실은 변경 요청이 허용하지 않은 출처에서 올 때 401과 403 중 무엇이 맞는가?</p>
+            <p class="quiz-context"><a href="#codes">401 두 가지와 403</a> 절의 강조 상자.</p>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  403이다. 쿠키의 세션은 살아 있어 누구인지는 안다(인증 성공). 다만 그 출처에서 온 요청에는 이 일을 허락하지 않는다(인가 실패). 401을 주면
+                  스토어는 로그인 화면으로 보내겠지만, 다시 로그인해도 같은 출처의 요청은 여전히 막혀야 한다.
+                </p>
+              </div>
+            </details>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

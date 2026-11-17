@@ -1,0 +1,600 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>03 사용자·계정·세션 테이블</title>
+    <link rel="stylesheet" href="../learn.css" />
+    <script src="../vendor/highlightjs/highlight.min.js" defer></script>
+    <script src="../learn.js" defer></script>
+  </head>
+  <body>
+    <div class="layout">
+      <nav aria-label="목차">
+        <strong>목차</strong>
+        <ol>
+          <li><a href="#overview">세 테이블 한눈에 보기</a></li>
+          <li><a href="#users">users: 사람</a></li>
+          <li><a href="#why-accounts">비밀번호를 users에 두지 않는 이유</a></li>
+          <li><a href="#accounts">accounts: 로그인 수단</a></li>
+          <li><a href="#credential-id">credential 계정의 provider_account_id</a></li>
+          <li><a href="#sessions">sessions: 로그인 세션</a></li>
+          <li><a href="#cascade">사용자 행이 지워지면</a></li>
+          <li><a href="#migration">마이그레이션 SQL</a></li>
+          <li><a href="#social">소셜 로그인을 붙이면</a></li>
+          <li><a href="#check">스스로 확인하기</a></li>
+        </ol>
+      </nav>
+
+      <main>
+        <h1>03 사용자·계정·세션 테이블</h1>
+        <p class="lead">
+          로그인에 쓰는 세 테이블 <code>users</code>(사람), <code>accounts</code>(로그인 수단), <code>sessions</code>(로그인 세션)의 칸과 제약을
+          하나씩 보고, 왜 이렇게 나눴는지 따라간다. 특히 비밀번호를 사용자 테이블이 아니라 계정 테이블에 둔 결정이 1.4b의 구글·카카오
+          로그인을 어떻게 받아 내는지 본다. 스키마는 <code>apps/api/src/db/schema/users.ts</code>, 마이그레이션은
+          <code>apps/api/drizzle/0008_create_users_accounts_sessions.sql</code>이다. 기본 키, 외래 키, 유니크 같은 DB 개념은
+          <a href="../db-and-drizzle/01-프론트엔드-개발자를-위한-DB-개념.html">db-and-drizzle 01 문서</a>, Drizzle 문법은
+          <a href="../db-and-drizzle/02-drizzle-스키마-문법.html">db-and-drizzle 02 문서</a>에 있다.
+        </p>
+
+        <section id="overview">
+          <h2>세 테이블 한눈에 보기</h2>
+          <div class="erd" style="--erd-cols: 2">
+            <div class="erd-table" data-table="accounts" style="grid-area: 1 / 2">
+              <div class="erd-title">accounts <small>계정(로그인 수단)</small></div>
+              <ul>
+                <li data-key="PK">id</li>
+                <li data-key="FK" data-ref="users.id">user_id</li>
+                <li class="erd-mark">provider</li>
+                <li class="erd-mark">provider_account_id</li>
+                <li>password_hash</li>
+                <li>created_at</li>
+                <li>updated_at</li>
+              </ul>
+              <p class="erd-constraints"><span class="erd-mark">UNIQUE (provider, provider_account_id)</span></p>
+            </div>
+            <div class="erd-table" data-table="users" style="grid-area: 1 / 1 / 3 / 2">
+              <div class="erd-title">users <small>사용자</small></div>
+              <ul>
+                <li data-key="PK">id</li>
+                <li>email</li>
+                <li>name</li>
+                <li>email_verified_at</li>
+                <li>created_at</li>
+                <li>updated_at</li>
+              </ul>
+              <p class="erd-constraints">UNIQUE (email)</p>
+            </div>
+            <div class="erd-table" data-table="sessions" style="grid-area: 2 / 2">
+              <div class="erd-title">sessions <small>세션</small></div>
+              <ul>
+                <li data-key="PK">id</li>
+                <li class="erd-mark">token_hash</li>
+                <li data-key="FK" data-ref="users.id">user_id</li>
+                <li>expires_at</li>
+                <li>remember_me</li>
+                <li>ip_address</li>
+                <li>user_agent</li>
+                <li>created_at</li>
+                <li>updated_at</li>
+              </ul>
+              <p class="erd-constraints">UNIQUE (token_hash)</p>
+            </div>
+          </div>
+          <p class="erd-note">
+            회색 선은 외래 키다. 세 갈래 까마귀 발(N) 쪽이 "여러 개", 막대(1) 쪽이 "하나"다. 사용자 한 명에게 계정 여러 개, 세션 여러 개가 붙는다.
+            빨간 표시는 이 문서에서 자세히 보는 칸과 제약이다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>테이블</th><th>한 행이 뜻하는 것</th><th>비유</th></tr></thead>
+              <tbody>
+                <tr><td><code>users</code></td><td>스토어에 가입한 사람 한 명</td><td>회원 명부의 한 줄</td></tr>
+                <tr><td><code>accounts</code></td><td>그 사람이 로그인하는 방법 하나(이메일+비밀번호, 구글, 카카오)</td><td>한 사람이 가진 열쇠 하나</td></tr>
+                <tr><td><code>sessions</code></td><td>어느 브라우저에서 로그인해 있는 상태 하나</td><td>입장할 때 받은 손목 띠 하나</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            사용자가 노트북과 휴대폰에서 로그인해 있으면 세션 행이 둘이다. 이메일로도, 나중에 카카오로도 로그인할 수 있게 연결하면 계정 행이
+            둘이다. 사람은 여전히 한 명이라 <code>users</code> 행은 하나다.
+          </p>
+          <p>
+            운영자는 이 세 테이블에 없다. 운영자는 따로 <code>operators</code> 테이블과 운영자 세션 테이블을 두기로 했다(ADR 0010,
+            <a href="https://github.com/p-iknow/openrun/issues/82">#82</a>에서 만든다).
+          </p>
+        </section>
+
+        <section id="users">
+          <h2>users: 사람</h2>
+          <pre><code class="language-ts" data-lines="4-6 8-9">// apps/api/src/db/schema/users.ts
+export const users = pgTable('users', {
+  id: integer().primaryKey().generatedAlwaysAsIdentity(),
+  // 소문자로 정규화해 넣는다. 탈퇴(1.8)하면 지우므로 NULL을 허용한다.
+  // PostgreSQL의 UNIQUE는 NULL끼리 겹치는 것으로 보지 않으므로, 유니크는 이메일이 있는 행에만 걸린다.
+  email: text().unique(),
+  name: text().notNull(),
+  // 이메일 인증을 마친 일시다. 이메일 가입은 가입할 때 채운다. NULL은 1.4b 소셜 가입에서 제공자가 인증하지 않은 이메일을 위해 남긴다.
+  emailVerifiedAt: timestamp('email_verified_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});</code></pre>
+
+          <h3 id="email">email: 소문자, 유니크, 그런데 NULL 허용</h3>
+          <ul>
+            <li>
+              <strong>소문자로 넣는다.</strong> <code>Kim@Example.com</code>과 <code>kim@example.com</code>이 다른 사람으로 가입되면 안 된다.
+              가입할 때와 로그인할 때 모두 소문자로 바꾸므로, DB에서는 글자 그대로 비교하면 된다(<a href="02-로그인-요청-한-번-따라가기.html#validate">02 문서</a>).
+            </li>
+            <li>
+              <strong>유니크다.</strong> 한 이메일로 두 사람이 가입할 수 없다. 앱에서 먼저 확인하더라도, 동시에 들어온 가입 요청 둘을 끝까지
+              막는 것은 DB의 유니크 제약이다(<a href="../db-and-drizzle/01-프론트엔드-개발자를-위한-DB-개념.html#unique-why-db">왜 DB가 막아야 하나</a>).
+            </li>
+            <li>
+              <strong>그런데 <code>NOT NULL</code>이 아니다.</strong> 탈퇴(1.8)하면 개인정보인 이메일을 지우고 행은 남긴다. 주문 같은 기록이
+              이 행을 가리키고 있어서다. 탈퇴한 사람이 여럿이면 <code>email</code>이 <code>NULL</code>인 행이 여럿 생기는데, PostgreSQL의 유니크
+              제약은 <code>NULL</code>끼리 같다고 보지 않으므로 막히지 않는다(<a href="../db-and-drizzle/01-프론트엔드-개발자를-위한-DB-개념.html#unique-index">유니크와 NULL</a>).
+              그래서 "이메일이 있는 행끼리만 유니크"가 따로 조건을 쓰지 않고도 이루어진다.
+            </li>
+          </ul>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th colspan="3">users 예시</th></tr><tr><th>id</th><th>email</th><th>name</th></tr></thead>
+              <tbody>
+                <tr><td>1</td><td>kim@example.com</td><td>김오픈</td></tr>
+                <tr><td>2</td><td><code>NULL</code></td><td>(탈퇴)</td></tr>
+                <tr><td>3</td><td><code>NULL</code></td><td>(탈퇴)</td></tr>
+                <tr><td>4</td><td><s>kim@example.com</s></td><td>유니크 위반으로 들어가지 않는다</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3 id="email-verified-at">email_verified_at: 참/거짓 대신 일시</h3>
+          <p>
+            "이메일 인증을 마쳤는가"는 참/거짓이지만 <code>boolean</code> 대신 일시를 둔다. <code>NULL</code>이면 아직, 값이 있으면 그때
+            마쳤다. 칸 하나로 "했는지"와 "언제 했는지"를 함께 남긴다. API 응답에서는 <code>emailVerified: user.emailVerifiedAt !== null</code>로
+            참/거짓만 내보낸다(<a href="09-인증-API-응답-설계.html#session-dto">09 문서</a>).
+          </p>
+          <p>
+            이메일 가입은 가입 화면 안에서 인증번호로 이메일을 인증해야 끝나므로(<a href="https://github.com/p-iknow/openrun/issues/76">#76</a>,
+            <a href="https://github.com/p-iknow/openrun/issues/74">#74</a>), 가입할 때 이 칸을 채운다. 이메일 가입자에게는 <code>NULL</code>이 없다.
+            그래도 <code>NULL</code>을 허용하는 것은 1.4b 소셜 가입에서 제공자가 인증해 주지 않은 이메일을 받을 수 있어서다. 가입 전의 인증 시도는
+            사용자가 아직 없으므로 이 테이블이 아니라 <code>email_verifications</code> 테이블(#76)에 두고, 가입하면 그 행을 지운다.
+          </p>
+          <p>
+            <code>users</code>에는 비밀번호가 없다. 이 문서에서 가장 중요한 결정이라 다음 절에서 따로 본다.
+          </p>
+        </section>
+
+        <section id="why-accounts">
+          <h2>비밀번호를 users에 두지 않는 이유</h2>
+          <p>가장 단순한 설계는 사용자 테이블에 비밀번호 해시 칸을 두는 것이다. 이메일 로그인만 있다면 그것으로 충분하다.</p>
+          <div class="flow">
+            <div class="lane blue">
+              <div class="lane-title">설계 A: users에 password_hash</div>
+              <ol class="chain">
+                <li><span>users(id, email, password_hash, …)</span></li>
+              </ol>
+            </div>
+            <div class="lane green">
+              <div class="lane-title">설계 B(이 저장소): 로그인 수단을 accounts로</div>
+              <ol class="chain">
+                <li><span>users(id, email, …)</span></li>
+                <li><span>accounts(user_id, provider, provider_account_id, password_hash)</span></li>
+              </ol>
+            </div>
+          </div>
+          <p>1단계에는 구글·카카오 로그인(1.4b)이 들어온다. 그때 설계 A에서 생기는 일을 보자.</p>
+          <ol class="steps blue">
+            <li>
+              <strong>카카오로만 가입한 사람</strong>
+              비밀번호가 없다. <code>password_hash</code>를 <code>NULL</code>로 두면 "비밀번호가 없는 사용자"와 "데이터가 잘못된 사용자"를 구분할 수
+              없다.
+            </li>
+            <li>
+              <strong>카카오 사용자를 다시 알아보기</strong>
+              카카오가 주는 사용자 식별자를 저장할 칸이 필요하다. <code>users.kakao_id</code>를 더한다.
+            </li>
+            <li>
+              <strong>구글도 붙인다</strong>
+              <code>users.google_id</code>를 또 더한다. 제공자가 늘 때마다 사용자 테이블에 칸이 늘고, 대부분의 행에서 그 칸은 비어 있다.
+            </li>
+            <li>
+              <strong>한 사람이 이메일과 카카오를 함께 쓰기(1.8의 소셜 연결)</strong>
+              칸이 다 한 행에 있어 되긴 하지만, "연결 해제"나 "마지막 로그인 수단은 끊을 수 없다" 같은 규칙을 칸마다 따로 짜야 한다.
+            </li>
+          </ol>
+          <p>
+            설계 B는 "로그인 수단"을 행으로 둔다. 이메일+비밀번호도, 구글도, 카카오도 <code>accounts</code>의 행 하나이고 모양이 같다. 제공자가
+            늘어도 테이블 모양은 그대로이고, 한 사람이 수단을 여럿 가지면 행이 여럿일 뿐이다. 이 모양은
+            <a href="../../research/better-auth-session.md">Better Auth</a>의 <code>account</code> 테이블을 따른 것이다. Auth.js 같은
+            다른 인증 라이브러리도 사용자와 로그인 수단을 나누는 같은 모양을 쓴다.
+          </p>
+          <div class="callout">
+            <p>
+              <strong>사용자(users)는 "누구인가", 계정(accounts)은 "어떻게 들어오는가"다.</strong> 로그인 방식이 늘거나 바뀌어도 "누구인가"는
+              그대로여야 주문, 찜, 리뷰가 같은 사람에게 붙어 있다.
+            </p>
+          </div>
+          <p>1.4b와 1.8을 마친 뒤의 모습을 예시 데이터로 그려 보면 이렇다. 구글·카카오 행은 아직 들어갈 수 없는, 앞으로의 모습이다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th colspan="5">accounts 예시 (1.4b 이후)</th></tr><tr><th>id</th><th>user_id</th><th>provider</th><th>provider_account_id</th><th>password_hash</th></tr></thead>
+              <tbody>
+                <tr><td>1</td><td><strong>1</strong></td><td><code>credential</code></td><td>1</td><td><code>a3f1…:9c0e…</code></td></tr>
+                <tr><td>2</td><td><strong>1</strong></td><td><code>kakao</code> <span class="badge blue">1.4b</span></td><td>3141592653</td><td><code>NULL</code></td></tr>
+                <tr><td>3</td><td><strong>1</strong></td><td><code>google</code> <span class="badge blue">1.4b</span></td><td>1098765432101234567890</td><td><code>NULL</code></td></tr>
+                <tr><td>4</td><td><strong>5</strong></td><td><code>kakao</code> <span class="badge blue">1.4b</span></td><td>2718281828</td><td><code>NULL</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            사용자 1은 이메일, 카카오, 구글 세 수단으로 들어올 수 있다. 사용자 5는 카카오로만 가입해 비밀번호가 없다. 두 사람 모두
+            <code>users</code>에서는 같은 모양이다.
+          </p>
+        </section>
+
+        <section id="accounts">
+          <h2>accounts: 로그인 수단</h2>
+          <pre><code class="language-ts" data-lines="3 6 8-9 17 19 21 31">// apps/api/src/db/schema/users.ts
+// 로그인 수단의 제공자다. 1.4b에서 google, kakao를 더한다.
+export const ACCOUNT_PROVIDERS = ['credential'] as const;
+export type AccountProvider = (typeof ACCOUNT_PROVIDERS)[number];
+
+export const accountProvider = pgEnum('account_provider', ACCOUNT_PROVIDERS);
+
+// 사용자의 로그인 수단 하나다(Better Auth의 account 테이블). 이메일 로그인 계정(credential)이 비밀번호 해시를 갖는다.
+// 사용자 테이블에 비밀번호를 두지 않아, 소셜 로그인만 쓰는 사용자도 같은 모양이 된다.
+export const accounts = pgTable(
+  'accounts',
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() =&gt; users.id, { onDelete: 'cascade' }),
+    provider: accountProvider().notNull(),
+    // 제공자 안에서 이 계정을 가리키는 값이다. 이메일 로그인 계정은 Better Auth처럼 사용자 id를 넣는다.
+    providerAccountId: text('provider_account_id').notNull(),
+    // scrypt 해시(`솔트:키`, hex)다. 이메일 로그인 계정에만 있다.
+    passwordHash: text('password_hash'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) =&gt; [
+    // 같은 제공자의 같은 계정이 두 사용자에게 연결되지 않게 막는다.
+    unique().on(table.provider, table.providerAccountId),
+    index().on(table.userId),
+  ],
+);</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>칸</th><th>뜻</th></tr></thead>
+              <tbody>
+                <tr><td><code>user_id</code></td><td>이 수단으로 들어오면 누가 되는가</td></tr>
+                <tr><td><code>provider</code></td><td>어느 제공자인가. 지금은 <code>credential</code>(이메일+비밀번호) 하나다. 정해진 값만 들어가도록 <a href="../db-and-drizzle/02-drizzle-스키마-문법.html#pg-enum">pgEnum</a>으로 둔다</td></tr>
+                <tr><td><code>provider_account_id</code></td><td>그 제공자 안에서 이 계정을 가리키는 값. 카카오라면 카카오가 주는 회원 번호다</td></tr>
+                <tr><td><code>password_hash</code></td><td><code>credential</code> 계정에만 있는 scrypt 해시. 만드는 법은 <a href="04-비밀번호-해시와-확인.html">04 문서</a></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3 id="provider-unique">UNIQUE (provider, provider_account_id)</h3>
+          <p>
+            "카카오 회원 3141592653"은 세상에 하나다. 이 계정이 우리 사용자 두 명에게 동시에 연결되면, 카카오로 로그인했을 때 누구로 들여보낼지
+            정할 수 없다. 그래서 두 칸의 조합을 유니크로 묶는다. 조합 유니크가 어떻게 동작하는지는
+            <a href="../db-and-drizzle/01-프론트엔드-개발자를-위한-DB-개념.html#unique-composite">여러 컬럼 유니크</a>에 있다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>provider</th><th>provider_account_id</th><th>결과</th></tr></thead>
+              <tbody>
+                <tr><td><code>kakao</code></td><td>3141592653</td><td>들어간다</td></tr>
+                <tr><td><code>google</code></td><td>3141592653</td><td>들어간다. 제공자가 다르면 같은 번호라도 다른 계정이다</td></tr>
+                <tr><td><code>kakao</code></td><td>3141592653</td><td>막힌다. 이미 누군가에게 연결된 카카오 계정이다</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            이 유니크 제약에는 인덱스가 따라 생긴다(<a href="../db-and-drizzle/01-프론트엔드-개발자를-위한-DB-개념.html#unique-index">유니크와 인덱스</a>).
+            1.4b에서 "카카오가 알려 준 회원 번호로 우리 사용자 찾기"가 바로 이 두 칸으로 찾는 조회라, 그 조회도 이 인덱스로 빠르다.
+          </p>
+
+          <h3 id="user-id-index">index (user_id)</h3>
+          <p>
+            PostgreSQL은 외래 키 칸에 인덱스를 자동으로 만들지 않는다. "이 사용자의 계정 전부"를 찾을 일(로그인 수단 목록, 사용자 행이 지워질 때
+            딸린 행 찾기)이 있어 <code>user_id</code>에 인덱스를 따로 둔다. 지금 로그인 조회는 이메일로 사용자를 찾아 JOIN하므로 이 인덱스를
+            쓸 수 있다(<a href="02-로그인-요청-한-번-따라가기.html#credentials">02 문서의 SQL</a>).
+          </p>
+        </section>
+
+        <section id="credential-id">
+          <h2>credential 계정의 provider_account_id</h2>
+          <p>
+            카카오 계정이라면 <code>provider_account_id</code>에 카카오 회원 번호를 넣으면 된다. 그런데 이메일+비밀번호 계정은 "제공자 안의 식별자"가
+            따로 없다. 우리가 제공자이기 때문이다. 이 저장소는 Better Auth처럼 <strong>사용자 id</strong>를 넣는다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>넣을 수 있는 값</th><th>생기는 일</th></tr></thead>
+              <tbody>
+                <tr><td><strong>사용자 id</strong> (선택)</td><td>사용자마다 값이 하나로 정해져, <code>UNIQUE (provider, provider_account_id)</code>가 "사용자 한 명에게 credential 계정은 하나"까지 막아 준다. 바뀔 일도 없다</td></tr>
+                <tr><td>이메일</td><td>이메일을 바꾸면(1.8) 두 테이블을 함께 고쳐야 한다. 탈퇴로 이메일을 지우면 <code>NOT NULL</code>인 이 칸에 넣을 값이 없다</td></tr>
+                <tr><td>비워 두기(<code>NULL</code>)</td><td>칸이 <code>NOT NULL</code>이 아니어야 하고, <code>NULL</code>끼리는 유니크로 막히지 않아 한 사람에게 credential 계정이 둘 생길 수 있다</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            사용자 id를 넣으면 테이블의 모든 행이 "제공자 + 그 안의 식별자"라는 같은 규칙을 지키고, 덤으로 credential 계정이 사용자당 하나라는 규칙도
+            DB가 지킨다. 다만 사용자 id는 사용자 행을 넣은 뒤에야 알 수 있으므로, 가입(<a href="https://github.com/p-iknow/openrun/issues/74">#74</a>)은
+            사용자 행을 먼저 넣고 돌려받은 id로 계정 행을 넣는다.
+          </p>
+          <p>로그인 조회는 이 칸을 쓰지 않는다. 이메일은 <code>users</code>에 있으므로 이메일로 사용자를 찾고, 그 사용자의 credential 계정을 JOIN한다.</p>
+        </section>
+
+        <section id="sessions">
+          <h2>sessions: 로그인 세션</h2>
+          <pre><code class="language-ts" data-lines="6 10 11-12">// apps/api/src/db/schema/users.ts
+export const sessions = pgTable(
+  'sessions',
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    tokenHash: text('token_hash').notNull().unique(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() =&gt; users.id, { onDelete: 'cascade' }),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    // 로그인 상태 유지를 골랐는지다. 켜면 7일 동안 유지하며 연장하고, 끄면 1일 뒤 끝나며 연장하지 않는다.
+    rememberMe: boolean('remember_me').notNull(),
+    ipAddress: text('ip_address'),
+    userAgent: text('user_agent'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) =&gt; [index().on(table.userId)],
+);</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>칸</th><th>뜻</th><th>누가 쓰나</th></tr></thead>
+              <tbody>
+                <tr><td><code>token_hash</code></td><td>쿠키에 든 토큰의 SHA-256 해시(hex 64자). 원문은 저장하지 않는다</td><td>요청마다 이 값으로 세션을 찾는다</td></tr>
+                <tr><td><code>user_id</code></td><td>이 세션의 주인</td><td>가드가 핸들러에 넘기는 <code>subjectId</code></td></tr>
+                <tr><td><code>expires_at</code></td><td>이 시각이 지나면 끝난 세션</td><td>만료 판단, 연장 시점 계산</td></tr>
+                <tr><td><code>remember_me</code></td><td>로그인 상태 유지를 골랐는지</td><td>만료·연장 정책 고르기</td></tr>
+                <tr><td><code>ip_address</code>, <code>user_agent</code></td><td>로그인한 곳과 브라우저</td><td>기록용. 판단에는 쓰지 않는다</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3 id="token-hash">token_hash: 유니크이자 찾는 열쇠</h3>
+          <p>
+            세션을 찾는 유일한 방법이 "쿠키의 토큰을 해시해 같은 행 찾기"다. 유니크 제약이 같은 해시가 두 번 들어가지 않게 막고, 함께 생기는 인덱스가
+            이 조회를 빠르게 한다. 토큰을 해시해서 저장하는 이유와 해시가 겹칠 걱정이 없는 이유는
+            <a href="05-세션-토큰-만들기-서명-저장.html">05 문서</a>에 있다.
+          </p>
+          <div class="callout">
+            <p>
+              <strong>Better Auth와 다른 점:</strong> Better Auth는 세션 테이블에 토큰 원문을 저장한다. 이 저장소는 SHA-256 해시를 저장해, DB가
+              유출돼도 그 값으로 쿠키를 만들 수 없게 했다(ADR 0009).
+            </p>
+          </div>
+
+          <h3 id="remember-me">remember_me: 세션 행에 둔다</h3>
+          <p>
+            로그인 상태 유지를 켰는지에 따라 세션의 규칙이 달라진다. 켰으면 7일 유지와 연장, 껐으면 1일 뒤 끝이다. 요청이 올 때마다 이 세션이 어느
+            규칙을 따르는지 알아야 하므로, 고른 값을 세션 행에 저장한다. 규칙의 내용은
+            <a href="06-SessionManager-발급-확인-연장-폐기.html">06 문서</a>에 있다.
+          </p>
+          <div class="callout">
+            <p>
+              <strong>Better Auth와 다른 점:</strong> Better Auth는 "유지하지 않음"을 별도 쿠키(<code>dont_remember</code>)로 들고 다닌다. 이
+              저장소는 세션 행에 둔다. 세션의 규칙을 정하는 값이 세션과 같은 곳에 있어 쿠키 하나만 다루면 되고, 서버가 판단에 쓰는 값을 브라우저에
+              맡기지 않는다(ADR 0009).
+            </p>
+          </div>
+
+          <h3 id="ip-ua">ip_address, user_agent</h3>
+          <p>
+            세션을 만들 때 요청의 IP와 <code>User-Agent</code> 헤더를 적어 둔다. Better Auth도 같은 칸을 둔다. 지금은 어디서도 읽지 않는 기록이고,
+            로그인 판단에도 쓰지 않는다. IP는 휴대폰이 와이파이와 LTE를 오가기만 해도 바뀌어서 판단에 쓰면 멀쩡한 사용자가 로그아웃된다. 둘 다 값이
+            없을 수 있어 <code>NULL</code>을 허용한다.
+          </p>
+
+          <h3 id="sessions-user-index">index (user_id)</h3>
+          <p>
+            "이 사용자의 세션 전부"를 지울 일이 있다. 탈퇴(1.8)하면 세션을 모두 끊어야 하고, 사용자 행이 지워질 때 딸린 세션을 찾는 것도 이 칸이다.
+            그래서 <code>accounts</code>처럼 <code>user_id</code>에 인덱스를 둔다. <code>expires_at</code>에는 인덱스가 없다. 만료된 행은 그 세션으로
+            요청이 올 때 지운다(<a href="06-SessionManager-발급-확인-연장-폐기.html">06 문서</a>). 아무도 다시 오지 않는 만료 세션을 한꺼번에 지우는
+            일은 아직 하지 않는다.
+          </p>
+        </section>
+
+        <section id="cascade">
+          <h2>사용자 행이 지워지면</h2>
+          <p>
+            <code>accounts.user_id</code>와 <code>sessions.user_id</code>는 모두 <code>onDelete: 'cascade'</code>다. 사용자 행을 지우면 그 사람의
+            계정과 세션도 DB가 함께 지운다. 값별 동작은 <a href="../db-and-drizzle/02-drizzle-스키마-문법.html#on-delete">onDelete</a>에 있다.
+          </p>
+          <div class="flow">
+            <div class="lane blue">
+              <div class="lane-title">DELETE FROM users WHERE id = 1</div>
+              <ol class="chain">
+                <li><span>users 1 삭제</span></li>
+                <li><span>accounts의 user_id = 1 삭제</span></li>
+                <li><span>sessions의 user_id = 1 삭제</span></li>
+              </ol>
+            </div>
+          </div>
+          <p>
+            계정과 세션은 사용자 없이는 뜻이 없다. 주인 없는 비밀번호 해시나, 아무도 아닌 사람으로 로그인되는 세션이 남지 않게 한다. 기본값
+            (<code>no action</code>)이었다면 딸린 행을 먼저 지우지 않는 한 사용자 행을 지울 수 없다.
+          </p>
+          <div class="callout warn">
+            <p>
+              탈퇴는 사용자 행을 지우는 일이 아니다. 1.8의 탈퇴는 이메일 같은 개인정보를 지우고 행은 남기는 방식을 전제로 하고 있어서(<a href="#email">email</a>
+              절), 그때는 cascade가 동작하지 않는다. 탈퇴할 때 세션을 끊는 일은 앱이 직접 해야 한다. cascade는 테스트 데이터 정리처럼 행을 실제로 지울
+              때 딸린 행이 남지 않게 하는 안전장치다.
+            </p>
+          </div>
+        </section>
+
+        <section id="migration">
+          <h2>마이그레이션 SQL</h2>
+          <p>
+            세 테이블은 마이그레이션 하나(<code>0008</code>)로 만들었다. drizzle-kit이 스키마에서 만든 SQL 중 이 문서에서 본 제약만 추렸다.
+            마이그레이션을 만드는 순서는 <a href="../db-and-drizzle/08-마이그레이션.html">db-and-drizzle 08 문서</a>에 있다.
+          </p>
+          <pre><code class="language-sql" data-lines="1 7 9 20 24 28 30-31">CREATE TYPE "public"."account_provider" AS ENUM('credential');
+CREATE TABLE "accounts" (
+	"id" integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY (...),
+	"user_id" integer NOT NULL,
+	"provider" "account_provider" NOT NULL,
+	"provider_account_id" text NOT NULL,
+	"password_hash" text,
+	...
+	CONSTRAINT "accounts_provider_provider_account_id_unique" UNIQUE("provider","provider_account_id")
+);
+CREATE TABLE "sessions" (
+	"id" integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY (...),
+	"token_hash" text NOT NULL,
+	"user_id" integer NOT NULL,
+	"expires_at" timestamp with time zone NOT NULL,
+	"remember_me" boolean NOT NULL,
+	"ip_address" text,
+	"user_agent" text,
+	...
+	CONSTRAINT "sessions_token_hash_unique" UNIQUE("token_hash")
+);
+CREATE TABLE "users" (
+	"id" integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY (...),
+	"email" text,
+	"name" text NOT NULL,
+	"email_verified_at" timestamp with time zone,
+	...
+	CONSTRAINT "users_email_unique" UNIQUE("email")
+);
+ALTER TABLE "accounts" ADD CONSTRAINT "accounts_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ALTER TABLE "sessions" ADD CONSTRAINT "sessions_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+CREATE INDEX "accounts_user_id_index" ON "accounts" USING btree ("user_id");
+CREATE INDEX "sessions_user_id_index" ON "sessions" USING btree ("user_id");</code></pre>
+          <p>
+            <code>users</code>를 나중에 만드는데도 문제가 없는 이유는 외래 키를 테이블을 다 만든 뒤 <code>ALTER TABLE</code>로 따로 걸기 때문이다.
+            <code>password_hash</code>에는 <code>NOT NULL</code>이 없다. 소셜 계정 행에는 비밀번호가 없어서다.
+          </p>
+        </section>
+
+        <section id="social">
+          <h2>소셜 로그인을 붙이면</h2>
+          <p>
+            이 절은 1.4b에서 할 일을 지금 스키마에 비춰 본 것이다. 실제로 무엇을 바꿀지는 1.4b 설계에서 정하고, 그때 이 문서를 고친다.
+          </p>
+          <ol class="steps green">
+            <li>
+              <strong>제공자 값 더하기</strong>
+              <code>ACCOUNT_PROVIDERS</code>에 <code>'google'</code>, <code>'kakao'</code>를 더하고 마이그레이션을 만든다. PostgreSQL enum에 값을
+              더하는 SQL은 <code>ALTER TYPE "account_provider" ADD VALUE 'google'</code>이다. 테이블 모양은 그대로다.
+            </li>
+            <li>
+              <strong>카카오로 들어온 사람 알아보기</strong>
+              카카오가 알려 준 회원 번호로 <code>provider = 'kakao' AND provider_account_id = '…'</code>인 행을 찾는다. 있으면 그
+              <code>user_id</code>로 세션을 발급한다. 세션 발급부터는 이메일 로그인과 똑같이 <code>SessionManager.issue</code>를 쓴다.
+            </li>
+            <li>
+              <strong>처음 온 사람 가입시키기</strong>
+              없으면 <code>users</code> 행과 <code>kakao</code> 계정 행을 함께 만든다. 비밀번호 칸은 비어 있다.
+            </li>
+            <li>
+              <strong>이미 같은 이메일로 가입한 사람</strong>
+              카카오 계정의 이메일이 기존 사용자와 같을 때 어떻게 할지는 1.4b에서 정한다. 조사 메모
+              (<code>docs/research/social-signup-email.md</code>)는 제공자가 인증한 이메일이면 자동으로 연결하고, 이메일이 없거나 인증되지 않았으면
+              가입 화면에서 받아 #76의 인증번호로 인증하는 쪽을 권한다. 구글은 gmail과 Workspace 주소만 인증을 보장한다. 어느 쪽이든 결과는 <code>accounts</code>에 행을 더하거나 더하지 않는 일이라 스키마는 바뀌지 않는다.
+            </li>
+          </ol>
+          <p>
+            Better Auth의 <code>account</code> 테이블에는 제공자가 준 액세스 토큰, 리프레시 토큰 같은 칸도 있다. 로그인만 하고 제공자 API를 따로
+            부르지 않는다면 필요 없으므로, 그 칸을 더할지도 1.4b에서 정한다.
+          </p>
+        </section>
+
+        <section id="check">
+          <h2>스스로 확인하기</h2>
+
+          <div class="quiz">
+            <p class="quiz-q">1. 사용자 1이 이메일 계정을 하나 더 만들려고 아래 행을 넣으면 어떻게 되는가?</p>
+            <p class="quiz-context"><a href="#credential-id">credential 계정의 provider_account_id</a> 절. 사용자 1에게는 이미 <code>(credential, '1')</code> 행이 있다.</p>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>user_id</th><th>provider</th><th>provider_account_id</th><th>password_hash</th></tr></thead>
+                <tbody><tr><td>1</td><td><code>credential</code></td><td>1</td><td><code>b7d2…:41aa…</code></td></tr></tbody>
+              </table>
+            </div>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  <code>UNIQUE (provider, provider_account_id)</code>에 걸려 들어가지 않는다. credential 계정의 <code>provider_account_id</code>를
+                  사용자 id로 정했기 때문에, 이 유니크가 "사용자 한 명에게 credential 계정은 하나"라는 규칙까지 지킨다.
+                </p>
+              </div>
+            </details>
+          </div>
+
+          <div class="quiz">
+            <p class="quiz-q">2. <code>email</code> 칸을 아래처럼 바꾸면 1.8의 탈퇴에서 무엇이 막히는가?</p>
+            <p class="quiz-context"><a href="#email">email</a> 절의 스키마를 바꾼다.</p>
+            <pre><code class="language-diff">-  email: text().unique(),
++  email: text().notNull().unique(),</code></pre>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  탈퇴할 때 이메일을 <code>NULL</code>로 지울 수 없다. 빈 문자열 같은 값을 넣으려 해도, 두 번째 탈퇴자부터는 같은 값이 겹쳐 유니크에
+                  걸린다. <code>NULL</code>을 허용해 두면 PostgreSQL이 <code>NULL</code>끼리는 겹친다고 보지 않으므로 탈퇴자가 몇 명이든 괜찮다.
+                </p>
+              </div>
+            </details>
+          </div>
+
+          <div class="quiz">
+            <p class="quiz-q">3. 1.4b에서 구글 로그인을 붙일 때 <code>users</code> 테이블에 칸을 더해야 할까?</p>
+            <p class="quiz-context"><a href="#why-accounts">비밀번호를 users에 두지 않는 이유</a>와 <a href="#social">소셜 로그인을 붙이면</a> 절.</p>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  더하지 않아도 된다. 구글 계정은 <code>accounts</code>에 <code>provider = 'google'</code>, <code>provider_account_id = 구글 사용자 식별자</code>인
+                  행으로 들어간다. <code>account_provider</code> enum에 값을 더하는 마이그레이션만 있으면 된다.
+                </p>
+              </div>
+            </details>
+          </div>
+
+          <div class="quiz">
+            <p class="quiz-q">4. 세션 테이블에 토큰 원문(<code>token</code>)을 저장하고 그 칸으로 찾아도 로그인은 똑같이 동작한다. 그런데도 해시를 저장하는 이유는?</p>
+            <p class="quiz-context"><a href="#token-hash">token_hash</a> 절.</p>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  DB가 유출되는 경우를 막기 위해서다. 원문이 있으면 그 값과 서명 키로 곧바로 남의 세션 쿠키를 만들 수 있다. 해시만 있으면 원래
+                  토큰을 거꾸로 알아낼 수 없어 쿠키를 만들 수 없다. 조회는 쿠키의 토큰을 해시해서 하면 되므로 비용은 해시 한 번뿐이다.
+                </p>
+              </div>
+            </details>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

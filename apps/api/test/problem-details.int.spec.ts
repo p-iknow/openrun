@@ -56,6 +56,8 @@ describe('오류 응답', () => {
     vi.stubEnv('DATABASE_URL', inject('databaseUrl'));
     // 앱이 부팅 때 공연 이미지 주소 프로바이더를 만들므로 값이 있어야 한다.
     vi.stubEnv('SHOW_IMAGE_BASE_URL', 'https://images.example.com/openrun');
+    // 앱이 부팅 때 세션 쿠키 서명 키를 읽으므로 값이 있어야 한다.
+    vi.stubEnv('AUTH_SECRET', 'test-auth-secret-0123456789abcdefghijklmnop');
   });
 
   afterAll(() => {

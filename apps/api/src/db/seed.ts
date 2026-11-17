@@ -15,10 +15,12 @@ import {
   shows,
   type Genre,
 } from './schema/shows.js';
+import { accounts, sessions, users } from './schema/users.js';
 import { floors, seats, venues } from './schema/venues.js';
 import { renderDetailImages } from './seed-detail-image.js';
 import { renderPoster } from './seed-poster.js';
 import { buildShowDescription, SEED_SHOW_CONTENTS } from './seed-shows.js';
+import { DEMO_USER, insertDemoUser } from './seed-users.js';
 
 // 개발용 시드다. 매번 비우고 같은 id부터 다시 넣는다.
 // 공연의 제목, 장르, 관람 연령, 러닝타임, 소개는 seed-shows.ts에 직접 쓴 내용이다.
@@ -476,8 +478,9 @@ const db = drizzle(readDatabaseUrl());
 try {
   const performanceSeatCount = await db.transaction(async (tx) => {
     await tx.execute(
-      sql`TRUNCATE ${seatGradeAssignments}, ${seatGrades}, ${showDetailImages}, ${performanceSeats}, ${performances}, ${shows}, ${seats}, ${floors}, ${venues} RESTART IDENTITY`,
+      sql`TRUNCATE ${seatGradeAssignments}, ${seatGrades}, ${showDetailImages}, ${performanceSeats}, ${performances}, ${shows}, ${seats}, ${floors}, ${venues}, ${sessions}, ${accounts}, ${users} RESTART IDENTITY`,
     );
+    await insertDemoUser({ db: tx, now: new Date() });
 
     // 공연장마다 좌석 목록. 회차 좌석은 이 목록의 좌석 수만큼 만들고, 좌석 등급은 공연장 전체에서 몇 번째 열인지(rowPosition)로 정한다.
     const venueSeats: {
@@ -641,7 +644,7 @@ try {
     0,
   );
   console.log(
-    `공연장 ${VENUE_LAYOUTS.length}곳(좌석 ${seatCount}석), 공연 ${seedShows.length}개, 회차 ${performanceCount}개, 회차 좌석 ${performanceSeatCount}개를 넣고 포스터 ${posters.length}장, 상세 이미지 ${detailImages.flat().length}장을 만들었습니다.`,
+    `공연장 ${VENUE_LAYOUTS.length}곳(좌석 ${seatCount}석), 공연 ${seedShows.length}개, 회차 ${performanceCount}개, 회차 좌석 ${performanceSeatCount}개를 넣고 포스터 ${posters.length}장, 상세 이미지 ${detailImages.flat().length}장을 만들었습니다. 데모 사용자 ${DEMO_USER.email}을 넣었습니다.`,
   );
 } finally {
   await db.$client.end();

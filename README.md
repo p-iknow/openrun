@@ -25,7 +25,7 @@ cp apps/store/.env.example apps/store/.env
 
 pnpm infra:up               # PostgreSQL, Mailpit 실행
 pnpm db:migrate             # 마이그레이션 적용
-pnpm db:seed                # 개발용 공연 데이터 넣기
+pnpm db:seed                # 개발용 공연 데이터와 데모 사용자 넣기
 
 pnpm dev                    # 스토어, API, store-ui 감시 빌드 함께 실행
 ```
@@ -36,11 +36,15 @@ pnpm dev                    # 스토어, API, store-ui 감시 빌드 함께 실�
 
 시드는 공연마다 가상의 포스터(장르별 그림과 색, 제목, 공연 기간, 공연장)와 상세 이미지 세 장(소개, 관람 포인트, 예매·관람 안내)을 PNG로 만들어 `apps/store/public/show-images/`의 `posters/`, `details/`에 쓴다. 이 폴더는 git에 올리지 않으며 시드를 다시 돌리면 다시 만든다. 이미 시드를 넣은 DB에 `pnpm db:migrate`로 포스터 경로 컬럼을 더하면 공연과 회차가 비워지므로 `pnpm db:seed`를 다시 실행한다.
 
+시드는 이메일을 인증한 데모 사용자도 넣는다. 이메일 `demo@example.com`, 비밀번호 `openrun1234!`로 로그인한다(`POST /auth/sign-in`). 로컬 전용 값이다.
+
 | 환경 변수         | 파일                                | 뜻                                                                                                                      |
 | ----------------- | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | `DATABASE_URL`    | `apps/api/.env`                     | PostgreSQL 주소                                                                                                         |
 | `SHOW_IMAGE_BASE_URL` | `apps/api/.env`, `apps/store/.env` | 공연 이미지(포스터, 상세 이미지) 저장소의 주소. API는 이 값과 저장소 안 경로를 합친 완전한 URL을 돌려주고, 스토어는 이 주소의 이미지만 `next/image`로 최적화한다. 두 파일의 값을 같게 둔다. |
 | `API_INTERNAL_URL` | `apps/store/.env`                  | 서버 렌더링이 API를 호출하는 내부 주소                                                                                  |
+| `AUTH_SECRET`     | `apps/api/.env`                     | 세션 쿠키 서명(HMAC-SHA256)의 키. 32자 이상이어야 하고, 짧거나 없으면 API가 부팅하지 않는다. 운영 값은 `openssl rand -base64 32`로 만든다. |
+| `COOKIE_DOMAIN`   | `apps/api/.env`                     | 선택. 사용자 세션 쿠키의 `Domain`. 스토어와 API가 서브도메인으로 나뉘는 배포에서 상위 도메인을 적는다. 로컬은 둘 다 `localhost`라 비워 둔다. |
 
 `pnpm dev`는 `packages/store-ui`를 감시 빌드하므로 토큰이나 컴포넌트를 고치면 스토어에 바로 반영된다.
 

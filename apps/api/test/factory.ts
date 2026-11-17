@@ -8,7 +8,9 @@ import {
   showDetailImages,
   shows,
 } from '../src/db/schema/shows.js';
+import { accounts, users } from '../src/db/schema/users.js';
 import { floors, seats, venues } from '../src/db/schema/venues.js';
+import { hashPassword } from '../src/auth/password.js';
 import { db } from './db.js';
 
 // 테스트 데이터 팩토리. build()는 기본값을 채운 행을 DB에 넣고 id를 돌려준다.
@@ -161,4 +163,47 @@ async function insertShow({
       .values(grades.map((grade) => ({ ...grade, showId })));
   }
   return showId;
+}
+
+interface UserInput {
+  email: string;
+  name: string;
+  // 이메일 로그인 계정의 비밀번호. 해시해서 넣는다.
+  password: string;
+  emailVerifiedAt: string | null;
+}
+
+// 사용자와 이메일 로그인 계정을 넣고 사용자 id를 돌려준다. 기본 사용자는 이메일을 인증했다.
+export const userFactory = Factory.Async.makeFactory<UserInput>({
+  email: 'user@example.com',
+  name: '김오픈',
+  password: 'password1!',
+  emailVerifiedAt: '2026-01-01T00:00:00Z',
+}).transform(insertUser);
+
+async function insertUser({
+  email,
+  name,
+  password,
+  emailVerifiedAt,
+}: UserInput): Promise<number> {
+  const [user] = await db
+    .insert(users)
+    .values({
+      email,
+      name,
+      emailVerifiedAt:
+        emailVerifiedAt === null ? null : new Date(emailVerifiedAt),
+    })
+    .returning({ id: users.id });
+  if (!user) {
+    throw new Error('사용자를 넣지 못했습니다.');
+  }
+  await db.insert(accounts).values({
+    userId: user.id,
+    provider: 'credential',
+    providerAccountId: String(user.id),
+    passwordHash: await hashPassword(password),
+  });
+  return user.id;
 }

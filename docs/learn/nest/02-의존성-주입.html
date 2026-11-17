@@ -761,6 +761,33 @@ export class SeatHoldModule {}</code></pre>
             클래스다. 생성자에 <code>Mailer</code>가 적혀 있으면 Nest는 <code>Mailer</code>라는
             이름표로 객체를 찾는다. 이름표와 내용물이 나뉘어 있어서 2단계와 4단계가 가능하다.
           </p>
+          <h4 id="token">주입 토큰: 컨테이너에서 찾는 열쇠</h4>
+          <p>
+            이 이름표를 Nest 문서는 <strong>주입 토큰(injection token)</strong>이라 부른다. Nest는 앱이 켜질 때 프로바이더를 만들어
+            저장소(DI 컨테이너)에 넣어 두고, 주입할 자리마다 토큰으로 찾아 꺼낸다. 컨테이너를 아주 단순하게 그리면 토큰을 키로 쓰는
+            <code>Map</code>이다.
+          </p>
+          <pre><code class="language-ts">// DI 컨테이너를 아주 단순하게 그리면
+const container = new Map&lt;토큰, 인스턴스&gt;();
+
+// 넣기: provide가 토큰이다
+container.set(Mailer, new Mailer()); // 토큰 = 클래스
+container.set(CLOCK, { now: () =&gt; Date.now() }); // 토큰 = Symbol (4단계)
+
+// 꺼내기: 생성자의 타입이나 @Inject(토큰)으로 찾는다
+container.get(Mailer); // constructor(private readonly mailer: Mailer)
+container.get(CLOCK); // constructor(@Inject(CLOCK) private readonly clock: Clock)</code></pre>
+          <ul>
+            <li>
+              <strong>클래스 토큰:</strong> 보통의 경우다. 생성자에 타입만 적으면 그 클래스가 토큰이 되므로 <code>@Inject</code>가
+              필요 없다.
+            </li>
+            <li>
+              <strong>Symbol이나 문자열 토큰:</strong> 클래스로 구별할 수 없을 때 쓴다. 인터페이스로 받거나(4단계), 같은 클래스의
+              인스턴스를 설정만 달리해 여럿 둘 때다. 클래스 하나를 키로 둘을 넣을 수는 없으므로 인스턴스마다 이름표를 따로 만든다.
+              Symbol은 만들 때마다 유일한 값이라 문자열처럼 우연히 겹치지 않는다.
+            </li>
+          </ul>
 
           <h3>2단계: 문자열이 필요한 객체</h3>
           <p>이번에는 <code>Database</code>를 옮긴다.</p>

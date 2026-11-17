@@ -278,6 +278,11 @@ th {
 td {
   background: var(--surface);
 }
+/* 표 칸의 코드는 글자 중간에서 끊지 않는다. 끊을 수 있다고 보면 자동 표 배치가 열을 글자 몇 개 폭까지 줄인다. */
+td code {
+  word-break: normal;
+  overflow-wrap: break-word;
+}
 /* 계산 표에서 보지 않고 건너뛰는 칸 */
 td.muted {
   color: var(--muted);
@@ -581,6 +586,305 @@ td.muted {
   font-size: 0.85rem;
 }
 
+/*
+ * 순서도: 참여자(브라우저, API, DB) 사이에 요청과 응답이 오가는 순서.
+ * 참여자 수만큼 같은 폭의 열을 두고, 메시지는 보내는 열부터 받는 열까지 걸친다.
+ * 열 수(--seq-cols), 메시지의 열 범위와 번호, 생명선은 learn.js가 정한다.
+ */
+.seq {
+  margin: 1.25rem 0;
+  padding: 1rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--code-bg);
+  overflow-x: auto;
+}
+.seq-actors,
+.seq-steps {
+  display: grid;
+  grid-template-columns: repeat(var(--seq-cols, 3), minmax(8.5rem, 1fr));
+  min-width: calc(var(--seq-cols, 3) * 8.5rem);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.seq-actors li {
+  justify-self: center;
+  margin: 0;
+  padding: 0.3rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  font-size: 0.85rem;
+  font-weight: 700;
+  line-height: 1.4;
+  text-align: center;
+}
+.seq-steps {
+  position: relative;
+  row-gap: 0.45rem;
+  padding: 0.9rem 0 0.3rem;
+}
+.seq-lifeline {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc((var(--i) + 0.5) * 100% / var(--seq-cols, 3));
+  border-left: 1px dashed var(--muted);
+  opacity: 0.55;
+}
+.seq-steps > li {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+.seq-num {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  margin-right: 0.3rem;
+  border-radius: 999px;
+  color: #fff;
+  background: var(--seq-color);
+  font-size: 0.7rem;
+  font-weight: 700;
+  vertical-align: 0.05em;
+}
+@media (prefers-color-scheme: dark) {
+  .seq-num {
+    color: #17181b;
+  }
+}
+/* 메시지: 보내는 열 가운데부터 받는 열 가운데까지 화살표를 긋고, 글은 그 위에 둔다. */
+.seq-msg {
+  --seq-color: var(--blue);
+  --seq-inset: calc(50% / var(--span, 2));
+  padding: 0 var(--seq-inset) 0.75rem;
+  text-align: center;
+}
+.seq-msg small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.seq-msg::after {
+  content: '';
+  position: absolute;
+  left: var(--seq-inset);
+  right: var(--seq-inset);
+  bottom: 0.3rem;
+  border-top: 1.5px solid var(--seq-color);
+}
+.seq-msg::before {
+  content: '';
+  position: absolute;
+  right: var(--seq-inset);
+  bottom: calc(0.3rem - 3.75px);
+  border-top: 4.5px solid transparent;
+  border-bottom: 4.5px solid transparent;
+  border-left: 8px solid var(--seq-color);
+}
+.seq-msg.to-left::before {
+  right: auto;
+  left: var(--seq-inset);
+  border-left: 0;
+  border-right: 8px solid var(--seq-color);
+}
+.seq-msg.reply {
+  --seq-color: var(--green);
+}
+.seq-msg.reply::after {
+  border-top-style: dashed;
+}
+/* 한 참여자 안에서 일어나는 일 */
+.seq-self {
+  --seq-color: var(--blue);
+  justify-self: center;
+  max-width: calc(100% - 0.75rem);
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--seq-color);
+  border-radius: 4px 6px 6px 4px;
+  background: var(--surface);
+  text-align: left;
+}
+.seq-self small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+/* 순서 사이에 끼우는 설명이나 구간 이름 */
+.seq-steps > li.seq-note {
+  grid-column: 1 / -1;
+  justify-self: center;
+  padding: 0.2rem 0.75rem;
+  border-radius: 999px;
+  color: var(--warn);
+  background: var(--warn-bg);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+/* 실패나 거절처럼 흐름이 끊기는 메시지와 동작 */
+.seq-steps > li.stop {
+  --seq-color: var(--accent);
+}
+
+/*
+ * 시간 막대: 만료, 연장처럼 시간축 위에서 일어나는 일.
+ * --tl-max가 축의 끝 값이다. 막대는 --from부터 --to까지, 사건은 --at에 그린다.
+ * 눈금 줄은 learn.js가 data-unit(단위)과 data-tick(간격, 기본 1)으로 마지막 줄에 더한다.
+ */
+.timeline {
+  --tl-max: 10;
+  margin: 1.25rem 0;
+  padding: 1rem 1.25rem 0.75rem 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--code-bg);
+  overflow-x: auto;
+}
+.tl-row {
+  display: grid;
+  grid-template-columns: var(--tl-label, 7.5rem) minmax(26rem, 1fr);
+  align-items: end;
+  gap: 0.75rem;
+  margin: 0 0 0.35rem;
+}
+.tl-label {
+  padding-bottom: 0.25rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.tl-label small {
+  display: block;
+  color: var(--muted);
+  font-weight: 400;
+}
+/* 막대 색과 같은 색의 이름표로 여러 줄을 한 묶음으로 보인다. */
+.tl-label.blue {
+  color: var(--blue);
+}
+.tl-label.green {
+  color: var(--green);
+}
+/* 다른 묶음이 시작하는 줄. 위에 선을 그어 앞 묶음과 나눈다. */
+.tl-row.tl-split {
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px dashed var(--muted);
+}
+.tl-track {
+  position: relative;
+  height: 2.75rem;
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  background-image: linear-gradient(to right, var(--border) 1px, transparent 1px);
+  background-size: calc(100% / var(--tl-max) * var(--tl-tick, 1)) 100%;
+}
+.tl-bar {
+  position: absolute;
+  bottom: 0.2rem;
+  left: calc(var(--from) / var(--tl-max) * 100%);
+  width: calc((var(--to) - var(--from)) / var(--tl-max) * 100%);
+  height: 1.45rem;
+  padding: 0 0.4rem;
+  overflow: hidden;
+  border: 1px solid var(--muted);
+  border-radius: 4px;
+  color: var(--muted);
+  background: var(--surface);
+  font-size: 0.74rem;
+  line-height: calc(1.45rem - 2px);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.tl-bar.blue {
+  border-color: var(--blue);
+  color: var(--blue);
+  background: var(--blue-bg);
+}
+.tl-bar.green {
+  border-color: var(--green);
+  color: var(--green);
+  background: var(--green-bg);
+}
+/* 쓰이지 않게 된 기간(연장으로 대체된 옛 만료, 지나간 세션) */
+.tl-bar.faded {
+  border-style: dashed;
+  opacity: 0.6;
+}
+.tl-event {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--at) / var(--tl-max) * 100%);
+  padding-left: 0.25rem;
+  border-left: 2px solid var(--accent);
+  color: var(--accent);
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+/* 축 끝 가까이의 사건은 글을 선 왼쪽에 둔다. */
+.tl-event.end {
+  padding: 0 0.25rem 0 0;
+  border-left: 0;
+  border-right: 2px solid var(--accent);
+  transform: translateX(-100%);
+  text-align: right;
+}
+/* 사건 글이 겹치면 learn.js가 뒤의 사건을 한 줄 아래로 내리고 줄을 높인다. */
+.tl-track.stacked {
+  height: 3.6rem;
+}
+.tl-event.lower {
+  padding-top: 0.85rem;
+}
+/* 사건 글은 다른 사건의 선보다 위에 그린다. 배경색 테두리를 둘러, 선이 글자를 지나가도 글이 먼저 보이게 한다. learn.js가 감싼다. */
+.tl-event-label {
+  position: relative;
+  z-index: 1;
+  text-shadow:
+    1px 0 0 var(--code-bg),
+    -1px 0 0 var(--code-bg),
+    0 1px 0 var(--code-bg),
+    0 -1px 0 var(--code-bg),
+    2px 0 0 var(--code-bg),
+    -2px 0 0 var(--code-bg);
+}
+/* 막대가 좁아 글이 잘리면 learn.js가 글을 막대 오른쪽 바깥으로 뺀다. */
+.tl-bar.label-outside {
+  color: transparent;
+}
+.tl-bar-label {
+  position: absolute;
+  bottom: 0.2rem;
+  left: calc(var(--at) / var(--tl-max) * 100%);
+  padding-left: 0.3rem;
+  color: var(--muted);
+  font-size: 0.74rem;
+  line-height: 1.45rem;
+  white-space: nowrap;
+}
+.tl-axis .tl-track {
+  height: 1.1rem;
+  border: 0;
+  background: none;
+}
+.tl-tick {
+  position: absolute;
+  left: calc(var(--at) / var(--tl-max) * 100%);
+  transform: translateX(-50%);
+  color: var(--muted);
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+
 .steps {
   margin: 1rem 0;
   padding: 0;
@@ -736,6 +1040,656 @@ details.fold {
 }
 .quiz-answer .fold-body {
   border-top: 0;
+}
+
+/* 요청 장면: 어떤 페이지에서 어떤 요청이 어디로 가고, 브라우저가 어떻게 판정하는지 */
+.scenes {
+  display: grid;
+  gap: 0.75rem;
+  margin: 1.25rem 0;
+}
+.scene {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(8rem, 11rem) fit-content(14rem);
+  align-items: center;
+  gap: 0 0.5rem;
+  padding: 0.85rem;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--green);
+  border-radius: 8px;
+  background: var(--code-bg);
+}
+.scene.cross {
+  border-left-color: var(--warn);
+}
+.scene.danger {
+  border-left-color: var(--accent);
+}
+.scene-title {
+  grid-column: 1 / -1;
+  margin-bottom: 0.6rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.scene-browser {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.scene-url {
+  padding: 0.3rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.scene-url::before {
+  content: "";
+  display: inline-block;
+  margin-right: 0.45rem;
+  width: 2.1rem;
+  height: 0.5rem;
+  background:
+    radial-gradient(circle, #e0605a 0.22rem, transparent 0.24rem) 0 50% / 0.7rem 0.5rem no-repeat,
+    radial-gradient(circle, #e4b23c 0.22rem, transparent 0.24rem) 0.7rem 50% / 0.7rem 0.5rem no-repeat,
+    radial-gradient(circle, #4fb05f 0.22rem, transparent 0.24rem) 1.4rem 50% / 0.7rem 0.5rem no-repeat;
+}
+.scene-page {
+  padding: 0.55rem 0.6rem;
+  font-size: 0.85rem;
+}
+.scene-url b,
+.scene-server b {
+  padding: 0 0.15rem;
+  border-radius: 3px;
+  background: var(--blue-bg);
+  color: var(--blue);
+  font-weight: 600;
+}
+.scene.cross .scene-url b,
+.scene.danger .scene-url b {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+.scene-req {
+  position: relative;
+  padding-bottom: 0.7rem;
+  text-align: center;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.72rem;
+  line-height: 1.3;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.scene-req::after {
+  content: "";
+  position: absolute;
+  left: 0.2rem;
+  right: 0.55rem;
+  bottom: 0.3rem;
+  border-top: 2px solid var(--muted);
+}
+.scene-req::before {
+  content: "";
+  position: absolute;
+  right: 0.2rem;
+  bottom: calc(0.3rem - 4px);
+  border: 5px solid transparent;
+  border-left: 8px solid var(--muted);
+  border-right: 0;
+}
+.scene-server {
+  padding: 0.55rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  text-align: center;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8rem;
+  min-width: 7rem;
+  overflow-wrap: break-word;
+}
+.scene-server small {
+  display: block;
+  margin-top: 0.15rem;
+  font-family: system-ui, sans-serif;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+.scene-foot {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem 1rem;
+  margin-top: 0.7rem;
+  padding-top: 0.6rem;
+  border-top: 1px dashed var(--border);
+  font-size: 0.85rem;
+}
+.scene-verdict strong {
+  color: var(--green);
+}
+.scene.cross .scene-verdict strong {
+  color: var(--warn);
+}
+.scene.danger .scene-verdict strong {
+  color: var(--accent);
+}
+.scene-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.scene-chips[data-legend]::before {
+  content: attr(data-legend);
+  align-self: center;
+  margin-right: 0.15rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.scene-chips li {
+  margin: 0;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+.scene-chips li.yes {
+  background: var(--green-bg);
+  color: var(--green);
+}
+.scene-chips li.yes::before {
+  content: "✓ ";
+}
+.scene-chips li.no {
+  background: var(--diff-del-bg);
+  color: var(--accent);
+}
+.scene-chips li.no::before {
+  content: "✕ ";
+}
+@media (max-width: 640px) {
+  .scene {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .scene-req {
+    margin: 0.4rem 0;
+  }
+}
+
+/* 변환 줄: 값이 함수를 지나 어떻게 바뀌는지 */
+.pipe {
+  display: grid;
+  gap: 0.6rem;
+  margin: 1.25rem 0;
+  padding: 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--code-bg);
+}
+.pipe-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0;
+}
+.pipe-label {
+  flex-basis: 100%;
+  margin-bottom: 0.1rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+.pipe-val {
+  padding: 0.3rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.pipe-val small {
+  display: block;
+  font-family: system-ui, sans-serif;
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+.pipe-val.secret {
+  border-color: var(--warn);
+  background: var(--warn-bg);
+}
+.pipe-val.ok {
+  border-color: var(--green);
+  background: var(--green-bg);
+}
+.pipe-val.bad {
+  border-color: var(--accent);
+  background: var(--diff-del-bg);
+}
+.pipe-fn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  margin: 0 0.35rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  background: var(--blue-bg);
+  color: var(--blue);
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.pipe-fn::before {
+  content: "→";
+  margin-right: 0.4rem;
+  font-weight: 400;
+}
+.pipe-fn::after {
+  content: "→";
+  margin-left: 0.4rem;
+  font-weight: 400;
+}
+.pipe-fn.blocked {
+  background: var(--diff-del-bg);
+  color: var(--accent);
+  text-decoration: line-through;
+}
+.pipe-fn.blocked::before,
+.pipe-fn.blocked::after {
+  content: "✕";
+  text-decoration: none;
+}
+.pipe-fn.green {
+  background: var(--green-bg);
+  color: var(--green);
+}
+.pipe-note {
+  margin-left: 0.6rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+/* 해부도: 한 값을 부분으로 나누고 부분마다 이름을 단다 */
+.anatomy {
+  display: flex;
+  flex-wrap: wrap;
+  row-gap: 0.4rem;
+  margin: 1.25rem 0;
+  padding: 1rem 0.9rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--code-bg);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9rem;
+}
+.anatomy .part {
+  --part-color: var(--border);
+  display: inline-flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 0.2rem 0.15rem 0;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.anatomy .part::after {
+  content: attr(data-label);
+  margin-top: 0.3rem;
+  padding: 0.3rem 0.25rem 0;
+  border-top: 3px solid var(--part-color);
+  font-family: system-ui, sans-serif;
+  font-size: 0.7rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.anatomy .part[data-label=""]::after {
+  border-top-color: transparent;
+}
+.anatomy .part.blue {
+  --part-color: var(--blue);
+  color: var(--blue);
+}
+.anatomy .part.green {
+  --part-color: var(--green);
+  color: var(--green);
+}
+.anatomy .part.warn {
+  --part-color: var(--warn);
+  color: var(--warn);
+}
+.anatomy .part.dim {
+  color: var(--muted);
+}
+.anatomy-caption {
+  flex-basis: 100%;
+  margin-top: 0.4rem;
+  font-family: system-ui, sans-serif;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+/* 비교 카드: 같은 항목을 가진 선택지 두세 개를 나란히 놓고 항목별로 견준다. */
+.compare {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 0.9rem;
+  margin: 1.25rem 0;
+}
+.compare-card {
+  display: flex;
+  flex-direction: column;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border);
+  border-top: 4px solid var(--muted);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.compare-card.blue {
+  border-top-color: var(--blue);
+}
+.compare-card.green {
+  border-top-color: var(--green);
+}
+.compare-title {
+  margin-bottom: 0.6rem;
+  font-weight: 700;
+}
+.compare-card.blue .compare-title {
+  color: var(--blue);
+}
+.compare-card.green .compare-title {
+  color: var(--green);
+}
+.compare-title small {
+  display: block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.72rem;
+  font-weight: 400;
+  color: var(--muted);
+}
+.compare-facts {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0 0 0.8rem;
+}
+.compare-facts dt {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.compare-facts dd {
+  margin: 0.05rem 0 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.compare-facts dd strong {
+  font-size: 1.05rem;
+}
+.compare-result {
+  margin: 0;
+  padding: 0.5rem 0.65rem;
+  border-radius: 6px;
+  background: var(--code-bg);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+/* 카드 높이가 달라도 결과는 카드 맨 아래에 맞춘다. */
+.compare-facts + .compare-result {
+  margin-top: auto;
+}
+
+/* 유출 표: 상황마다 공격자가 가진 것(●/○)과, 그것으로 통과할 수 있는 확인(✓/✕), 결과를 한 줄로 보인다. */
+table.breach th,
+table.breach td {
+  padding: 0.5rem 0.45rem;
+  vertical-align: middle;
+}
+table.breach th small,
+table.breach td small {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 400;
+  color: var(--muted);
+  white-space: normal;
+}
+/* 그룹(가진 것, 확인, 결과)의 첫 열 앞에 굵은 선을 둔다. */
+table.breach .group-start {
+  border-left: 2px solid var(--muted);
+}
+table.breach td.has,
+table.breach td.lacks,
+table.breach td.pass,
+table.breach td.fail {
+  text-align: center;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+table.breach td.has::before,
+table.breach td.lacks::before,
+table.breach td.pass::before,
+table.breach td.fail::before {
+  display: block;
+  font-size: 1.05rem;
+  line-height: 1.2;
+}
+table.breach td.has {
+  background: var(--warn-bg);
+  color: var(--warn);
+  font-weight: 600;
+}
+table.breach td.has::before {
+  content: "●";
+}
+table.breach td.lacks {
+  color: var(--muted);
+}
+table.breach td.lacks::before {
+  content: "○";
+}
+table.breach td.pass {
+  background: var(--diff-del-bg);
+  color: var(--accent);
+  font-weight: 600;
+}
+table.breach td.pass::before {
+  content: "✓";
+}
+table.breach td.fail {
+  color: var(--green);
+}
+table.breach td.fail::before {
+  content: "✕";
+}
+/* 결과 칸: 결과는 한 줄로 두고, 막는 장치는 아래 small에 적는다. */
+table.breach td.bad,
+table.breach td.safe {
+  min-width: 10rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+table.breach td.bad {
+  background: var(--diff-del-bg);
+  color: var(--accent);
+}
+table.breach td.safe {
+  color: var(--green);
+}
+table.breach td.bad small,
+table.breach td.safe small {
+  margin-top: 0.2rem;
+}
+
+/* 나머지 격자: 값의 범위를 나머지(%)로 접어, 결과마다 몇 번 대응하는지 보인다. 칸은 learn.js가 그린다. */
+.modgrid {
+  margin: 1.25rem 0;
+  padding: 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--code-bg);
+  overflow-x: auto;
+}
+.modgrid-grid {
+  display: grid;
+  grid-template-columns: 4.6rem repeat(var(--modgrid-cols), minmax(0.55rem, 1fr));
+  align-items: center;
+  gap: 1px;
+}
+.modgrid-row-label {
+  padding-right: 0.4rem;
+  font-size: 0.7rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.modgrid-head,
+.modgrid-count {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.6rem;
+  line-height: 1.6;
+  text-align: center;
+  color: var(--muted);
+}
+.modgrid-count.more {
+  color: var(--warn);
+  font-weight: 700;
+}
+.modgrid-cell {
+  height: 0.9rem;
+  border: 1px solid var(--blue);
+  border-radius: 2px;
+  background: var(--blue-bg);
+}
+/* 남는 구간: 앞쪽 결과에 한 번 더 붙는 칸(extra)과 버리는 칸(reject) */
+.modgrid-cell.extra {
+  border-color: var(--warn);
+  background: var(--warn-bg);
+}
+.modgrid-cell.reject {
+  border: 1px dashed var(--accent);
+  background: var(--diff-del-bg);
+}
+.modgrid-rest-note {
+  padding-left: 0.5rem;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+.modgrid-rest-note.extra {
+  color: var(--warn);
+}
+.modgrid-rest-note.reject {
+  color: var(--accent);
+}
+.modgrid-caption {
+  margin: 0.6rem 0 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+/* 관문: 차례로 확인하고, 하나라도 걸리면 옆으로 빠지는 흐름 */
+.gates {
+  margin: 1.25rem 0;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--code-bg);
+  list-style: none;
+  counter-reset: gate;
+}
+.gates > li {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 14rem);
+  align-items: center;
+  gap: 0 1.6rem;
+  margin: 0;
+  padding: 0 0 1.6rem;
+}
+.gates > li:last-child {
+  padding-bottom: 0;
+}
+.gates > li:not(:last-child)::after {
+  content: "↓ 통과";
+  position: absolute;
+  left: 1.1rem;
+  bottom: 0.25rem;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+.gate-check {
+  position: relative;
+  padding: 0.55rem 0.7rem 0.55rem 2.6rem;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--blue);
+  border-radius: 6px;
+  background: var(--surface);
+  font-size: 0.9rem;
+  counter-increment: gate;
+}
+.gate-check::before {
+  content: counter(gate);
+  position: absolute;
+  left: 0.65rem;
+  top: 0.6rem;
+  display: grid;
+  place-items: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 50%;
+  background: var(--blue);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.gate-check small {
+  display: block;
+  margin-top: 0.2rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.gate-fail {
+  position: relative;
+  padding: 0.4rem 0.6rem;
+  border: 1px dashed var(--accent);
+  border-radius: 6px;
+  background: var(--diff-del-bg);
+  color: var(--accent);
+  font-size: 0.8rem;
+}
+.gate-fail::before {
+  content: "";
+  position: absolute;
+  right: 100%;
+  top: 50%;
+  width: 1.5rem;
+  border-top: 2px dashed var(--accent);
+}
+.gate-fail strong {
+  display: block;
+}
+.gates > li.pass .gate-check {
+  border-left-color: var(--green);
+}
+.gates > li.pass .gate-check::before {
+  content: "✓";
+  background: var(--green);
+}
+@media (max-width: 640px) {
+  .gates > li {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.4rem;
+  }
+  .gate-fail::before {
+    display: none;
+  }
 }
 
 @media (max-width: 900px) {

