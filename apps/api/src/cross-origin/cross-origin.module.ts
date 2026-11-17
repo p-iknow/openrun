@@ -15,9 +15,10 @@ import { OriginCheckMiddleware } from './origin-check.middleware.js';
 })
 export class CrossOriginModule implements NestModule {
   // 순서가 중요하다. preflight는 CORS가 먼저 응답하고, 출처를 확인한 뒤에 본문 형식을 본다.
+  // '{*splat}'는 루트(/)까지 포함한 모든 경로다. Nest 미들웨어는 컨트롤러에 없는 경로에는 붙지 않는다.
   configure(consumer: MiddlewareConsumer): void {
     consumer
       .apply(CorsMiddleware, OriginCheckMiddleware, JsonBodyMiddleware)
-      .forRoutes('*splat');
+      .forRoutes('{*splat}');
   }
 }

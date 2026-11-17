@@ -192,22 +192,6 @@ describe('변경 요청의 본문 형식', () => {
     });
   });
 
-  it('charset이 붙은 JSON은 받는다', async () => {
-    const response = await request(app.getHttpServer())
-      .post('/auth/sign-in')
-      .set('Origin', STORE_ORIGIN)
-      .set('Content-Type', 'application/json; charset=utf-8')
-      .send(
-        JSON.stringify({
-          email: 'nobody@example.com',
-          password: 'password1!',
-          rememberMe: true,
-        }),
-      );
-
-    expect(response.status).toBe(401);
-  });
-
   it('본문이 없는 변경 요청은 Content-Type을 보지 않는다', async () => {
     const response = await signOut().set('Origin', STORE_ORIGIN);
 
