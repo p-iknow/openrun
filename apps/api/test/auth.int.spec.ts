@@ -31,6 +31,8 @@ vi.mock(import('../src/auth/password.js'), async (importOriginal) => {
 
 const DEFAULT_NOW = '2026-02-01T00:00:00Z';
 const AUTH_SECRET = 'test-auth-secret-0123456789abcdefghijklmnop';
+// 쿠키를 실은 변경 요청은 스토어 출처에서 보내야 한다(cross-origin.int.spec.ts).
+const STORE_ORIGIN = 'http://store.example.com';
 const SESSION_COOKIE = 'openrun.session_token';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -43,6 +45,8 @@ beforeAll(() => {
   vi.stubEnv('DATABASE_URL', inject('databaseUrl'));
   vi.stubEnv('SHOW_IMAGE_BASE_URL', 'https://images.example.com/openrun');
   vi.stubEnv('AUTH_SECRET', AUTH_SECRET);
+  vi.stubEnv('STORE_ORIGIN', STORE_ORIGIN);
+  vi.stubEnv('ADMIN_ORIGIN', 'http://admin.example.com');
 });
 
 afterAll(async () => {
@@ -389,6 +393,7 @@ describe('POST /auth/sign-out', () => {
 
     const response = await request(app.getHttpServer())
       .post('/auth/sign-out')
+      .set('Origin', STORE_ORIGIN)
       .set('Cookie', header);
 
     expect(response.status).toBe(204);
@@ -401,10 +406,12 @@ describe('POST /auth/sign-out', () => {
     const { header } = await signIn();
     await request(app.getHttpServer())
       .post('/auth/sign-out')
+      .set('Origin', STORE_ORIGIN)
       .set('Cookie', header);
 
     const again = await request(app.getHttpServer())
       .post('/auth/sign-out')
+      .set('Origin', STORE_ORIGIN)
       .set('Cookie', header);
     const withoutCookie = await request(app.getHttpServer()).post(
       '/auth/sign-out',
@@ -422,6 +429,7 @@ describe('다시 로그인', () => {
 
     const second = await request(app.getHttpServer())
       .post('/auth/sign-in')
+      .set('Origin', STORE_ORIGIN)
       .set('Cookie', first.header)
       .send({
         email: 'user@example.com',
