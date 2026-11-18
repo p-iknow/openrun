@@ -16,11 +16,12 @@ export class OriginCheckMiddleware implements NestMiddleware {
     }
     const pathname = getPathname(request);
     const allowed = this.allowedOrigins.getOriginFor(pathname);
-    if (request.get('cookie')) {
-      if (getRequestOrigin(request) !== allowed) {
-        throw createOriginNotAllowedException();
-      }
-    } else if (
+    const hasCookie = Boolean(request.get('cookie'));
+    if (hasCookie && getRequestOrigin(request) !== allowed) {
+      throw createOriginNotAllowedException();
+    }
+    if (
+      !hasCookie &&
       isAuthEntryPath(pathname) &&
       isForgedAuthEntryRequest({ request, allowed })
     ) {
