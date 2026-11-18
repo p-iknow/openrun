@@ -20,37 +20,35 @@ export class OriginCheckMiddleware implements NestMiddleware {
       if (getRequestOrigin(request) !== allowed) {
         throw createOriginNotAllowedException();
       }
-    } else if (isAuthEntryPath(pathname)) {
-      checkAuthEntryRequest({ request, allowed });
+    } else if (
+      isAuthEntryPath(pathname) &&
+      isForgedAuthEntryRequest({ request, allowed })
+    ) {
+      throw createOriginNotAllowedException();
     }
     next();
   }
 }
 
 /**
- * 쿠키가 없는 로그인과 가입 요청을 검사한다(로그인 CSRF, Better Auth의 formCsrfMiddleware와 같음).
+ * 쿠키가 없는 로그인과 가입 요청이 다른 사이트에서 보낸 것인지 판단한다(로그인 CSRF, Better Auth의 formCsrfMiddleware와 같음).
  * 다른 사이트가 공격자 계정으로 로그인시키면 피해자가 입력한 정보가 공격자 계정에 쌓인다.
  * 쿠키가 없으면 Origin이 없는 요청(서버 간 호출, curl)도 받아야 하므로, 브라우저가 붙이는 헤더가 있을 때만 막는다.
  * 그래서 쿠키가 실린 요청과 달리 Referer로 대신 판단하지 않는다(Better Auth와 같음).
  * 허용 출처는 Better Auth처럼 신뢰 출처 전체가 아니라 경로별로 고른다. 어드민 로그인은 어드민 출처에서만 받는다.
  */
-function checkAuthEntryRequest({
+function isForgedAuthEntryRequest({
   request,
   allowed,
 }: {
   request: Request;
   allowed: string;
-}): void {
+}): boolean {
   const isCrossSiteNavigation =
     request.get('sec-fetch-site') === 'cross-site' &&
     request.get('sec-fetch-mode') === 'navigate';
-  if (isCrossSiteNavigation) {
-    throw createOriginNotAllowedException();
-  }
   const origin = request.get('origin');
-  if (origin && origin !== allowed) {
-    throw createOriginNotAllowedException();
-  }
+  return isCrossSiteNavigation || (!!origin && origin !== allowed);
 }
 
 // Origin이 없으면(오래된 브라우저, 일부 같은 출처 요청) Referer의 출처를 쓴다. 둘 다 없으면 null이다.
