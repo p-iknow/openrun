@@ -216,6 +216,8 @@ describe('CORS', () => {
       expect(response.status).toBe(204);
       expect(response.headers['access-control-allow-origin']).toBe(origin);
       expect(response.headers['access-control-allow-credentials']).toBe('true');
+      // 출처마다 다른 Access-Control-Allow-Origin을 돌려주므로, 캐시가 출처별로 응답을 나눠 저장하도록 Vary: Origin이 필요하다.
+      // 이 헤더는 우리 코드가 아니라 cors 패키지가 origin에 문자열을 넘기면 붙여 준다.
       expect(response.headers['vary']).toMatch(/Origin/);
     },
   );
