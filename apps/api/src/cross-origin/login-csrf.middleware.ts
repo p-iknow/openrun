@@ -34,11 +34,16 @@ export class LoginCsrfMiddleware implements NestMiddleware {
       next();
       return;
     }
-    const allowed = this.allowedOrigins.getOriginFor(pathname);
-    if (
-      isCrossSiteNavigation(request) ||
-      isFromOtherOrigin({ request, allowed })
-    ) {
+    if (isCrossSiteNavigation(request)) {
+      throw createOriginNotAllowedException();
+    }
+    const origin = request.get('origin');
+    // Origin이 없으면 다른 사이트에서 왔다는 증거가 없으므로 통과시킨다(curl, 서버 간 호출).
+    if (origin === undefined) {
+      next();
+      return;
+    }
+    if (origin !== this.allowedOrigins.getOriginFor(pathname)) {
       throw createOriginNotAllowedException();
     }
     next();
@@ -51,16 +56,4 @@ function isCrossSiteNavigation(request: Request): boolean {
     request.get('sec-fetch-site') === 'cross-site' &&
     request.get('sec-fetch-mode') === 'navigate'
   );
-}
-
-// Origin이 있는데 허용 출처가 아니다. Origin이 없으면 판단할 증거가 없으므로 false다.
-function isFromOtherOrigin({
-  request,
-  allowed,
-}: {
-  request: Request;
-  allowed: string;
-}): boolean {
-  const origin = request.get('origin');
-  return origin !== undefined && origin !== allowed;
 }

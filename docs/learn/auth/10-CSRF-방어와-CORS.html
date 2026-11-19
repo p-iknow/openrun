@@ -428,8 +428,16 @@ if (isSafeMethod(request) || hasCookie(request) || !isAuthEntryPath(pathname)) {
   next();
   return;
 }
-const allowed = this.allowedOrigins.getOriginFor(pathname);
-if (isCrossSiteNavigation(request) || isFromOtherOrigin({ request, allowed })) {
+if (isCrossSiteNavigation(request)) {
+  throw createOriginNotAllowedException();
+}
+const origin = request.get('origin');
+// Origin이 없으면 다른 사이트에서 왔다는 증거가 없으므로 통과시킨다(curl, 서버 간 호출).
+if (origin === undefined) {
+  next();
+  return;
+}
+if (origin !== this.allowedOrigins.getOriginFor(pathname)) {
   throw createOriginNotAllowedException();
 }
 
@@ -438,11 +446,6 @@ function isCrossSiteNavigation(request: Request): boolean {
     request.get('sec-fetch-site') === 'cross-site' &amp;&amp;
     request.get('sec-fetch-mode') === 'navigate'
   );
-}
-
-function isFromOtherOrigin({ request, allowed }): boolean {
-  const origin = request.get('origin');
-  return origin !== undefined &amp;&amp; origin !== allowed;
 }</code></pre>
           <p>
             일반 CSRF를 보는 <code>OriginCheckMiddleware</code>와 나눠 둔 미들웨어다. 대상(쿠키 없는 요청)도 판단 방식도 반대라서
