@@ -14,7 +14,7 @@
         <strong>1부: 전체 모양</strong>
         <ol>
           <li><a href="#overview">한눈에 보기</a></li>
-          <li><a href="#order">미들웨어 세 개와 순서</a></li>
+          <li><a href="#order">미들웨어 네 개와 순서</a></li>
         </ol>
         <strong>2부: 케이스별로</strong>
         <ol>
@@ -68,8 +68,8 @@
                 </tr>
                 <tr>
                   <td>Origin 검사</td>
-                  <td><code>OriginCheckMiddleware</code></td>
-                  <td>요청을 보낸 <strong>출처</strong>가 그 경로의 허용 출처가 아니면 403 <code>ORIGIN_NOT_ALLOWED</code></td>
+                  <td><code>OriginCheckMiddleware</code>,<br /><code>LoginCsrfMiddleware</code></td>
+                  <td>요청을 보낸 <strong>출처</strong>가 그 경로의 허용 출처가 아니면 403 <code>ORIGIN_NOT_ALLOWED</code>. 쿠키가 실린 요청(일반 CSRF)과 쿠키 없는 로그인·가입(로그인 CSRF)을 나눠 본다</td>
                 </tr>
                 <tr>
                   <td>JSON 본문만 받기</td>
@@ -113,10 +113,10 @@
         </section>
 
         <section id="order">
-          <h2>미들웨어 세 개와 순서</h2>
+          <h2>미들웨어 네 개와 순서</h2>
           <pre><code class="language-ts">// cross-origin.module.ts
 consumer
-  .apply(CorsMiddleware, OriginCheckMiddleware, JsonBodyMiddleware)
+  .apply(CorsMiddleware, OriginCheckMiddleware, LoginCsrfMiddleware, JsonBodyMiddleware)
   .forRoutes('{*splat}');</code></pre>
           <ol class="gates">
             <li>
@@ -124,8 +124,12 @@ consumer
               <div class="gate-fail"><strong>막지 않는다</strong>허용하지 않은 출처는 헤더만 빼고 다음으로 넘긴다</div>
             </li>
             <li>
-              <div class="gate-check">OriginCheckMiddleware<small>GET, HEAD, OPTIONS 밖의 요청만 본다</small></div>
-              <div class="gate-fail"><strong>403 ORIGIN_NOT_ALLOWED</strong>출처가 허용 출처가 아니다</div>
+              <div class="gate-check">OriginCheckMiddleware<small>쿠키가 실린 변경 요청(GET, HEAD, OPTIONS 밖)만 본다</small></div>
+              <div class="gate-fail"><strong>403 ORIGIN_NOT_ALLOWED</strong>허용 출처임을 증명하지 못한다</div>
+            </li>
+            <li>
+              <div class="gate-check">LoginCsrfMiddleware<small>쿠키 없는 로그인·가입 요청만 본다</small></div>
+              <div class="gate-fail"><strong>403 ORIGIN_NOT_ALLOWED</strong>다른 사이트에서 왔다는 증거가 있다</div>
             </li>
             <li>
               <div class="gate-check">JsonBodyMiddleware<small>본문이 있는 변경 요청만 본다</small></div>
@@ -225,8 +229,13 @@ consumer
             <strong>해결:</strong> Origin 검사가 출처를 <strong>글자 그대로</strong> 비교한다. <code>https://evil.openrun.com</code>은
             <code>STORE_ORIGIN</code>과 같지 않으니 403이다. SameSite가 막지 못하는 이 경우가 Origin 검사가 있는 가장 큰 이유다.
           </p>
-          <pre><code class="language-ts">const hasCookie = Boolean(request.get('cookie'));
-if (hasCookie &amp;&amp; getRequestOrigin(request) !== allowed) {
+          <pre><code class="language-ts">// origin-check.middleware.ts
+if (isSafeMethod(request) || !hasCookie(request)) {
+  next();
+  return;
+}
+const allowed = this.allowedOrigins.getOriginFor(getPathname(request));
+if (getRequestOrigin(request) !== allowed) {
   throw createOriginNotAllowedException();
 }</code></pre>
           <p>
@@ -414,21 +423,31 @@ getOriginFor(pathname: string): string {
             <strong>해결:</strong> 쿠키 없는 로그인·가입 요청(<code>/auth/sign-in</code>, <code>/auth/sign-up</code>와 그
             <code>/admin</code> 경로)만 따로 검사한다. Better Auth의 <code>formCsrfMiddleware</code>와 같은 규칙이다.
           </p>
-          <pre><code class="language-ts">if (
-  !hasCookie &amp;&amp;
-  isAuthEntryPath(pathname) &amp;&amp;
-  isForgedAuthEntryRequest({ request, allowed })
-) {
+          <pre><code class="language-ts">// login-csrf.middleware.ts
+if (isSafeMethod(request) || hasCookie(request) || !isAuthEntryPath(pathname)) {
+  next();
+  return;
+}
+const allowed = this.allowedOrigins.getOriginFor(pathname);
+if (isCrossSiteNavigation(request) || isFromOtherOrigin({ request, allowed })) {
   throw createOriginNotAllowedException();
 }
 
-function isForgedAuthEntryRequest({ request, allowed }): boolean {
-  const isCrossSiteNavigation =
+function isCrossSiteNavigation(request: Request): boolean {
+  return (
     request.get('sec-fetch-site') === 'cross-site' &amp;&amp;
-    request.get('sec-fetch-mode') === 'navigate';
+    request.get('sec-fetch-mode') === 'navigate'
+  );
+}
+
+function isFromOtherOrigin({ request, allowed }): boolean {
   const origin = request.get('origin');
-  return isCrossSiteNavigation || (!!origin &amp;&amp; origin !== allowed);
+  return origin !== undefined &amp;&amp; origin !== allowed;
 }</code></pre>
+          <p>
+            일반 CSRF를 보는 <code>OriginCheckMiddleware</code>와 나눠 둔 미들웨어다. 대상(쿠키 없는 요청)도 판단 방식도 반대라서
+            따로 두었다. Better Auth도 <code>originCheck</code>와 <code>formCsrfMiddleware</code>로 나눈다.
+          </p>
           <div class="table-wrap">
             <table>
               <thead>
@@ -487,27 +506,16 @@ function isForgedAuthEntryRequest({ request, allowed }): boolean {
               </div>
             </li>
             <li>
-              <div class="tree-row"><span class="tree-node">OriginCheckMiddleware</span></div>
-              <ul>
-                <li>
-                  <div class="tree-row">
-                    <span class="tree-node">쿠키가 실림</span>
-                    <span class="tree-note"><span class="badge blue">403</span> 출처 불일치</span>
-                  </div>
-                </li>
-                <li>
-                  <div class="tree-row">
-                    <span class="tree-node">쿠키 없음, 로그인·가입</span>
-                    <span class="tree-note"><span class="badge blue">403</span> 출처 불일치</span>
-                  </div>
-                </li>
-                <li>
-                  <div class="tree-row">
-                    <span class="tree-node">쿠키 없음, 그 밖의 경로</span>
-                    <span class="tree-note">통과</span>
-                  </div>
-                </li>
-              </ul>
+              <div class="tree-row">
+                <span class="tree-node">OriginCheckMiddleware</span>
+                <span class="tree-note"><span class="badge blue">403</span> 쿠키가 실렸는데 출처 불일치. 쿠키가 없으면 통과</span>
+              </div>
+            </li>
+            <li>
+              <div class="tree-row">
+                <span class="tree-node">LoginCsrfMiddleware</span>
+                <span class="tree-note"><span class="badge blue">403</span> 쿠키 없는 로그인·가입인데 출처 불일치. 그 밖의 경로는 통과</span>
+              </div>
             </li>
             <li>
               <div class="tree-row">
@@ -780,7 +788,7 @@ this.handler = cors((request, callback) =&gt; {
                 </tr>
                 <tr>
                   <td>⑤ 로그인 CSRF</td>
-                  <td>Origin 검사(쿠키 없는 로그인·가입)</td>
+                  <td>LoginCsrfMiddleware</td>
                   <td><code>Sec-Fetch-Site</code>, <code>Sec-Fetch-Mode</code>, <code>Origin</code></td>
                   <td>403</td>
                 </tr>

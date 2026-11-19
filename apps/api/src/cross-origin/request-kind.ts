@@ -28,3 +28,8 @@ export function isAuthEntryPath(pathname: string): boolean {
     : pathname;
   return AUTH_ENTRY_PATHS.has(path);
 }
+
+/** 쿠키가 실렸는지. 세션이 유효한지는 보지 않는다. 출처가 틀린 요청은 세션과 상관없이 막으므로 DB를 읽기 전에 헤더만 본다. */
+export function hasCookie(request: Request): boolean {
+  return Boolean(request.get('cookie'));
+}
