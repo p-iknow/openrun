@@ -27,9 +27,9 @@ export class JsonBodyMiddleware implements NestMiddleware {
   }
 }
 
-// 본문 없는 POST(예: 로그아웃의 fetch)는 브라우저가 Content-Length: 0을 붙이고 Content-Type은 보내지 않는다.
-// request.is()는 Content-Length 헤더만 있으면 0이어도 본문이 있다고 보고 JSON이 아니라고 판단해 415가 되므로,
-// 본문이 실제로 있는지 먼저 확인한다.
+// 형식을 따질 본문이 있는지. 본문 없는 변경 요청(예: 로그아웃)은 Content-Type이 없으니 형식을 보지 않고 받는다.
+// 브라우저는 본문 없는 POST에 Content-Length: 0을 붙이므로 길이가 0이면 본문이 없는 것으로 본다.
+// request.is()로는 이 확인을 대신할 수 없다. 본문이 없으면 null을, Content-Length: 0이면 false를 돌려줘 둘 다 415가 된다.
 function hasBody(request: Request): boolean {
   const contentLength = request.get('content-length');
   return (

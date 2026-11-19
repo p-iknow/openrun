@@ -544,17 +544,22 @@ request.is('application/json')                      // 매개변수를 떼고 �
 Content-Length: 0
 (Content-Type 없음)</code></pre>
           <p>
-            본문이 없으니 막을 이유가 없다. 그런데 <code>request.is()</code>는 <code>Content-Length</code> 헤더가 있으면 값이
-            <code>0</code>이어도 본문이 있다고 보고, Content-Type이 없으니 JSON이 아니라고 판단한다. 그래서 <code>hasBody</code>로
-            <code>Content-Length: 0</code>을 먼저 "본문 없음"으로 걸러 낸다.
+            규칙이 "<strong>본문이 있는</strong> 변경 요청은 JSON만 받는다"이므로, 형식을 보기 전에 본문이 있는지부터 확인한다.
+            이 확인을 하는 것이 <code>hasBody</code>다. 브라우저는 본문 없는 POST에 <code>Content-Length: 0</code>을 붙이므로 길이가
+            <code>0</code>이면 본문이 없는 것으로 본다.
+          </p>
+          <p>
+            <code>request.is()</code>로는 이 확인을 대신할 수 없다. 헤더가 아예 없으면 <code>null</code>을,
+            <code>Content-Length: 0</code>이면 <code>false</code>를 돌려준다. <code>!request.is(...)</code>로 쓰면 둘 다 참이라 415가
+            된다.
           </p>
           <div class="table-wrap">
             <table>
               <thead>
                 <tr>
                   <th>요청</th>
-                  <th><code>request.is()</code>만 볼 때</th>
-                  <th><code>hasBody</code>를 먼저 볼 때</th>
+                  <th><code>!request.is()</code>만 볼 때</th>
+                  <th><code>hasBody</code>를 먼저 볼 때(지금 코드)</th>
                 </tr>
               </thead>
               <tbody>
@@ -583,7 +588,7 @@ Content-Length: 0
     (contentLength !== undefined &amp;&amp; contentLength !== '0') // 길이가 0보다 큰 본문
   );
 }</code></pre>
-          <p>처음에는 이 확인 없이 구현했는데, 로그아웃 테스트가 415로 실패해서 넣었다.</p>
+          <p>처음에는 본문이 있는지 확인하지 않고 구현했다가, 로그아웃 테스트가 415로 실패해서 이 확인을 넣었다.</p>
         </section>
 
         <section id="case-json">
