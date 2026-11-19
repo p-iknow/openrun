@@ -14,6 +14,7 @@ export class JsonBodyMiddleware implements NestMiddleware {
     if (
       !isSafeMethod(request) &&
       hasBody(request) &&
+      // 문자열 비교가 아니라 request.is()로 본다. `application/json; charset=utf-8`처럼 매개변수가 붙어도 같은 JSON이다.
       !request.is('application/json')
     ) {
       throw new ProblemException({
@@ -26,12 +27,15 @@ export class JsonBodyMiddleware implements NestMiddleware {
   }
 }
 
-// Content-Length: 0인 요청(본문 없는 fetch POST)은 Content-Type이 없어도 받는다.
-// request.is()는 Content-Length 헤더만 있으면 0이어도 본문이 있다고 보므로 따로 확인한다.
+// 본문 없는 POST(예: 로그아웃의 fetch)는 브라우저가 Content-Length: 0을 붙이고 Content-Type은 보내지 않는다.
+// request.is()는 Content-Length 헤더만 있으면 0이어도 본문이 있다고 보고 JSON이 아니라고 판단해 415가 되므로,
+// 본문이 실제로 있는지 먼저 확인한다.
 function hasBody(request: Request): boolean {
   const contentLength = request.get('content-length');
   return (
+    // 길이를 미리 알리지 않고 조각으로 보내는 본문(chunked)
     request.get('transfer-encoding') !== undefined ||
+    // 길이가 0보다 큰 본문
     (contentLength !== undefined && contentLength !== '0')
   );
 }

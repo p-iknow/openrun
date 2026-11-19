@@ -520,13 +520,70 @@ function isForgedAuthEntryRequest({ request, allowed }): boolean {
 if (!isSafeMethod(request) &amp;&amp; hasBody(request) &amp;&amp; !request.is('application/json')) {
   throw new ProblemException({ status: 415, code: 'UNSUPPORTED_MEDIA_TYPE', ... });
 }</code></pre>
-          <ul>
-            <li><code>request.is('application/json')</code>은 <code>application/json; charset=utf-8</code>도 맞다고 본다.</li>
-            <li>
-              <code>hasBody</code>가 따로 있는 이유: <code>request.is()</code>는 <code>Content-Length: 0</code>도 본문이 있다고 본다.
-              본문 없는 POST(로그아웃)는 Content-Type 없이 오므로 415가 되면 안 된다.
-            </li>
-          </ul>
+          <p>아래 두 처리는 모두 정상 요청을 415로 잘못 막지 않으려고 있다.</p>
+          <h3><code>charset=utf-8</code>이 붙은 JSON</h3>
+          <p>스토어의 로그인 요청은 이렇게 보낸다.</p>
+          <pre><code class="language-ts">fetch('https://api.openrun.com/auth/sign-in', {
+  method: 'POST',
+  credentials: 'include',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ email, password, rememberMe }),
+});</code></pre>
+          <p>
+            HTTP 클라이언트 라이브러리나 도구에 따라 <code>Content-Type: application/json; charset=utf-8</code>처럼 문자 인코딩을
+            덧붙이기도 한다(테스트에 쓰는 supertest도 그렇다). <code>;</code> 뒤는 매개변수라 같은 JSON이다. 문자열을 그대로
+            비교하면 이 요청이 415가 된다.
+          </p>
+          <pre><code class="language-ts">request.get('content-type') === 'application/json' // 'application/json; charset=utf-8' → false → 415 (잘못 막힘)
+request.is('application/json')                      // 매개변수를 떼고 비교 → 맞음 → 통과</code></pre>
+          <h3>본문 없는 POST(로그아웃)</h3>
+          <p>로그아웃은 보낼 데이터가 없다.</p>
+          <pre><code class="language-ts">fetch('https://api.openrun.com/auth/sign-out', { method: 'POST', credentials: 'include' });</code></pre>
+          <p>브라우저는 본문 없는 POST에 <code>Content-Length: 0</code>을 붙이고, 형식이 없으니 <code>Content-Type</code>은 보내지 않는다.</p>
+          <pre><code>POST /auth/sign-out
+Content-Length: 0
+(Content-Type 없음)</code></pre>
+          <p>
+            본문이 없으니 막을 이유가 없다. 그런데 <code>request.is()</code>는 <code>Content-Length</code> 헤더가 있으면 값이
+            <code>0</code>이어도 본문이 있다고 보고, Content-Type이 없으니 JSON이 아니라고 판단한다. 그래서 <code>hasBody</code>로
+            <code>Content-Length: 0</code>을 먼저 "본문 없음"으로 걸러 낸다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>요청</th>
+                  <th><code>request.is()</code>만 볼 때</th>
+                  <th><code>hasBody</code>를 먼저 볼 때</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>로그아웃(<code>Content-Length: 0</code>, Content-Type 없음)</td>
+                  <td>JSON 아님 → <strong>415</strong>(잘못 막힘)</td>
+                  <td>본문 없음 → 통과</td>
+                </tr>
+                <tr>
+                  <td>로그인(JSON 본문)</td>
+                  <td>통과</td>
+                  <td>통과</td>
+                </tr>
+                <tr>
+                  <td>공격 폼(<code>text/plain</code> 본문)</td>
+                  <td>415</td>
+                  <td>본문 있음, JSON 아님 → 415</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <pre><code class="language-ts">function hasBody(request: Request): boolean {
+  const contentLength = request.get('content-length');
+  return (
+    request.get('transfer-encoding') !== undefined ||      // 길이를 미리 알리지 않고 조각으로 보내는 본문
+    (contentLength !== undefined &amp;&amp; contentLength !== '0') // 길이가 0보다 큰 본문
+  );
+}</code></pre>
+          <p>처음에는 이 확인 없이 구현했는데, 로그아웃 테스트가 415로 실패해서 넣었다.</p>
         </section>
 
         <section id="case-json">
