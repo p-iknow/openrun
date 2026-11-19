@@ -50,6 +50,9 @@ export class LoginCsrfMiddleware implements NestMiddleware {
 }
 
 // 다른 사이트의 페이지가 폼 제출이나 링크로 이동시킨 요청. 두 헤더는 브라우저만 붙이고 페이지의 스크립트는 바꿀 수 없다.
+// Origin 검사를 돕는 보조 검사다. 주된 방어는 Origin 검사로, 다른 사이트와 같은 사이트의 서브도메인(evil.openrun.com),
+// 폼과 fetch를 모두 막는다. 이 검사는 다른 사이트의 이동만 잡으므로 서브도메인(same-site)이나 fetch(cors)는 못 막고,
+// Origin이 없는데 Sec-Fetch는 붙은 드문 요청을 막는 몫만 한다.
 function isCrossSiteNavigation(request: Request): boolean {
   return (
     request.get('sec-fetch-site') === 'cross-site' &&
