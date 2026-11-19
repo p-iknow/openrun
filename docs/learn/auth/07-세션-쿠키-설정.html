@@ -33,7 +33,7 @@
         </ol>
         <strong>마무리</strong>
         <ol>
-          <li><a href="#later">SameSite 다음 겹과 아직 없는 운영자 쿠키</a></li>
+          <li><a href="#later">SameSite 다음의 CSRF 방어와 아직 없는 운영자 쿠키</a></li>
           <li><a href="#check">스스로 확인하기</a></li>
         </ol>
       </nav>
@@ -763,11 +763,11 @@ private buildCookieOptions() {
         </section>
 
         <section id="later">
-          <h2>SameSite 다음 겹과 아직 없는 운영자 쿠키</h2>
+          <h2>SameSite 다음의 CSRF 방어와 아직 없는 운영자 쿠키</h2>
           <h3>CSRF 방어와 CORS</h3>
           <p>
-            CSRF 토큰은 쓰지 않는다. 변경 요청은 <code>SameSite=Lax</code>, <code>Origin</code> 헤더 검사, JSON 본문만 받기의 세 겹으로
-            막는다(ADR 0009). 이 문서의 SameSite가 첫 겹이고, <a href="#samesite">Lax가 막지 못하는 것</a>을 나머지 두 겹이 막는다.
+            CSRF 토큰은 쓰지 않는다. 변경 요청은 <code>SameSite=Lax</code>, <code>Origin</code> 헤더 검사, JSON 본문만 받기의 세 가지 방어로
+            막는다(ADR 0009). 이 문서의 SameSite가 그중 하나이고, <a href="#samesite">Lax가 막지 못하는 것</a>을 나머지 두 방어가 막는다.
             스토어가 API를 쿠키와 함께 부를 수 있게 하는 credentials 허용 CORS도 함께 있다. 케이스별 정리는
             <a href="10-CSRF-방어와-CORS.html">10 문서</a>에 있다.
           </p>

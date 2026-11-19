@@ -48,14 +48,14 @@
         <section id="overview">
           <h2>한눈에 보기</h2>
           <p>
-            CSRF 토큰은 쓰지 않는다(ADR 0009). 대신 세 겹으로 막는다. 쿠키의 <code>SameSite=Lax</code>는
-            <a href="07-세션-쿠키-설정.html#samesite">07 문서</a>에서 이미 붙였고, 이 문서의 미들웨어가 나머지 두 겹과 CORS를 더한다.
+            CSRF 토큰은 쓰지 않는다(ADR 0009). 대신 세 가지 방어로 막는다. 쿠키의 <code>SameSite=Lax</code>는
+            <a href="07-세션-쿠키-설정.html#samesite">07 문서</a>에서 이미 붙였고, 이 문서의 미들웨어가 나머지 두 방어와 CORS를 더한다.
           </p>
           <div class="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th>겹</th>
+                  <th>방어</th>
                   <th>어디서</th>
                   <th>막는 것</th>
                 </tr>
@@ -80,7 +80,7 @@
             </table>
           </div>
           <p>
-            CORS(<code>CorsMiddleware</code>)는 막는 겹이 아니다. 허용한 두 출처가 쿠키를 실은 요청의 응답을
+            CORS(<code>CorsMiddleware</code>)는 방어가 아니다. 허용한 두 출처가 쿠키를 실은 요청의 응답을
             <strong>읽게</strong> 해 준다.
           </p>
           <div class="table-wrap">
@@ -559,7 +559,7 @@ this.handler = cors((request, callback) =&gt; {
           <div class="callout warn">
             <p>
               그래서 <strong>GET으로 상태를 바꾸지 않는다</strong>는 것이 이 방어 전체의 전제다. GET 이동은 쿠키가 실리고,
-              Origin을 보내지 않고, 본문도 없어 세 겹을 모두 비켜 간다(<a href="01-웹-인증-개념.html#csrf">01 문서의 CSRF</a>).
+              Origin을 보내지 않고, 본문도 없어 세 방어를 모두 비켜 간다(<a href="01-웹-인증-개념.html#csrf">01 문서의 CSRF</a>).
               다른 출처가 GET 응답을 읽는 것은 CORS가 막는다.
             </p>
           </div>

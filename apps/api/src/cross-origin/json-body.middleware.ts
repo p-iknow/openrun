@@ -6,7 +6,7 @@ import { isSafeMethod } from './request-kind.js';
 /**
  * 본문이 있는 변경 요청은 application/json만 받는다.
  * 폼 제출처럼 preflight 없이 다른 사이트에서 보낼 수 있는 형식(text/plain, form-urlencoded, multipart)을 막아
- * Origin 검사와 SameSite=Lax 쿠키 위에 한 겹을 더한다(ADR 0009).
+ * Origin 검사, SameSite=Lax 쿠키와 함께 CSRF를 막는다(ADR 0009).
  */
 @Injectable()
 export class JsonBodyMiddleware implements NestMiddleware {
