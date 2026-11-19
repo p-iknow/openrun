@@ -2,7 +2,12 @@ import { Injectable, type NestMiddleware } from '@nestjs/common';
 import type { NextFunction, Request, Response } from 'express';
 import { AllowedOrigins } from './allowed-origins.js';
 import { createOriginNotAllowedException } from './origin-not-allowed.js';
-import { getPathname, hasCookie, isSafeMethod } from './request-kind.js';
+import {
+  getPathname,
+  getRequestOrigin,
+  hasCookie,
+  isSafeMethod,
+} from './request-kind.js';
 
 /**
  * 쿠키가 실린 변경 요청은 그 경로의 허용 출처에서 보낸 것이어야 한다(일반 CSRF, Better Auth의 originCheck와 같음).
@@ -25,14 +30,4 @@ export class OriginCheckMiddleware implements NestMiddleware {
     }
     next();
   }
-}
-
-// Origin이 없으면(오래된 브라우저, 일부 같은 출처 요청) Referer의 출처를 쓴다. 둘 다 없으면 null이다.
-function getRequestOrigin(request: Request): string | null {
-  const origin = request.get('origin');
-  if (origin) {
-    return origin;
-  }
-  const referer = request.get('referer');
-  return referer ? (URL.parse(referer)?.origin ?? null) : null;
 }

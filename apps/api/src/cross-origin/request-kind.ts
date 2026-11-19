@@ -33,3 +33,13 @@ export function isAuthEntryPath(pathname: string): boolean {
 export function hasCookie(request: Request): boolean {
   return Boolean(request.get('cookie'));
 }
+
+/** 요청을 보낸 출처. Origin이 없으면(오래된 브라우저, 일부 같은 출처 요청) Referer의 출처를 쓴다. 둘 다 없으면 null이다. */
+export function getRequestOrigin(request: Request): string | null {
+  const origin = request.get('origin');
+  if (origin) {
+    return origin;
+  }
+  const referer = request.get('referer');
+  return referer ? (URL.parse(referer)?.origin ?? null) : null;
+}

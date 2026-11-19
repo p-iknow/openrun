@@ -431,9 +431,9 @@ if (isSafeMethod(request) || hasCookie(request) || !isAuthEntryPath(pathname)) {
 if (isCrossSiteNavigation(request)) {
   throw createOriginNotAllowedException();
 }
-const origin = request.get('origin');
-// Origin이 없으면 다른 사이트에서 왔다는 증거가 없으므로 통과시킨다(curl, 서버 간 호출).
-if (origin === undefined) {
+const origin = getRequestOrigin(request); // Origin, 없으면 Referer의 출처
+// Origin도 Referer도 없으면 다른 사이트에서 왔다는 증거가 없으므로 통과시킨다(curl, 서버 간 호출).
+if (origin === null) {
   next();
   return;
 }
@@ -465,7 +465,7 @@ function isCrossSiteNavigation(request: Request): boolean {
                   <td>다른 사이트의 페이지가 폼 제출이나 이동으로 보냈다</td>
                 </tr>
                 <tr>
-                  <td><code>Origin</code>이 있는데 허용 출처와 다름</td>
+                  <td><code>Origin</code>(없으면 <code>Referer</code>의 출처)이 있는데 허용 출처와 다름</td>
                   <td>다른 출처의 페이지가 보냈다(<code>fetch</code>든 폼이든)</td>
                 </tr>
               </tbody>
@@ -477,8 +477,8 @@ function isCrossSiteNavigation(request: Request): boolean {
           </p>
           <div class="callout">
             <p>
-              <strong>쿠키 요청과 다른 점:</strong> Origin이 없으면 <strong>통과</strong>시킨다.
-              쿠키가 없으면 빼앗을 세션이 없고, curl이나 서버 간 호출처럼 Origin 없는 정상 요청도 받아야 하기 때문이다. 그래서
+              <strong>쿠키 요청과 다른 점:</strong> Origin도 Referer도 없으면 <strong>통과</strong>시킨다(쿠키가 실린 요청은 막는다).
+              쿠키가 없으면 빼앗을 세션이 없고, curl이나 서버 간 호출처럼 둘 다 없는 정상 요청도 받아야 하기 때문이다. 그래서
               "다른 사이트에서 왔다"는 증거가 있을 때만 막는다.
             </p>
           </div>
@@ -792,7 +792,7 @@ this.handler = cors((request, callback) =&gt; {
                 <tr>
                   <td>⑤ 로그인 CSRF</td>
                   <td>LoginCsrfMiddleware</td>
-                  <td><code>Sec-Fetch-Site</code>, <code>Sec-Fetch-Mode</code>, <code>Origin</code></td>
+                  <td><code>Sec-Fetch-Site</code>, <code>Sec-Fetch-Mode</code>, <code>Origin</code>, <code>Referer</code></td>
                   <td>403</td>
                 </tr>
                 <tr>
@@ -851,7 +851,7 @@ this.handler = cors((request, callback) =&gt; {
             <summary>3. 쿠키가 실린 요청은 Origin이 없으면 막는데, 쿠키 없는 로그인 요청은 왜 통과시키는가?</summary>
             <p>
               쿠키가 없으면 빼앗을 세션이 없고, Origin 없는 정상 요청(curl, 서버 간 호출)도 받아야 한다. 그래서 다른 사이트에서
-              왔다는 증거(Sec-Fetch, 틀린 Origin)가 있을 때만 막는다(<a href="#case-login">⑤</a>).
+              왔다는 증거(Sec-Fetch, 틀린 Origin이나 Referer)가 있을 때만 막는다(<a href="#case-login">⑤</a>).
             </p>
           </details>
           <div class="quiz">

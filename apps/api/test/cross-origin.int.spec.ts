@@ -163,6 +163,19 @@ describe('쿠키 없는 로그인 요청(로그인 CSRF)', () => {
     expect(response.status).toBe(403);
   });
 
+  it('Origin이 없으면 Referer의 출처로 판단한다', async () => {
+    const rejected = await signIn().set(
+      'Referer',
+      'https://evil.example.com/event',
+    );
+    const allowed = await signIn().set('Referer', `${STORE_ORIGIN}/login`);
+
+    expect(rejected.status).toBe(403);
+    expect(rejected.body).toEqual(ORIGIN_NOT_ALLOWED);
+    // 없는 사용자라 로그인은 실패하지만 출처 검사는 통과했다.
+    expect(allowed.status).toBe(401);
+  });
+
   it('스토어 출처에서 보내면 검사를 통과해 로그인을 처리한다', async () => {
     const response = await signIn()
       .set('Origin', STORE_ORIGIN)
