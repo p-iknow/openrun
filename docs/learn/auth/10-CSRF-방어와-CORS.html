@@ -1,0 +1,734 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>10 CSRF 방어와 CORS</title>
+    <link rel="stylesheet" href="../learn.css" />
+    <script src="../vendor/highlightjs/highlight.min.js" defer></script>
+    <script src="../learn.js" defer></script>
+  </head>
+  <body>
+    <div class="layout">
+      <nav aria-label="목차">
+        <strong>1부: 전체 모양</strong>
+        <ol>
+          <li><a href="#overview">한눈에 보기</a></li>
+          <li><a href="#order">미들웨어 세 개와 순서</a></li>
+        </ol>
+        <strong>2부: 케이스별로</strong>
+        <ol>
+          <li><a href="#case-form">① 다른 사이트의 폼 제출</a></li>
+          <li><a href="#case-subdomain">② 같은 사이트의 서브도메인</a></li>
+          <li><a href="#case-admin">③ 스토어 출처로 어드민 API</a></li>
+          <li><a href="#case-no-origin">④ Origin이 없는 쿠키 요청</a></li>
+          <li><a href="#case-login">⑤ 로그인 CSRF</a></li>
+          <li><a href="#case-text">⑥ text/plain 본문의 fetch</a></li>
+          <li><a href="#case-json">⑦ JSON 본문의 fetch</a></li>
+          <li><a href="#case-read">⑧ 허용한 출처가 응답을 읽기</a></li>
+          <li><a href="#case-get">⑨ GET 요청</a></li>
+          <li><a href="#case-curl">⑩ curl과 서버 간 호출</a></li>
+        </ol>
+        <strong>마무리</strong>
+        <ol>
+          <li><a href="#summary">케이스 정리표</a></li>
+          <li><a href="#check">스스로 확인하기</a></li>
+        </ol>
+      </nav>
+
+      <main>
+        <h1>10 CSRF 방어와 CORS</h1>
+        <p class="lead">
+          쿠키로 인증하는 API를 다른 사이트가 몰래 부르지 못하게 막고, 스토어와 어드민은 쿠키를 실어 부를 수 있게 하는
+          <code>apps/api/src/cross-origin/</code>을 케이스별로 정리한다. 케이스마다 어떤 공격이나 요구가 있고, 어느 미들웨어가
+          어떤 헤더를 보고 무슨 응답을 내는지 적는다. CSRF, CORS, 출처와 사이트, SameSite 개념은
+          <a href="01-웹-인증-개념.html#csrf">01 문서</a>에 있고, 이 문서는 이 저장소의 규칙과 코드만 다룬다.
+        </p>
+
+        <section id="overview">
+          <h2>한눈에 보기</h2>
+          <p>
+            CSRF 토큰은 쓰지 않는다(ADR 0009). 대신 세 겹으로 막는다. 쿠키의 <code>SameSite=Lax</code>는
+            <a href="07-세션-쿠키-설정.html#samesite">07 문서</a>에서 이미 붙였고, 이 문서의 미들웨어가 나머지 두 겹과 CORS를 더한다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>겹</th>
+                  <th>어디서</th>
+                  <th>막는 것</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>SameSite=Lax</code></td>
+                  <td>브라우저(쿠키 속성)</td>
+                  <td>다른 <strong>사이트</strong>에서 시작된 POST에 쿠키를 싣지 않는다</td>
+                </tr>
+                <tr>
+                  <td>Origin 검사</td>
+                  <td><code>OriginCheckMiddleware</code></td>
+                  <td>요청을 보낸 <strong>출처</strong>가 그 경로의 허용 출처가 아니면 403 <code>ORIGIN_NOT_ALLOWED</code></td>
+                </tr>
+                <tr>
+                  <td>JSON 본문만 받기</td>
+                  <td><code>JsonBodyMiddleware</code></td>
+                  <td>폼처럼 preflight 없이 보낼 수 있는 본문 형식을 415로 거절한다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            CORS(<code>CorsMiddleware</code>)는 막는 겹이 아니다. 허용한 두 출처가 쿠키를 실은 요청의 응답을
+            <strong>읽게</strong> 해 준다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>환경 변수</th>
+                  <th>로컬 값</th>
+                  <th>쓰이는 곳</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>STORE_ORIGIN</code></td>
+                  <td><code>http://localhost:3001</code></td>
+                  <td>CORS 허용, <code>/admin/*</code> 밖 경로의 변경 요청 허용 출처</td>
+                </tr>
+                <tr>
+                  <td><code>ADMIN_ORIGIN</code></td>
+                  <td><code>http://localhost:3002</code></td>
+                  <td>CORS 허용, <code>/admin/*</code> 변경 요청 허용 출처</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            둘 다 <code>AllowedOrigins</code> 프로바이더가 부팅 때 읽는다. 없거나 <code>http://localhost:3001/</code>처럼 경로나 끝의
+            <code>/</code>가 붙으면 부팅하지 않는다. 브라우저가 보내는 <code>Origin</code>과 글자 그대로 비교하기 때문이다.
+          </p>
+        </section>
+
+        <section id="order">
+          <h2>미들웨어 세 개와 순서</h2>
+          <pre><code class="language-ts">// cross-origin.module.ts
+consumer
+  .apply(CorsMiddleware, OriginCheckMiddleware, JsonBodyMiddleware)
+  .forRoutes('{*splat}');</code></pre>
+          <ol class="gates">
+            <li>
+              <div class="gate-check">CorsMiddleware<small>허용 출처면 CORS 헤더를 붙인다. preflight(OPTIONS)는 여기서 204로 끝낸다</small></div>
+              <div class="gate-fail"><strong>막지 않는다</strong>허용하지 않은 출처는 헤더만 빼고 다음으로 넘긴다</div>
+            </li>
+            <li>
+              <div class="gate-check">OriginCheckMiddleware<small>GET, HEAD, OPTIONS 밖의 요청만 본다</small></div>
+              <div class="gate-fail"><strong>403 ORIGIN_NOT_ALLOWED</strong>출처가 허용 출처가 아니다</div>
+            </li>
+            <li>
+              <div class="gate-check">JsonBodyMiddleware<small>본문이 있는 변경 요청만 본다</small></div>
+              <div class="gate-fail"><strong>415 UNSUPPORTED_MEDIA_TYPE</strong>본문이 application/json이 아니다</div>
+            </li>
+            <li class="pass">
+              <div class="gate-check">컨트롤러</div>
+            </li>
+          </ol>
+          <ul>
+            <li>
+              <strong>CORS가 먼저:</strong> preflight에는 쿠키도 본문도 없다. 뒤의 검사보다 먼저 응답해야 브라우저가 본 요청을
+              보낼 수 있다.
+            </li>
+            <li>
+              <strong>Origin이 JSON보다 먼저:</strong> 다른 출처의 폼 제출은 "출처가 틀렸다"(403)가 원인이다. 415보다 먼저 알려
+              주는 게 맞다.
+            </li>
+            <li>
+              <strong><code>main.ts</code>의 <code>enableCors</code>가 아닌 이유:</strong> 통합 테스트는 <code>main.ts</code>를
+              거치지 않고 <code>AppModule</code>로 앱을 만든다. 모듈의 미들웨어여야 테스트 앱에도 같은 규칙이 붙어 HTTP 경계에서
+              검증할 수 있다.
+            </li>
+            <li>
+              <strong><code>'{*splat}'</code>:</strong> 루트(<code>/</code>)까지 포함한 모든 경로다. 다만 Nest 미들웨어는
+              컨트롤러에 없는 경로에는 붙지 않아, 없는 경로는 검사 없이 404가 된다. 실행될 핸들러가 없으니 문제없다.
+            </li>
+          </ul>
+        </section>
+
+        <section id="case-form">
+          <h2>① 다른 사이트의 폼 제출</h2>
+          <p><strong>문제:</strong> 로그인한 사용자가 <code>evil.com</code>을 열면, 숨은 폼이 API로 POST를 보낸다. 브라우저가 세션 쿠키를 실어 주면 서버는 사용자가 보낸 요청으로 착각한다.</p>
+          <div class="scenes">
+            <div class="scene danger">
+              <div class="scene-title">evil.com의 숨은 폼</div>
+              <div class="scene-browser">
+                <div class="scene-url">https://<b>evil.com</b></div>
+                <div class="scene-page">&lt;form method="post" action="https://api.openrun.com/auth/sign-out"&gt; 자동 제출</div>
+              </div>
+              <div class="scene-req">POST /auth/sign-out</div>
+              <div class="scene-server"><b>api.openrun.com</b><small>Origin: https://evil.com</small></div>
+              <div class="scene-foot">
+                <span class="scene-verdict">다른 사이트 → <strong>쿠키 없음, 출처 불일치</strong></span>
+                <ul class="scene-chips"><li class="no">SameSite=Lax</li><li class="no">Origin 검사</li></ul>
+              </div>
+            </div>
+          </div>
+          <p><strong>해결:</strong></p>
+          <ul>
+            <li>
+              <code>evil.com</code>과 <code>openrun.com</code>은 다른 사이트라 <code>SameSite=Lax</code>가 쿠키를 뺀다. 쿠키가 없으니
+              피해자 권한으로 실행되지 않는다.
+            </li>
+            <li>
+              쿠키가 실리는 환경(SameSite를 모르는 오래된 브라우저 등)이어도 <code>Origin: https://evil.com</code>이 허용 출처가 아니라
+              403이다.
+            </li>
+          </ul>
+          <p>테스트: <code>허용 목록에 없는 Origin은 403 ORIGIN_NOT_ALLOWED다</code></p>
+        </section>
+
+        <section id="case-subdomain">
+          <h2>② 같은 사이트의 서브도메인</h2>
+          <p>
+            <strong>문제:</strong> <code>SameSite</code>는 출처가 아니라 <a href="01-웹-인증-개념.html#origin">사이트</a>(등록 가능한
+            도메인)로 판단한다. 사용자 콘텐츠를 올리는 서브도메인이나 탈취된 서브도메인은 스토어와 같은 사이트다. 게다가 사용자 세션
+            쿠키는 스토어 서버 렌더링을 위해 상위 도메인에 굽는다(<a href="07-세션-쿠키-설정.html#domain">07 문서</a>).
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>호스트</th>
+                  <th>사이트</th>
+                  <th>출처</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>store.openrun.com</code></td>
+                  <td rowspan="3">모두 <code>openrun.com</code> → <code>SameSite=Lax</code> 쿠키가 실린다</td>
+                  <td>허용 출처(<code>STORE_ORIGIN</code>)</td>
+                </tr>
+                <tr>
+                  <td><code>api.openrun.com</code></td>
+                  <td>API</td>
+                </tr>
+                <tr>
+                  <td><code>evil.openrun.com</code></td>
+                  <td>허용 출처 아님</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            <strong>해결:</strong> Origin 검사가 출처를 <strong>글자 그대로</strong> 비교한다. <code>https://evil.openrun.com</code>은
+            <code>STORE_ORIGIN</code>과 같지 않으니 403이다. SameSite가 막지 못하는 이 경우가 Origin 검사가 있는 가장 큰 이유다.
+          </p>
+          <pre><code class="language-ts">const hasCookie = Boolean(request.get('cookie'));
+if (hasCookie &amp;&amp; getRequestOrigin(request) !== allowed) {
+  throw createOriginNotAllowedException();
+}</code></pre>
+          <p>
+            쿠키가 유효한 세션인지는 보지 않는다. 쿠키가 <strong>실렸는지</strong>만 본다. 세션을 DB에서 읽기 전에, 싸게 막을 수 있는
+            것을 먼저 막는다.
+          </p>
+        </section>
+
+        <section id="case-admin">
+          <h2>③ 스토어 출처로 어드민 API</h2>
+          <p>
+            <strong>문제:</strong> 스토어와 어드민은 같은 사이트라 SameSite가 둘 사이를 막지 못한다. 스토어에 XSS가 생기면 스토어
+            페이지의 스크립트가 어드민 API를 부를 수 있다.
+          </p>
+          <p><strong>해결:</strong> 허용 출처를 경로마다 하나로 정한다.</p>
+          <pre><code class="language-ts">// allowed-origins.ts
+getOriginFor(pathname: string): string {
+  return isAdminPath(pathname) ? this.admin : this.store;
+}</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>경로</th>
+                  <th><code>STORE_ORIGIN</code>에서</th>
+                  <th><code>ADMIN_ORIGIN</code>에서</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>/admin/*</code></td>
+                  <td>403</td>
+                  <td>통과</td>
+                </tr>
+                <tr>
+                  <td>나머지</td>
+                  <td>통과</td>
+                  <td>403</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            CORS는 두 출처 모두에 연다. 경로별 제한은 CORS가 아니라 Origin 검사가 맡는다. CORS는 응답을 읽게 할지만 정할 뿐,
+            폼처럼 preflight 없는 요청이 서버에 닿는 것은 막지 못하기 때문이다(<a href="#case-text">⑥</a>).
+          </p>
+          <p>
+            경로 판단은 <code>request.path</code>가 아니라 원래 URL의 경로(<code>getPathname</code>)로 한다. Nest가 미들웨어를
+            경로에 마운트하면 <code>request.path</code>에는 마운트 뒤의 나머지만 남아 <code>/admin</code>이 사라진다.
+          </p>
+        </section>
+
+        <section id="case-no-origin">
+          <h2>④ Origin이 없는 쿠키 요청</h2>
+          <p>
+            <strong>문제:</strong> 오래된 브라우저나 일부 같은 출처 요청은 <code>Origin</code>을 보내지 않는다. 그렇다고 Origin이 없는
+            요청을 통과시키면, Origin을 빼는 방법을 찾은 공격이 그대로 지나간다.
+          </p>
+          <p><strong>해결:</strong> <code>Origin</code>이 없으면 <code>Referer</code>의 출처를 쓰고, 둘 다 없으면 막는다.</p>
+          <pre><code class="language-ts">function getRequestOrigin(request: Request): string | null {
+  const origin = request.get('origin');
+  if (origin) {
+    return origin;
+  }
+  const referer = request.get('referer');
+  return referer ? (URL.parse(referer)?.origin ?? null) : null;
+}</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>쿠키 요청의 헤더</th>
+                  <th>판단에 쓰는 출처</th>
+                  <th>결과</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>Origin: http://store…</code></td>
+                  <td>Origin</td>
+                  <td>통과</td>
+                </tr>
+                <tr>
+                  <td><code>Referer: http://store…/login</code>만</td>
+                  <td>Referer의 출처</td>
+                  <td>통과</td>
+                </tr>
+                <tr>
+                  <td><code>Origin: null</code></td>
+                  <td><code>"null"</code>(허용 출처와 다름)</td>
+                  <td>403</td>
+                </tr>
+                <tr>
+                  <td>둘 다 없음</td>
+                  <td><code>null</code></td>
+                  <td>403</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            <code>Origin: null</code>은 sandbox iframe이나 일부 리다이렉트에서 브라우저가 보내는 값이다. 어디서 왔는지 알 수 없다는
+            뜻이니 허용하지 않는다.
+          </p>
+        </section>
+
+        <section id="case-login">
+          <h2>⑤ 로그인 CSRF</h2>
+          <p>
+            <strong>문제:</strong> 공격자가 피해자의 브라우저를 <strong>공격자 계정으로</strong> 로그인시킨다. 피해자는 자기 계정인 줄
+            알고 결제 정보나 개인정보를 입력하고, 그 정보가 공격자 계정에 쌓인다. 로그인 요청에는 쿠키가 없어서 ②의 쿠키 검사에
+            걸리지 않는다.
+          </p>
+          <p>
+            <strong>해결:</strong> 쿠키 없는 로그인·가입 요청(<code>/auth/sign-in</code>, <code>/auth/sign-up</code>와 그
+            <code>/admin</code> 경로)만 따로 검사한다. Better Auth의 <code>formCsrfMiddleware</code>와 같은 규칙이다.
+          </p>
+          <pre><code class="language-ts">if (
+  !hasCookie &amp;&amp;
+  isAuthEntryPath(pathname) &amp;&amp;
+  isForgedAuthEntryRequest({ request, allowed })
+) {
+  throw createOriginNotAllowedException();
+}
+
+function isForgedAuthEntryRequest({ request, allowed }): boolean {
+  const isCrossSiteNavigation =
+    request.get('sec-fetch-site') === 'cross-site' &amp;&amp;
+    request.get('sec-fetch-mode') === 'navigate';
+  const origin = request.get('origin');
+  return isCrossSiteNavigation || (!!origin &amp;&amp; origin !== allowed);
+}</code></pre>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>조건</th>
+                  <th>뜻</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>Sec-Fetch-Site: cross-site</code> + <code>Sec-Fetch-Mode: navigate</code></td>
+                  <td>다른 사이트의 페이지가 폼 제출이나 이동으로 보냈다</td>
+                </tr>
+                <tr>
+                  <td><code>Origin</code>이 있는데 허용 출처와 다름</td>
+                  <td>다른 출처의 페이지가 보냈다(<code>fetch</code>든 폼이든)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            두 헤더 모두 브라우저만 붙이는 헤더(forbidden header)라 페이지의 스크립트가 바꿀 수 없다. 실제 브라우저의 폼 제출은 둘을
+            함께 보내지만, 테스트는 분기마다 따로 검증하려고 하나씩만 넣는다.
+          </p>
+          <div class="callout">
+            <p>
+              <strong>쿠키 요청과 다른 점:</strong> Origin이 없으면 <strong>통과</strong>시키고, Referer로 대신 판단하지 않는다.
+              쿠키가 없으면 빼앗을 세션이 없고, curl이나 서버 간 호출처럼 Origin 없는 정상 요청도 받아야 하기 때문이다. 그래서
+              "다른 사이트에서 왔다"는 증거가 있을 때만 막는다.
+            </p>
+          </div>
+          <p>
+            Better Auth는 신뢰 출처 전체와 맞춰 보지만, 여기서는 경로별 허용 출처와 맞춰 본다. 어드민 로그인은 어드민 출처에서만,
+            사용자 로그인과 가입은 스토어 출처에서만 받는다(ADR 0009의 "Better Auth와 다르게 정한 것").
+          </p>
+          <p>
+            Origin도 Sec-Fetch도 보내지 않는 아주 오래된 브라우저는 이 검사를 지나간다. 그래도 폼으로는 JSON을 보낼 수 없어 415가
+            되므로(<a href="#case-text">⑥</a>) 남는 틈은 좁다.
+          </p>
+        </section>
+
+        <section id="case-text">
+          <h2>⑥ text/plain 본문의 fetch</h2>
+          <p>
+            <strong>문제:</strong> 공격 페이지가 <code>fetch(url, { method: 'POST', body: '...', credentials: 'include' })</code>로
+            <code>text/plain</code> 본문을 보낸다. <code>text/plain</code>, <code>application/x-www-form-urlencoded</code>,
+            <code>multipart/form-data</code>는 <strong>단순 요청</strong>이라 preflight 없이 서버에 바로 닿는다. CORS는 응답을 못 읽게 할
+            뿐 실행은 막지 못한다.
+          </p>
+          <p><strong>해결:</strong> 미들웨어를 차례로 지나며 이렇게 막힌다.</p>
+          <ul class="tree" style="--tree-col: 17rem">
+            <li>
+              <div class="tree-row">
+                <span class="tree-node">CorsMiddleware</span>
+                <span class="tree-note">허용하지 않은 출처 → CORS 헤더 없이 다음으로</span>
+              </div>
+            </li>
+            <li>
+              <div class="tree-row"><span class="tree-node">OriginCheckMiddleware</span></div>
+              <ul>
+                <li>
+                  <div class="tree-row">
+                    <span class="tree-node">쿠키가 실림</span>
+                    <span class="tree-note"><span class="badge blue">403</span> 출처 불일치</span>
+                  </div>
+                </li>
+                <li>
+                  <div class="tree-row">
+                    <span class="tree-node">쿠키 없음, 로그인·가입</span>
+                    <span class="tree-note"><span class="badge blue">403</span> 출처 불일치</span>
+                  </div>
+                </li>
+                <li>
+                  <div class="tree-row">
+                    <span class="tree-node">쿠키 없음, 그 밖의 경로</span>
+                    <span class="tree-note">통과</span>
+                  </div>
+                </li>
+              </ul>
+            </li>
+            <li>
+              <div class="tree-row">
+                <span class="tree-node">JsonBodyMiddleware</span>
+                <span class="tree-note"><span class="badge green">415</span> application/json이 아님</span>
+              </div>
+            </li>
+          </ul>
+          <pre><code class="language-ts">// json-body.middleware.ts
+if (!isSafeMethod(request) &amp;&amp; hasBody(request) &amp;&amp; !request.is('application/json')) {
+  throw new ProblemException({ status: 415, code: 'UNSUPPORTED_MEDIA_TYPE', ... });
+}</code></pre>
+          <ul>
+            <li><code>request.is('application/json')</code>은 <code>application/json; charset=utf-8</code>도 맞다고 본다.</li>
+            <li>
+              <code>hasBody</code>가 따로 있는 이유: <code>request.is()</code>는 <code>Content-Length: 0</code>도 본문이 있다고 본다.
+              본문 없는 POST(로그아웃)는 Content-Type 없이 오므로 415가 되면 안 된다.
+            </li>
+          </ul>
+        </section>
+
+        <section id="case-json">
+          <h2>⑦ JSON 본문의 fetch</h2>
+          <p>
+            <strong>문제:</strong> 공격 페이지가 <code>Content-Type: application/json</code>으로 보내면 415는 피한다.
+          </p>
+          <p>
+            <strong>해결:</strong> <code>application/json</code>은 단순 요청이 아니라서 브라우저가 먼저 preflight(OPTIONS)를 보낸다.
+            <code>CorsMiddleware</code>가 허용하지 않은 출처의 preflight에 CORS 헤더를 주지 않으니, 브라우저는
+            <strong>본 요청을 아예 보내지 않는다.</strong> JSON만 받는 규칙이 CORS를 방어로 바꿔 주는 셈이다.
+          </p>
+          <div class="seq">
+            <ol class="seq-actors">
+              <li>evil.com 페이지</li>
+              <li>브라우저</li>
+              <li>API</li>
+            </ol>
+            <ol class="seq-steps">
+              <li data-from="1" data-to="2">fetch POST <small>application/json</small></li>
+              <li data-from="2" data-to="3">OPTIONS <small>preflight</small></li>
+              <li class="reply" data-from="3" data-to="2">204 <small>Access-Control-Allow-Origin 없음</small></li>
+              <li class="stop" data-at="2">본 요청을 보내지 않음</li>
+              <li class="reply" data-from="2" data-to="1">TypeError: Failed to fetch</li>
+            </ol>
+          </div>
+        </section>
+
+        <section id="case-read">
+          <h2>⑧ 허용한 출처가 응답을 읽기</h2>
+          <p>
+            <strong>요구:</strong> 스토어(<code>store.</code>)와 API(<code>api.</code>)는 출처가 다르다. 스토어 브라우저 코드가
+            <code>credentials: 'include'</code>로 API를 부르고 응답을 읽으려면, 서버가 그 출처와 credentials를 허락해야 한다.
+          </p>
+          <p><strong>해결:</strong> 허용한 출처에만 CORS 헤더를 붙인다.</p>
+          <pre><code class="language-ts">// cors.middleware.ts
+this.handler = cors((request, callback) =&gt; {
+  const origin = request.headers.origin;
+  callback(
+    null, // 오류 자리. 실패할 일이 없어 늘 null이다
+    origin &amp;&amp; origins.has(origin)
+      ? { origin, credentials: true }
+      : { origin: false },
+  );
+});</code></pre>
+          <div class="compare">
+            <div class="compare-card blue">
+              <div class="compare-title">허용한 출처<small>STORE_ORIGIN, ADMIN_ORIGIN</small></div>
+              <dl class="compare-facts">
+                <dt><code>Access-Control-Allow-Origin</code></dt>
+                <dd>요청의 출처 그대로</dd>
+                <dt><code>Access-Control-Allow-Credentials</code></dt>
+                <dd><strong>true</strong></dd>
+                <dt><code>Vary</code></dt>
+                <dd>Origin</dd>
+              </dl>
+              <p class="compare-result">브라우저가 응답을 스크립트에 넘긴다</p>
+            </div>
+            <div class="compare-card green">
+              <div class="compare-title">그 밖의 출처<small>origin: false</small></div>
+              <dl class="compare-facts">
+                <dt><code>Access-Control-Allow-Origin</code></dt>
+                <dd>없음</dd>
+                <dt><code>Access-Control-Allow-Credentials</code></dt>
+                <dd>없음</dd>
+                <dt><code>Vary</code></dt>
+                <dd>없음</dd>
+              </dl>
+              <p class="compare-result">요청은 다음 미들웨어로 가고, 브라우저는 응답을 막는다</p>
+            </div>
+          </div>
+          <ul>
+            <li>
+              <strong>옵션을 요청마다 고르는 이유:</strong> <code>cors({ origin: [...], credentials: true })</code>처럼 고정하면
+              <code>cors</code>는 허용하지 않은 출처에도 <code>Access-Control-Allow-Credentials</code>를 붙인다.
+            </li>
+            <li>
+              <strong><code>*</code>를 쓰지 않는 이유:</strong> credentials를 허용하는 응답에는 브라우저가
+              <code>Access-Control-Allow-Origin: *</code>를 받아 주지 않는다. 출처를 하나 골라 돌려줘야 한다.
+            </li>
+            <li>
+              <strong><code>Vary: Origin</code>:</strong> 출처마다 다른 <code>Access-Control-Allow-Origin</code>을 돌려주므로, 캐시가
+              출처별로 응답을 나눠 저장하라는 표시다. 없으면 CDN이 스토어용 응답을 어드민에 줘서 어드민이 응답을 읽지 못할 수 있다.
+              <code>cors</code> 패키지가 <code>origin</code>에 문자열을 넘기면 붙여 준다.
+            </li>
+            <li>
+              <strong>허용하지 않은 출처를 오류로 넘기지 않는 이유:</strong> <code>callback(new Error())</code>는 500이 된다. 응답을
+              막는 건 브라우저의 일이니 서버는 헤더만 뺀다.
+            </li>
+          </ul>
+        </section>
+
+        <section id="case-get">
+          <h2>⑨ GET 요청</h2>
+          <p>
+            <strong>규칙:</strong> GET, HEAD, OPTIONS는 Origin 검사도 JSON 검사도 하지 않는다(<code>isSafeMethod</code>). 다른
+            사이트의 <code>&lt;img src&gt;</code>나 링크 이동도 GET을 보내고, <code>SameSite=Lax</code>는 최상위 GET 이동에 쿠키를
+            싣는다. 이 요청들을 막으면 스토어로 들어오는 링크까지 깨진다.
+          </p>
+          <div class="callout warn">
+            <p>
+              그래서 <strong>GET으로 상태를 바꾸지 않는다</strong>는 것이 이 방어 전체의 전제다. GET 이동은 쿠키가 실리고,
+              Origin을 보내지 않고, 본문도 없어 세 겹을 모두 비켜 간다(<a href="01-웹-인증-개념.html#csrf">01 문서의 CSRF</a>).
+              다른 출처가 GET 응답을 읽는 것은 CORS가 막는다.
+            </p>
+          </div>
+        </section>
+
+        <section id="case-curl">
+          <h2>⑩ curl과 서버 간 호출</h2>
+          <p>
+            curl은 <code>Origin</code>이든 <code>Sec-Fetch-Site</code>든 마음대로 넣고 뺄 수 있다. 그래도 괜찮다. CSRF는 브라우저가
+            <strong>피해자의 쿠키를 자동으로 실어 줄 때만</strong> 성립하는 공격이다. curl을 쓰는 사람은 자기 쿠키로 자기 계정을 다룰
+            뿐이다. Origin 검사는 브라우저가 정직하게 붙이는 헤더로 다른 사이트를 걸러 내는 장치이지, 모든 클라이언트를 막는 장치가
+            아니다.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>호출</th>
+                  <th>결과</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>쿠키 없는 호출(헬스 체크, Origin 없는 로그인)</td>
+                  <td>통과</td>
+                </tr>
+                <tr>
+                  <td>쿠키를 실은 GET(스토어 서버 렌더링이 세션을 읽음)</td>
+                  <td>통과</td>
+                </tr>
+                <tr>
+                  <td>쿠키를 실은 변경 요청, Origin·Referer 없음</td>
+                  <td><strong>403</strong></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <ul>
+            <li>
+              <strong>주의:</strong> 스토어 서버(Server Action, Route Handler)가 사용자 쿠키를 넘겨받아 변경 요청을 대신 보내면, 서버의
+              <code>fetch</code>는 <code>Origin</code>을 붙이지 않아 403이 된다. 지금은 변경 요청을 브라우저에서 API로 직접 보낸다.
+            </li>
+            <li>
+              <strong>남은 위험:</strong> curl로 비밀번호를 대량으로 추측하는 무차별 대입은 CSRF 방어로 막을 수 없다. 로그인·가입
+              요청 속도 제한이 맡고, 10단계에서 Redis와 함께 넣는다.
+            </li>
+          </ul>
+        </section>
+
+        <section id="summary">
+          <h2>케이스 정리표</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>케이스</th>
+                  <th>막거나 허용하는 곳</th>
+                  <th>보는 헤더</th>
+                  <th>결과</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>① 다른 사이트의 폼 제출</td>
+                  <td>SameSite, Origin 검사</td>
+                  <td><code>Origin</code></td>
+                  <td>쿠키 빠짐 또는 403</td>
+                </tr>
+                <tr>
+                  <td>② 같은 사이트의 서브도메인</td>
+                  <td>Origin 검사</td>
+                  <td><code>Origin</code></td>
+                  <td>403</td>
+                </tr>
+                <tr>
+                  <td>③ 스토어 출처로 어드민 API</td>
+                  <td>Origin 검사(경로별 허용 출처)</td>
+                  <td><code>Origin</code>, 경로</td>
+                  <td>403</td>
+                </tr>
+                <tr>
+                  <td>④ Origin 없는 쿠키 요청</td>
+                  <td>Origin 검사</td>
+                  <td><code>Referer</code></td>
+                  <td>Referer 출처로 판단, 둘 다 없으면 403</td>
+                </tr>
+                <tr>
+                  <td>⑤ 로그인 CSRF</td>
+                  <td>Origin 검사(쿠키 없는 로그인·가입)</td>
+                  <td><code>Sec-Fetch-Site</code>, <code>Sec-Fetch-Mode</code>, <code>Origin</code></td>
+                  <td>403</td>
+                </tr>
+                <tr>
+                  <td>⑥ text/plain 본문의 fetch</td>
+                  <td>Origin 검사, JSON 본문</td>
+                  <td><code>Origin</code>, <code>Content-Type</code></td>
+                  <td>403 또는 415</td>
+                </tr>
+                <tr>
+                  <td>⑦ JSON 본문의 fetch</td>
+                  <td>CORS(preflight)</td>
+                  <td><code>Origin</code></td>
+                  <td>브라우저가 본 요청을 보내지 않음</td>
+                </tr>
+                <tr>
+                  <td>⑧ 허용한 출처가 응답 읽기</td>
+                  <td>CORS</td>
+                  <td><code>Origin</code></td>
+                  <td>credentials를 허용하는 헤더</td>
+                </tr>
+                <tr>
+                  <td>⑨ GET 요청</td>
+                  <td>검사하지 않음</td>
+                  <td>메서드</td>
+                  <td>통과(GET은 상태를 바꾸지 않는다는 전제)</td>
+                </tr>
+                <tr>
+                  <td>⑩ curl과 서버 간 호출</td>
+                  <td>CSRF 대상이 아님</td>
+                  <td><code>Cookie</code></td>
+                  <td>쿠키 없으면 통과, 쿠키 실은 변경 요청은 403</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>모든 케이스는 <code>apps/api/test/cross-origin.int.spec.ts</code>에서 HTTP 요청으로 검증한다.</p>
+        </section>
+
+        <section id="check">
+          <h2>스스로 확인하기</h2>
+          <details>
+            <summary>1. SameSite=Lax 쿠키가 있는데도 Origin 검사가 필요한 경우는?</summary>
+            <p>
+              같은 사이트의 다른 서브도메인에서 온 요청이다. SameSite는 사이트로 판단해 쿠키를 싣지만, Origin 검사는 출처를 글자
+              그대로 비교해 막는다(<a href="#case-subdomain">②</a>, <a href="#case-admin">③</a>).
+            </p>
+          </details>
+          <details>
+            <summary>2. CORS 헤더를 안 보내도 다른 출처의 요청은 서버에 닿는다. 그러면 CORS가 막는 것은?</summary>
+            <p>
+              다른 출처의 스크립트가 응답을 읽는 것, 그리고 preflight가 필요한 요청(JSON 본문 등)의 본 요청 전송이다. 단순 요청의
+              실행은 막지 못해서 Origin 검사와 JSON 본문 제한이 필요하다(<a href="#case-text">⑥</a>, <a href="#case-json">⑦</a>).
+            </p>
+          </details>
+          <details>
+            <summary>3. 쿠키가 실린 요청은 Origin이 없으면 막는데, 쿠키 없는 로그인 요청은 왜 통과시키는가?</summary>
+            <p>
+              쿠키가 없으면 빼앗을 세션이 없고, Origin 없는 정상 요청(curl, 서버 간 호출)도 받아야 한다. 그래서 다른 사이트에서
+              왔다는 증거(Sec-Fetch, 틀린 Origin)가 있을 때만 막는다(<a href="#case-login">⑤</a>).
+            </p>
+          </details>
+          <div class="quiz">
+            <p class="quiz-q">4. 이 줄을 지우면 어떤 요청이 깨지는가?</p>
+            <p class="quiz-context"><code>json-body.middleware.ts</code>에서 <code>hasBody</code> 확인을 뺀다.</p>
+            <pre><code class="language-diff">-if (!isSafeMethod(request) &amp;&amp; hasBody(request) &amp;&amp; !request.is('application/json')) {
++if (!isSafeMethod(request) &amp;&amp; !request.is('application/json')) {</code></pre>
+            <details class="quiz-answer">
+              <summary>답 보기</summary>
+              <div class="fold-body">
+                <p>
+                  본문 없는 변경 요청이다. 예를 들어 Content-Type 없이 보내는 <code>POST /auth/sign-out</code>이 415가 된다.
+                  <code>request.is()</code>는 <code>Content-Length: 0</code>만 있어도 본문이 있다고 보고, Content-Type이 없으니
+                  <code>false</code>를 돌려준다. 실제로 이 확인을 넣기 전에는 로그아웃 테스트가 415로 실패했다.
+                </p>
+              </div>
+            </details>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
