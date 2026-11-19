@@ -477,7 +477,7 @@ function isCrossSiteNavigation(request: Request): boolean {
           </p>
           <div class="callout">
             <p>
-              <strong>쿠키 요청과 다른 점:</strong> Origin이 없으면 <strong>통과</strong>시키고, Referer로 대신 판단하지 않는다.
+              <strong>쿠키 요청과 다른 점:</strong> Origin이 없으면 <strong>통과</strong>시킨다.
               쿠키가 없으면 빼앗을 세션이 없고, curl이나 서버 간 호출처럼 Origin 없는 정상 요청도 받아야 하기 때문이다. 그래서
               "다른 사이트에서 왔다"는 증거가 있을 때만 막는다.
             </p>
