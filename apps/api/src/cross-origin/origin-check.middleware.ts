@@ -34,8 +34,10 @@ export class OriginCheckMiddleware implements NestMiddleware {
 /**
  * 쿠키가 없는 로그인과 가입 요청이 다른 사이트에서 보낸 것인지 판단한다(로그인 CSRF, Better Auth의 formCsrfMiddleware와 같음).
  * 다른 사이트가 공격자 계정으로 로그인시키면 피해자가 입력한 정보가 공격자 계정에 쌓인다.
- * 쿠키가 없으면 Origin이 없는 요청(서버 간 호출, curl)도 받아야 하므로, 브라우저가 붙이는 헤더가 있을 때만 막는다.
- * 그래서 쿠키가 실린 요청과 달리 Referer로 대신 판단하지 않는다(Better Auth와 같음).
+ * 쿠키가 실린 요청과 판단 방식이 반대다. 쿠키가 실린 요청은 허용 출처임을 증명해야 통과하지만(Origin이 없으면 Referer로라도),
+ * 여기서는 다른 사이트에서 왔다는 증거(Sec-Fetch, 틀린 Origin)가 있을 때만 막는다.
+ * 쿠키가 없으면 빼앗을 세션이 없고, Origin을 보내지 않는 정상 요청(curl, 서버 간 호출)도 받아야 하기 때문이다.
+ * Origin이 없으면 이미 통과시키므로 Referer로 대신 증명할 필요가 없다(Better Auth와 같음).
  * 허용 출처는 Better Auth처럼 신뢰 출처 전체가 아니라 경로별로 고른다. 어드민 로그인은 어드민 출처에서만 받는다.
  */
 function isForgedAuthEntryRequest({
