@@ -340,6 +340,76 @@ getOriginFor(pathname: string): string {
             알고 결제 정보나 개인정보를 입력하고, 그 정보가 공격자 계정에 쌓인다. 로그인 요청에는 쿠키가 없어서 ②의 쿠키 검사에
             걸리지 않는다.
           </p>
+          <h3>공격 시나리오</h3>
+          <ol class="steps blue">
+            <li>
+              <strong>공격자가 준비한다</strong>
+              openrun에 자기 계정(<code>attacker@evil.com</code>)을 만들고, 자기 사이트에 숨은 로그인 폼을 둔다.
+            </li>
+          </ol>
+          <pre><code class="language-html">&lt;!-- evil.com/이벤트 페이지 --&gt;
+&lt;form method="post" action="https://api.openrun.com/auth/sign-in"&gt;
+  &lt;input name="email" value="attacker@evil.com" /&gt;
+  &lt;input name="password" value="공격자 비밀번호" /&gt;
+&lt;/form&gt;
+&lt;script&gt;document.forms[0].submit()&lt;/script&gt;</code></pre>
+          <ol class="steps blue" style="--start: 1">
+            <li>
+              <strong>피해자를 끌어들인다</strong>
+              "뮤지컬 티켓 추첨 이벤트" 같은 링크를 메신저나 커뮤니티에 뿌린다. 피해자가 열면 폼이 자동으로 제출된다. 피해자가
+              로그아웃 상태든 다른 계정으로 로그인한 상태든 상관없다.
+            </li>
+            <li>
+              <strong>피해자 브라우저가 공격자 계정으로 로그인된다</strong>
+              API가 로그인에 성공해 <code>Set-Cookie</code>로 <strong>공격자 계정의 세션 쿠키</strong>를 피해자 브라우저에 굽는다.
+              공격자가 페이지를 openrun으로 다시 넘기면 피해자는 평소처럼 쓴다. 헤더에 이름이 작게 보일 뿐이라 대부분 알아채지
+              못한다.
+            </li>
+            <li>
+              <strong>피해자가 정보를 남긴다</strong>
+              예매하며 이름, 휴대폰 번호, 티켓 배송 주소, 생년월일을 입력한다. 결제 수단을 등록하거나 본 공연, 좌석, 관심 공연
+              기록이 쌓인다.
+            </li>
+            <li>
+              <strong>공격자가 가져간다</strong>
+              공격자는 자기 계정으로 정상 로그인해 마이페이지에서 이 정보를 본다. 결제 수단이 계정에 남아 있으면 그것으로 결제를
+              시도할 수도 있다.
+            </li>
+          </ol>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>일반 CSRF</th>
+                  <th>로그인 CSRF</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>쓰는 세션</td>
+                  <td>피해자의 세션</td>
+                  <td><strong>공격자의</strong> 세션</td>
+                </tr>
+                <tr>
+                  <td>요청에 쿠키</td>
+                  <td>있음</td>
+                  <td>없음(로그인 요청이라)</td>
+                </tr>
+                <tr>
+                  <td>피해</td>
+                  <td>피해자 권한으로 무언가를 실행한다</td>
+                  <td>피해자가 입력한 정보가 공격자에게 넘어간다</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            2008년 스탠퍼드의 CSRF 방어 연구(Barth, Jackson, Mitchell, "Robust Defenses for Cross-Site Request Forgery")가 이
+            공격으로 Google 검색 기록과 PayPal 결제 정보를 빼낼 수 있다고 보였다. 그 뒤로 로그인 폼에도 CSRF 방어를 거는 것이
+            보통이 되었다.
+          </p>
+          <h3>막는 방법</h3>
           <p>
             <strong>해결:</strong> 쿠키 없는 로그인·가입 요청(<code>/auth/sign-in</code>, <code>/auth/sign-up</code>와 그
             <code>/admin</code> 경로)만 따로 검사한다. Better Auth의 <code>formCsrfMiddleware</code>와 같은 규칙이다.
