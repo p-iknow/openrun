@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_FILTER, APP_PIPE } from '@nestjs/core';
 import { ClockModule } from './clock/clock.module.js';
+import { CrossOriginModule } from './cross-origin/cross-origin.module.js';
 import { DatabaseModule } from './db/database.module.js';
 import { ProblemDetailsFilter } from './problem-details/problem-details.filter.js';
 import { createValidationPipe } from './problem-details/validation.pipe.js';
@@ -11,6 +12,7 @@ import { VenuesModule } from './venues/venues.module.js';
 @Module({
   imports: [
     ClockModule,
+    CrossOriginModule,
     DatabaseModule,
     VenuesModule,
     ShowsModule,

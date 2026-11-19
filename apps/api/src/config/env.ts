@@ -44,6 +44,37 @@ export function shouldUseSecureCookies(
   return source.NODE_ENV === 'production';
 }
 
+/** 스토어의 출처(origin). 예: `http://localhost:3001`. 이 출처만 사용자 API를 쿠키와 함께 부를 수 있다. */
+export function readStoreOrigin(
+  source: NodeJS.ProcessEnv = process.env,
+): string {
+  return getOriginOrThrow({ source, name: 'STORE_ORIGIN' });
+}
+
+/** 어드민의 출처(origin). 예: `http://localhost:3002`. 이 출처만 `/admin/*` API를 쿠키와 함께 부를 수 있다. */
+export function readAdminOrigin(
+  source: NodeJS.ProcessEnv = process.env,
+): string {
+  return getOriginOrThrow({ source, name: 'ADMIN_ORIGIN' });
+}
+
+// 브라우저가 보내는 Origin 헤더와 글자 그대로 비교하므로, 경로나 끝의 /가 붙은 값은 부팅에서 막는다.
+function getOriginOrThrow({
+  source,
+  name,
+}: {
+  source: NodeJS.ProcessEnv;
+  name: string;
+}): string {
+  const value = getOrThrow({ source, name });
+  if (URL.parse(value)?.origin !== value) {
+    throw new Error(
+      `${name}은 출처(scheme://host[:port]) 형식이어야 합니다: ${value}`,
+    );
+  }
+  return value;
+}
+
 function getOrThrow({
   source,
   name,

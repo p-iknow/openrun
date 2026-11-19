@@ -48,6 +48,7 @@ const learnFolders = [
       { file: '07-세션-쿠키-설정.html', title: '07 세션 쿠키 설정', tags: ['auth'] },
       { file: '08-로그인-가드와-CurrentSession.html', title: '08 로그인 가드와 CurrentSession', tags: ['auth', 'nestjs'] },
       { file: '09-인증-API-응답-설계.html', title: '09 인증 API 응답 설계', tags: ['auth', 'openapi'] },
+      { file: '10-CSRF-방어와-CORS.html', title: '10 CSRF 방어와 CORS', tags: ['auth', 'nestjs'] },
     ],
   },
   {

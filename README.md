@@ -45,6 +45,8 @@ pnpm dev                    # 스토어, API, store-ui 감시 빌드 함께 실�
 | `API_INTERNAL_URL` | `apps/store/.env`                  | 서버 렌더링이 API를 호출하는 내부 주소                                                                                  |
 | `AUTH_SECRET`     | `apps/api/.env`                     | 세션 쿠키 서명(HMAC-SHA256)의 키. 32자 이상이어야 하고, 짧거나 없으면 API가 부팅하지 않는다. 운영 값은 `openssl rand -base64 32`로 만든다. |
 | `COOKIE_DOMAIN`   | `apps/api/.env`                     | 선택. 사용자 세션 쿠키의 `Domain`. 스토어와 API가 서브도메인으로 나뉘는 배포에서 상위 도메인을 적는다. 로컬은 둘 다 `localhost`라 비워 둔다. |
+| `STORE_ORIGIN`    | `apps/api/.env`                     | 스토어의 출처(예: `http://localhost:3001`). CORS로 쿠키와 함께 허용하고, 쿠키가 실린 사용자 API 변경 요청은 이 출처에서만 받는다. 없거나 출처 형식이 아니면 API가 부팅하지 않는다. |
+| `ADMIN_ORIGIN`    | `apps/api/.env`                     | 어드민의 출처(로컬 `http://localhost:3002`). `/admin/*` 변경 요청은 이 출처에서만 받는다. 없거나 출처 형식이 아니면 API가 부팅하지 않는다. |
 
 `pnpm dev`는 `packages/store-ui`를 감시 빌드하므로 토큰이나 컴포넌트를 고치면 스토어에 바로 반영된다.
 
