@@ -17,7 +17,6 @@ import {
  * OriginCheckMiddleware와 판단 방식이 반대다. 그쪽은 허용 출처임을 증명해야 통과하지만(Origin이 없으면 Referer로라도),
  * 여기서는 다른 사이트에서 왔다는 증거(Sec-Fetch, 틀린 Origin)가 있을 때만 막는다.
  * 로그인 CSRF는 피해자의 브라우저에 쿠키를 심어야 성립하므로, Origin을 보내지 않는 curl이나 서버 간 호출은 공격 수단이 아니라 정상 로그인이다.
- * Origin이 없으면 이미 통과시키므로 Referer로 대신 증명할 필요가 없다(Better Auth와 같음).
  * 허용 출처는 Better Auth처럼 신뢰 출처 전체가 아니라 경로별로 고른다. 어드민 로그인은 어드민 출처에서만 받는다.
  */
 @Injectable()
